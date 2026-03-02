@@ -1,0 +1,126 @@
+services:
+  # 1. Redis
+  redis_cache:
+    image: redis:7-alpine
+    container_name: redis_cache
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_network
+
+  # 2. Ana Backend
+  backend:
+    container_name: backend
+    build:
+      context: ./backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+      - shared_uploads:/app/uploads
+    ports:
+      - "8000:8000"
+    environment:
+      AI_SERVICE_URL: "http://aiservice:8001"
+      REDIS_URL: "redis://redis_cache:6379"
+    env_file:
+      - ./backend/.env
+    depends_on:
+      redis_cache:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app_network
+
+  # 3. AI Mikroservisi
+  aiservice:
+    container_name: aiService
+    build:
+      context: ./aiService
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+    volumes:
+      - ./aiService:/app
+      - shared_uploads:/app/uploads
+    ports:
+      - "8001:8001"
+    environment:
+      REDIS_URL: "redis://redis_cache:6379"
+    env_file:
+      - ./aiService/.env
+    depends_on:
+      redis_cache:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app_network
+
+  # 4. AI Celery İşçisi
+  aiceleryworker:
+    container_name: aiCeleryWorker
+    build:
+      context: ./aiService
+    command: celery -A app.tasks.celery_worker:celery_app worker --loglevel=info
+    volumes:
+      - ./aiService:/app
+      - shared_uploads:/app/uploads
+    environment:
+      PYTHONPATH: /app
+      REDIS_URL: redis://redis_cache:6379
+    env_file:
+      - ./aiService/.env
+    depends_on:
+      redis_cache:
+        condition: service_healthy
+      aiservice:
+        condition: service_started
+      backend:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - app_network
+
+  # 5. Frontend
+  frontend:
+    container_name: frontend
+    build:
+      context: ./frontend
+    command: npm run dev
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules # Changed to use the named volume you declared
+      - /app/.next
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - app_network
+
+  # 6. Local LLM (Ollama)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: pdf_designer_llm
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_storage:/root/.ollama
+    networks:
+      - app_network
+    restart: always
+
+# --- VOLUMES ---
+volumes:
+  shared_uploads:
+  ollama_storage:        # UNCOMMENTED THIS
+  frontend_node_modules: # Matches the name in frontend service
+
+# --- NETWORKS ---
+networks:
+  app_network:
+    driver: bridge
