@@ -27,9 +27,10 @@ class Settings(BaseSettings):
     REDIS_HOST: str = os.getenv("REDIS_HOST", "redis_cache")
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
 
-    # --- AI & Gemini Configuration ---
+    # --- AI & Gemini & xAI Configuration ---
     AI_SERVICE_URL: str = os.getenv("AI_SERVICE_URL", "http://aiservice:8001")
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
+    XAI_API_KEY: Optional[str] = os.getenv("XAI_API_KEY")
 
     # --- User & File Limits ---
     MAX_GUEST_USAGE: int = int(os.getenv("MAX_GUEST_USAGE", "3"))

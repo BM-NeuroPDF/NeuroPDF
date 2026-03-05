@@ -14,8 +14,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from PIL import Image, ImageDraw, ImageFont
 
-# Google AI
-import google.generativeai as genai
+def create_storage_path(user_id: str) -> str:
+    return f"{user_id}/{uuid.uuid4().hex}.png"
+
+# Google AI - Kaldırıldı, XAI kullanılacak
+# import google.generativeai as genai
 
 from app.db import get_supabase
 from app.models import User, UserAvatar
@@ -27,110 +30,148 @@ logger = logging.getLogger(__name__)
 BUCKET_NAME = "avatars"
 TEMP_AVATAR_TTL = 3600
 
-# API Key Konfigürasyonu
-if settings.GEMINI_API_KEY:
-    genai.configure(api_key=settings.GEMINI_API_KEY)
-
-MODEL_TEXT = "models/gemini-1.5-flash"
-
-def create_storage_path(user_id: str) -> str:
-    return f"{user_id}/{uuid.uuid4().hex}.png"
-
 # ==========================================
-# 1. GOOGLE IMAGEN (REST API İLE)
+# 1. POLLINATIONS.AI (ÜCRETSİZ RESİM ÜRETİMİ)
 # ==========================================
-async def generate_image_google(prompt: str) -> Optional[bytes]:
+async def generate_image_pollinations(prompt: str) -> Optional[bytes]:
     """
-    Google Imagen modelini SDK yerine direkt REST API ile çağırır.
-    PAYLOAD FORMATI DÜZELTİLDİ: 'instances' ve 'parameters' yapısı eklendi.
+    Pollinations.ai kullanarak ücretsiz resim üretir.
+    Prompt'u URL üzerinden gönderiyoruz.
     """
-    if not settings.GEMINI_API_KEY:
-        logger.warning("Gemini API Key eksik!")
-        return None
-
-    # URL: 'image-generation-001' modeli (Imagen 2 tabanlı, genelde erişimi açıktır)
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/image-generation-001:predict?key={settings.GEMINI_API_KEY}"
+    import urllib.parse
     
-    headers = {"Content-Type": "application/json"}
+    # Prompt'u URL güvenli formata çevir
+    encoded_prompt = urllib.parse.quote(prompt)
     
-    # ✅ DÜZELTME: Google API'nin kabul ettiği DOĞRU veri yapısı
-    payload = {
-        "instances": [
-            {
-                "prompt": prompt
-            }
-        ],
-        "parameters": {
-            "sampleCount": 1,
-            # aspect ratio parametresi bazı modellerde desteklenmeyebilir, 
-            # hata almamak için şimdilik sade tutuyoruz.
-        }
-    }
-
+    # Sabit seed ekleyerek tutarlılığı artırabiliriz veya tamamen rastgele bırakabiliriz
+    import random
+    seed = random.randint(1, 100000)
+    
+    # Pollinations URL formatı
+    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?seed={seed}&width=512&height=512&nologo=true"
+    
     try:
-        logger.info(f"Sending request to Google Imagen API: {prompt}")
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        # Prompt'u string'e çeviririz ki loglarken hata alınmasın
+        safe_prompt = str(prompt)
+        logger.info(f"Pollinations.ai'dan resim isteniyor: {safe_prompt[:50]}...")
+        # timeout ekleyelim, ücretsiz API bazen yavaş olabilir
+        response = requests.get(url, timeout=45)
         
-        # Hata kontrolü
-        if response.status_code != 200:
-            logger.error(f"Google API Error ({response.status_code}): {response.text}")
+        if response.status_code == 200:
+            return response.content
+        else:
+            logger.error(f"Pollinations Error ({response.status_code}): {response.text}")
             return None
-
-        result = response.json()
-        
-        # Yanıtı çözümle (Yapı: predictions -> [ { bytesBase64Encoded: "..." } ])
-        if "predictions" in result and len(result["predictions"]) > 0:
-            prediction = result["predictions"][0]
             
-            # Base64 verisini al
-            if "bytesBase64Encoded" in prediction:
-                b64_image = prediction["bytesBase64Encoded"]
-                return base64.b64decode(b64_image)
-            # Bazen direkt string olarak gelebilir
-            elif isinstance(prediction, str):
-                return base64.b64decode(prediction)
-                
-        logger.warning(f"Google boş veya bilinmeyen formatta yanıt döndü: {result}")
-        return None
-
     except Exception as e:
-        logger.error(f"Google Image REST Request Failed: {e}")
+        logger.error(f"Pollinations API Hatası: {e}")
         return None
 
 # ==========================================
-# 2. GEMINI VISION (RESİM ANALİZİ)
+# 2. xAI (GROK) VISION (RESİM ANALİZİ)
 # ==========================================
 async def analyze_and_rewrite_prompt(image_bytes: bytes, user_prompt: str) -> str:
     """
-    Gemini 1.5 Flash'a resmi gösterip yeni bir prompt yazdırır.
+    xAI (Grok Vision) kullanarak resmi analiz eder ve değişiklikle birlikte yeni prompt üretir.
     """
+    if not settings.XAI_API_KEY:
+        logger.warning("XAI_API_KEY eksik, orijinal prompt döndürülüyor.")
+        return user_prompt
+        
     try:
-        model = genai.GenerativeModel(MODEL_TEXT)
-        img = Image.open(io.BytesIO(image_bytes))
+        # Resmi Base64 formatına çevir
+        base64_image = base64.b64encode(image_bytes).decode('utf-8')
         
-        prompt_instruction = f"""
-        Bu resme bak ve kullanıcının şu isteğini uygula: "{user_prompt}".
-        Görevin: Bu resmin görsel stilini koruyarak, kullanıcının istediği değişikliği içeren 
-        YENİ bir resim çizdirmek için Google Imagen modeline verilecek İngilizce prompt'u yazmak.
-        Sadece prompt'u yaz.
-        """
+        url = "https://api.x.ai/v1/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {settings.XAI_API_KEY}"
+        }
         
-        response = model.generate_content([prompt_instruction, img])
-        return response.text.strip()
+        prompt_instruction = (
+            f"Bu resme bak ve kullanıcının şu isteğini uygula: '{user_prompt}'. "
+            "Görevin: Bu resmin GÖRSEL STİLİNİ KORUYARAK kullanıcının istediği değişikliği "
+            "içeren YENİ bir resim çizdirmek için bir AI resim üretecine (örn. Midjourney) verilecek "
+            "çok detaylı İngilizce bir prompt yazmak. "
+            "SADECE PROMPT'U YAZ, başka hiçbir açıklama yapma."
+        )
+        
+        payload = {
+            "model": "grok-vision-beta",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt_instruction
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}",
+                                "detail": "high"
+                            }
+                        }
+                    ]
+                }
+            ],
+            "temperature": 0.7
+        }
+        
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            data = response.json()
+            return data["choices"][0]["message"]["content"].strip()
+        else:
+            logger.error(f"xAI Vision Hatası: {response.text}")
+            return user_prompt
+            
     except Exception as e:
-        logger.error(f"Vision Analysis Failed: {e}")
+        logger.error(f"xAI Vision Analiz Hatası: {e}")
         return user_prompt
 
 async def improve_text_prompt(user_prompt: str) -> str:
     """
-    Gemini ile metin promptunu geliştirir.
+    xAI (Grok) ile metin promptunu geliştirir.
     """
+    if not settings.XAI_API_KEY:
+        logger.warning("XAI_API_KEY eksik, orijinal prompt döndürülüyor.")
+        return user_prompt
+        
     try:
-        model = genai.GenerativeModel(MODEL_TEXT)
-        prompt = f"Convert this user request into a high-quality, detailed English image generation prompt for AI: '{user_prompt}'. Output ONLY the prompt."
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except:
+        url = "https://api.x.ai/v1/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {settings.XAI_API_KEY}"
+        }
+        
+        prompt_instruction = (
+            f"Convert this user request into a high-quality, highly detailed, "
+            f"masterpiece English image generation prompt for an AI image generator: '{user_prompt}'. "
+            f"DO NOT add any conversational text. Output ONLY the raw prompt itself."
+        )
+        
+        payload = {
+            "model": "grok-beta",
+            "messages": [
+                {"role": "user", "content": prompt_instruction}
+            ],
+            "temperature": 0.7
+        }
+        
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
+        
+        if response.status_code == 200:
+            data = response.json()
+            return data["choices"][0]["message"]["content"].strip()
+        else:
+            logger.error(f"xAI Text Hatası: {response.text}")
+            return user_prompt
+            
+    except Exception as e:
+        logger.error(f"xAI Text İyileştirme Hatası: {e}")
         return user_prompt
 
 # ==========================================
@@ -141,22 +182,22 @@ async def generate_avatar_with_prompt(username: str, prompt: str) -> bytes:
     # 1. Prompt'u iyileştir
     improved_prompt = await improve_text_prompt(prompt)
     
-    # 2. Resmi Google API ile üret
-    image_bytes = await generate_image_google(improved_prompt)
+    # 2. Resmi Pollinations API ile üret
+    image_bytes = await generate_image_pollinations(improved_prompt)
     
     if image_bytes:
         return image_bytes
     
     # 3. Hata olursa Fallback (Harf Avatarı)
-    logger.warning("Google API resim üretemedi, fallback kullanılıyor.")
+    logger.warning("Pollinations API resim üretemedi, fallback kullanılıyor.")
     return generate_avatar_from_name(username, bg_color=(50, 50, 50))
 
 async def edit_avatar_with_prompt(image_bytes: bytes, prompt: str) -> bytes:
     # 1. Yeni Prompt Oluştur
     new_prompt = await analyze_and_rewrite_prompt(image_bytes, prompt)
     
-    # 2. Yeni Resim Üret
-    edited_bytes = await generate_image_google(new_prompt)
+    # 2. Yeni Resim Üret (Pollinations)
+    edited_bytes = await generate_image_pollinations(new_prompt)
     
     if edited_bytes:
         return edited_bytes

@@ -13,8 +13,11 @@ def verify_api_key(x_api_key: str = Security(API_KEY_HEADER)):
     Backend service'ten gelen istekleri doğrular.
     """
     if not settings.AI_SERVICE_API_KEY:
-        # API key yapılandırılmamışsa (development), herhangi bir key kabul et
-        return True
+        # Prevent starting without an API key to avoid open proxy issues
+        raise HTTPException(
+            status_code=500,
+            detail="Server is misconfigured: AI_SERVICE_API_KEY is not set."
+        )
     
     if not x_api_key:
         raise HTTPException(
