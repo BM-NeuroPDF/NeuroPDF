@@ -216,3 +216,37 @@ class PDF(Base):
     
     # Relationships
     user = relationship("User", back_populates="pdfs")
+
+# ==========================================
+# 9. SUMMARY CACHE TABLOSU
+# ==========================================
+class SummaryCache(Base):
+    __tablename__ = "summary_cache"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    pdf_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    summary: Mapped[str] = mapped_column(String, nullable=False)
+
+    # provider yerine llm_choice_id kullanıyoruz
+    llm_choice_id: Mapped[int] = mapped_column(
+        ForeignKey("llm_choices.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    # local summarization için user
+    user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False
+    )
+
+    # ilişkiler
+    user = relationship("User")
+    llm_choice = relationship("LLMChoice")

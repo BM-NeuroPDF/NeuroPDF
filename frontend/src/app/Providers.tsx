@@ -16,7 +16,9 @@ import { pdfjs } from "react-pdf";
 // ------------------------------------------------------------------
 
 if (typeof window !== "undefined") {
-  pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+  // Yerel worker kullan: public/pdf.worker.mjs
+  // Bu, CDN erişimi/versiyon uyumsuzluğu sorunlarını ortadan kaldırır.
+  pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.mjs";
 }
 
 export default function Providers({ children }: { children: React.ReactNode }) {

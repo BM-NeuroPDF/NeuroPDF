@@ -3,9 +3,15 @@
 import { useState, useEffect, useMemo } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import { useLanguage } from "@/context/LanguageContext";
+
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 
+// Configure worker from CDN to exactly match installed pdfjs version (.mjs)
+if (typeof window !== "undefined") {
+  (pdfjs as any).GlobalWorkerOptions.workerSrc =
+    `https://unpkg.com/pdfjs-dist@${(pdfjs as any).version}/build/pdf.worker.min.mjs`;
+}
 
 type Props = {
   file: File | string;

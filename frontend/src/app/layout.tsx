@@ -1,7 +1,7 @@
 // app/layout.tsx
 import type { Metadata } from "next";
 import "./globals.css";
-
+import { PopupProvider } from "@/context/PopupContext";
 import Providers from "./Providers";
 import NavBar from "@/components/NavBar";
 import ClientPdfPanel from "@/components/ClientPdfPanel";
@@ -23,7 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <LanguageProvider>
             <PdfProvider>
-              
+              <PopupProvider>
               <NavBar />
 
               <EulaGuard>
@@ -43,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   context'teki dosyaya her zaman erişebilecek. */}
               <GlobalPdfChat />
               </EulaGuard>
+              </PopupProvider>
             </PdfProvider>
           </LanguageProvider>
         </Providers>

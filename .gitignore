@@ -11,6 +11,9 @@ client_secret_*.json
 backend/.venv/
 aiService/.venv/
 
+aiService/venv/
+backend/venv/
+
 # === Node.js Dependencies & Build ===
 frontend/node_modules/
 frontend/.next/

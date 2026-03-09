@@ -12,6 +12,8 @@ import { useLanguage } from "@/context/LanguageContext";
 import { sendRequest } from "@/utils/api";
 import { getMaxUploadBytes } from "@/app/config/fileLimits";
 import PdfChatPanel from "@/components/PdfChatPanel";
+import Popup from "@/components/ui/Popup";
+import { usePopup } from "@/hooks/usePopup";
 
 const PdfViewer = dynamic(() => import("@/components/PdfViewer"), { ssr: false });
 const MarkdownViewer = dynamic(() => import("@/components/MarkdownViewer"), { ssr: false });
@@ -32,6 +34,8 @@ export default function SummarizePdfPage() {
   
   // ✅ 1. Dil desteği için t() ve language alındı
   const { t, language } = useLanguage();
+
+  const { popup, showError, showSuccess, showInfo, close } = usePopup();
 
   const [file, setFile] = useState<File | null>(null);
   const [summary, setSummary] = useState<string>("");
@@ -304,7 +308,11 @@ export default function SummarizePdfPage() {
 
   const currentError = getErrorMessage();
 
-  
+  useEffect(() => {
+    if (currentError) {
+      showError(currentError);
+    }
+  }, [currentError]);
 
   return (
     <main className="min-h-screen p-6 max-w-4xl mx-auto font-bold text-[var(--foreground)] relative">
@@ -512,16 +520,10 @@ export default function SummarizePdfPage() {
         </div>
       )}
 
-      {currentError && (
-        <div className="error-box mt-6 shadow-sm">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 shrink-0">
-            <path fillRule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clipRule="evenodd" />
-          </svg>
-          <span>{currentError}</span>
-        </div>
-      )}
-
+      
       <UsageLimitModal isOpen={showLimitModal} onClose={closeLimitModal} onLogin={redirectToLogin} usageCount={usageInfo?.usage_count} maxUsage={3} />
+
+      <Popup type={popup.type} message={popup.message} open={popup.open} onClose={close} />
 
       {file && (
         <PdfChatPanel file={file} isOpen={showChat} onClose={() => setShowChat(false)} />

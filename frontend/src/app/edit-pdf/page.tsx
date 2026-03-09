@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import dynamic from "next/dynamic";
 
@@ -33,6 +33,8 @@ import { guestService } from "@/services/guestService";
 import { useLanguage } from "@/context/LanguageContext";
 import { sendRequest } from "@/utils/api";
 import { getMaxUploadBytes } from "@/app/config/fileLimits";
+import Popup from "@/components/ui/Popup";
+import { usePopup } from "@/hooks/usePopup";
 
 const Document = dynamic(() => import("react-pdf").then(mod => mod.Document), { ssr: false });
 const Page = dynamic(() => import("react-pdf").then(mod => mod.Page), { ssr: false });
@@ -51,6 +53,7 @@ export default function EditPdfPage() {
   
   // ✅ 1. Dil Desteği
   const { t, language } = useLanguage();
+  const { popup, showError, showSuccess, showInfo, close } = usePopup();
 
   const [file, setFile] = useState<File | null>(null);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
@@ -325,7 +328,12 @@ export default function EditPdfPage() {
 
   const currentError = getErrorMessage();
 
-  
+  // Popup gösterimi – mevcut hata metni değiştikçe popup tetikle
+  useEffect(() => {
+    if (currentError) {
+      showError(currentError);
+    }
+  }, [currentError]);
 
   return (
     <main className="min-h-screen p-6 max-w-5xl mx-auto font-bold text-[var(--foreground)]">
@@ -380,6 +388,7 @@ export default function EditPdfPage() {
             <h3 className="text-xl font-semibold mb-4 opacity-90">{t('previewDragDrop')} ({pages.length} {t('page')})</h3>
             
             <Document
+              key={objectUrl || 'no-url'}
               file={objectUrl}
               onLoadSuccess={handleLoadSuccess}
               loading={<div className="p-6">{t('loading')}</div>}
@@ -460,6 +469,9 @@ export default function EditPdfPage() {
       )}
 
       <UsageLimitModal isOpen={showLimitModal} onClose={closeLimitModal} onLogin={redirectToLogin} usageCount={usageInfo?.usage_count} maxUsage={3} />
+
+      {/* GLOBAL POPUP */}
+      <Popup type={popup.type} message={popup.message} open={popup.open} onClose={close} />
     </main>
   );
 }

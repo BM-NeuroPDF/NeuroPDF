@@ -13,3 +13,7 @@ pydantic-settings
 python-dotenv
 gTTS
 ollama
+
+
+nltk
+zeyrek

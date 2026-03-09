@@ -5,6 +5,7 @@ from typing import Dict, List, Optional
 from pypdf import PdfReader, PdfWriter
 from pydantic import BaseModel
 import httpx
+import hashlib
 import html
 import io
 import re
@@ -12,6 +13,7 @@ import os
 import jwt # ✅ EKLENDİ: Token çözümleme için gerekli
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 # --- Config & DB ---
 from ..config import settings
@@ -234,11 +236,9 @@ def parse_page_ranges(range_str: str, max_pages: int) -> list[int]:
                     page_indices.add(page_num - 1)
     return sorted(list(page_indices))
 
-
 # ==========================================
-# GENEL ÖZETLEME
+# SUMMARIZE GENEL 
 # ==========================================
-
 @router.post("/summarize")
 async def summarize_file(
     file: UploadFile = File(...),
@@ -246,19 +246,16 @@ async def summarize_file(
     supabase: Client = Depends(get_supabase),
     db: Session = Depends(get_db)
 ):
-    """Frontend'deki 'handleSummarize' fonksiyonunun çağırdığı SENKRON endpoint."""
     print("\n--- SUMMARIZE İSTEĞİ ---")
-    
+
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Sadece PDF dosyaları kabul edilir.")
 
-    # USER ID ÇÖZÜMLEME (Manuel Decode - get_current_user_from_header YERİNE)
+    # USER ID ÇÖZÜMLEME
     user_id = None
     if authorization:
         try:
-            # "Bearer " kısmını temizle
             token = authorization.split("Bearer ")[1] if "Bearer " in authorization else authorization
-            # Token'ı decode et
             payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
             user_id = payload.get("sub")
             print(f"✅ Token Çözüldü. User ID: {user_id}")
@@ -268,41 +265,82 @@ async def summarize_file(
     else:
         print("👤 Misafir Kullanıcı")
 
-    # Boyut Kontrolü
     is_guest = user_id is None
     await validate_file_size(file, is_guest=is_guest)
 
     try:
         file_content = await file.read()
+
+        # ==========================================
+        # PDF HASH
+        # ==========================================
+        pdf_hash = generate_pdf_hash(file_content)
+        print(f"🔑 PDF Hash: {pdf_hash}")
+
+        # ==========================================
+        # LLM SEÇİMİ
+        # ==========================================
+        if is_guest:
+            llm_choice_id = 1  # local default
+            provider_string = "local"
+        else:
+            llm_choice_id, provider_string = get_user_llm_choice(db, user_id)
+
+        # ==========================================
+        # CACHE KONTROLÜ
+        # ==========================================
+        cached_summary = await check_summarize_cache(
+            file_content, db, llm_choice_id=llm_choice_id, user_id=user_id
+        )
+
+        if cached_summary:
+            return {
+                "status": "success",
+                "summary": cached_summary,
+                "pdf_hash": pdf_hash,
+                "pdf_blob": None,
+                "cached": True
+            }
+
+        # ==========================================
+        # AI SERVİS ÇAĞRISI
+        # ==========================================
         files = {"file": ("upload.pdf", file_content, "application/pdf")}
         ai_service_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/summarize-sync"
-        
-        # Kullanıcının LLM tercihini DB'den al
-        llm_provider = "local"  # Misafir için default
-        if user_id:
-            llm_provider = get_user_llm_provider(db, user_id)
-            print(f"📊 Kullanıcı LLM Tercihi: {llm_provider}")
 
-        print(f"📡 AI Service İstek: {ai_service_url} (llm_provider: {llm_provider})")
+        print(f"📡 AI Service İstek: {ai_service_url} (llm_provider: {provider_string})")
+
         async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
             headers = get_ai_service_headers()
-            params = {"llm_provider": llm_provider}
+            params = {"llm_provider": provider_string, "pdf_hash": pdf_hash}
             response = await client.post(ai_service_url, files=files, params=params, headers=headers)
-            
+
             if response.status_code != 200:
                 print(f"❌ AI Service Error: {response.text}")
                 raise HTTPException(status_code=response.status_code, detail="AI Servisi hatası")
-            
+
             result = response.json()
-            
-            # İSTATİSTİK GÜNCELLEME
-            if user_id:
+
+            if not is_guest:
                 await increment_user_usage(user_id, supabase, "summary")
+
+            # ==========================================
+            # CACHE KAYDET
+            # ==========================================
+            await save_summarize_cache(
+                file_content,
+                result.get("summary"),
+                db,
+                llm_choice_id=llm_choice_id,
+                user_id=user_id
+            )
 
         return {
             "status": "success",
             "summary": result.get("summary"),
-            "pdf_blob": None 
+            "pdf_hash": pdf_hash,
+            "pdf_blob": None,
+            "cached": False
         }
 
     except httpx.TimeoutException:
@@ -312,7 +350,6 @@ async def summarize_file(
     except Exception as e:
         print(f"❌ Özetleme Hatası: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Sunucu hatası: {str(e)}")
-
 
 # ==========================================
 # ÖZETLEME (MİSAFİR İÇİN)
@@ -465,6 +502,123 @@ async def get_file_summary(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==========================================
+# PDF HASHLEME
+# ==========================================
+def generate_pdf_hash(pdf_bytes: bytes) -> str:
+    """PDF içeriğini SHA-256 ile hashler."""
+    sha256 = hashlib.sha256()
+    sha256.update(pdf_bytes)
+    return sha256.hexdigest()
+
+async def check_summarize_cache(
+    pdf_bytes: bytes,
+    db: Session,
+    llm_choice_id: int,
+    user_id: Optional[str] = None
+) -> Optional[str]:
+    pdf_hash = generate_pdf_hash(pdf_bytes)
+
+    # CLOUD → user_id dikkate alınmaz
+    if llm_choice_id == 2:  # cloud
+        query = text("""
+            SELECT summary
+            FROM summary_cache
+            WHERE pdf_hash = :hash 
+              AND llm_choice_id = :llm_choice_id
+            LIMIT 1
+        """)
+        params = {
+            "hash": pdf_hash,
+            "llm_choice_id": llm_choice_id
+        }
+        cache_entry = db.execute(query, params).fetchone()
+
+        if cache_entry:
+            print(f"✅ Cloud Cache bulundu: Hash {pdf_hash}, LLM Choice ID {llm_choice_id}")
+            return cache_entry[0]
+
+        print(f"⚠️ Cloud Cache bulunamadı: Hash {pdf_hash}, LLM Choice ID {llm_choice_id}")
+        return None
+
+    # LOCAL → user_id dikkate alınır
+    else:
+        query = text("""
+            SELECT summary
+            FROM summary_cache
+            WHERE pdf_hash = :hash 
+              AND llm_choice_id = :llm_choice_id
+              AND user_id = :user_id
+            LIMIT 1
+        """)
+        params = {
+            "hash": pdf_hash,
+            "llm_choice_id": llm_choice_id,
+            "user_id": user_id
+        }
+        cache_entry = db.execute(query, params).fetchone()
+
+        if cache_entry:
+            print(f"✅ Local Cache bulundu: Hash {pdf_hash}, LLM Choice ID {llm_choice_id}, User {user_id}")
+            return cache_entry[0]
+
+        print(f"⚠️ Local Cache bulunamadı: Hash {pdf_hash}, LLM Choice ID {llm_choice_id}, User {user_id}")
+        return None
+
+
+# ==========================================
+# SUMMARIZE CACHE KAYDETME
+# ==========================================
+async def save_summarize_cache(
+    pdf_bytes: bytes,
+    summary: str,
+    db: Session,
+    llm_choice_id: int,
+    user_id: Optional[str] = None
+):
+    pdf_hash = generate_pdf_hash(pdf_bytes)
+    query = text("""
+        INSERT INTO summary_cache (pdf_hash, summary, llm_choice_id, user_id, created_at)
+        VALUES (:hash, :summary, :llm_choice_id, :user_id, NOW())
+    """)
+    db.execute(query, {
+        "hash": pdf_hash,
+        "summary": summary,
+        "llm_choice_id": llm_choice_id,
+        "user_id": user_id
+    })
+    db.commit()
+    print(f"✅ Cache kaydedildi: Hash {pdf_hash}, LLM Choice ID {llm_choice_id}, User {user_id}")
+
+# ==========================================
+# USER LLM CHOICE ID ALMA
+# ==========================================
+def get_user_llm_choice(db: Session, user_id: str):
+    query = text("""
+        SELECT llm_choice_id 
+        FROM users
+        WHERE id = :user_id
+        LIMIT 1
+    """)
+    result = db.execute(query, {"user_id": user_id}).fetchone()
+
+    llm_choice_id = result[0] if result else 1  # default local
+
+    # LLM adını çek
+    query2 = text("""
+        SELECT name
+        FROM llm_choices
+        WHERE id = :id
+        LIMIT 1
+    """)
+    result2 = db.execute(query2, {"id": llm_choice_id}).fetchone()
+
+    llm_name = result2[0] if result2 else "local"
+
+    return llm_choice_id, llm_name
+
 
 # ==========================================
 # CHAT Start

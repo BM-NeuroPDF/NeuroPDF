@@ -61,6 +61,7 @@ export const translations = {
     guestLoggingIn: "Giriş Yapılıyor...",
     guestLoginError: "Misafir oturumu oluşturulamadı.",
     sessionChecking: "Oturum bilgisi kontrol ediliyor...",
+    loginSuccess: "Giriş Başarılı",
 
     // Pricing Page
     pricingTitle: "Size Uygun Planı Seçin",
@@ -97,6 +98,7 @@ export const translations = {
     uploadButton: "Yükle",
     uploading: "Yükleniyor...",
     uploadSuccess: "Yüklendi",
+    uploadError: "Yükleme hatası",
     tempId: "Geçici ID",
     unknownUploadError: "Bilinmeyen yükleme hatası",
     selectFile: "Dosya Seç",
@@ -327,6 +329,7 @@ export const translations = {
     guestLoggingIn: "Logging in...",
     guestLoginError: "Guest session creation failed.",
     sessionChecking: "Checking session info...",
+    loginSuccess: "Logged in successfully!",
 
     // Pricing Page
     pricingTitle: "Choose Your Plan",
@@ -363,6 +366,7 @@ export const translations = {
     uploadButton: "Upload",
     uploading: "Uploading...",
     uploadSuccess: "Uploaded",
+    uploadError: "Yükleme hatası",
     tempId: "Temp ID",
     unknownUploadError: "Unknown upload error",
     selectFile: "Select File",

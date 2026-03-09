@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 /* --- Açık Mod (Light Theme) --- */
@@ -24,7 +25,7 @@
   --container-border: #e5e7eb;
   --card-shadow: 0 10px 15px rgba(0,0,0,0.05);
 
-  --font-sans: var(--font-geist-sans, "Nunito", "Inter", Helvetica, sans-serif);
+  --font-sans: 'IBM Plex Sans', sans-serif;
   --font-mono: var(--font-geist-mono, monospace);
 
   --danger-action-text: #ffffff;

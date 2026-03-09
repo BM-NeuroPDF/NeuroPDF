@@ -6,6 +6,9 @@ import { useLanguage } from "@/context/LanguageContext";
 import { sendRequest } from "@/utils/api"; // ✅ Merkezi API
 import { usePdf } from "@/context/PdfContext"; // ✅ YENİ: Paneli kapatmak için
 
+import Popup from "@/components/ui/Popup";
+import { usePopup } from "@/hooks/usePopup";
+
 export default function RegisterPage() {
   const router = useRouter();
   const { t, language } = useLanguage();
@@ -21,6 +24,7 @@ export default function RegisterPage() {
   // UI States
   const [loading, setLoading] = useState(false);
   
+  const { popup, showError, showSuccess, close } = usePopup();
   // EULA Logic States
   const [showEulaModal, setShowEulaModal] = useState(false);
   const [eulaAccepted, setEulaAccepted] = useState(false);
@@ -103,7 +107,7 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!eulaAccepted) {
-      alert("Please accept the agreement first.");
+      showError("Please accept the agreement first.");
       return;
     }
 
@@ -113,12 +117,12 @@ export default function RegisterPage() {
       // ✅ sendRequest ile Kayıt
       await sendRequest("/auth/register", "POST", { ...form, eula_accepted: true });
 
-      alert(t('registerSuccess'));
+      showSuccess(t("registerSuccess"));
       setTimeout(() => router.push("/login"), 2000);
 
     } catch (err: any) {
       console.error("Register Error:", err);
-      alert(err.message || t('registerError'));
+      showError(err.message || t("registerError"));
     } finally {
       setLoading(false);
     }
@@ -302,6 +306,12 @@ export default function RegisterPage() {
           </div>
         </div>
       )}
+      <Popup
+        type={popup.type}
+        message={popup.message}
+        open={popup.open}
+        onClose={close}
+      />
     </main>
   );
 }
