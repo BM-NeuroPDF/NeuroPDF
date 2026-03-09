@@ -8,16 +8,15 @@ class Settings(BaseSettings):
     
     # Redis (Celery kuyruğu için şart - Docker'da "redis://redis_cache:6379" olur)
     REDIS_URL: str = "redis://localhost:6379"
-    # API Key for internal service authentication (optional, defaults to empty = no auth in dev)
-    #AI_SERVICE_API_KEY: str = ""
-
+    
     # --- Opsiyonel Alanlar (Boş bırakılabilir) ---
     
     # ElevenLabs (Eğer TTS kullanılacaksa gerekli, yoksa boş kalabilir)
     ELEVENLABS_API_KEY: Optional[str] = None
 
     # Dahili Servis Güvenliği (Backend -> AI Service iletişimi için)
-    AI_SERVICE_API_KEY: Optional[str] = None
+    # Development'ta boş olabilir, production'da set edilmeli
+    AI_SERVICE_API_KEY: str = ""
 
     # --- Pydantic Ayarları ---
     model_config = SettingsConfigDict(

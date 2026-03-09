@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # --- AI & Gemini & xAI Configuration ---
     AI_SERVICE_URL: str = os.getenv("AI_SERVICE_URL", "http://aiservice:8001")
-    AI_SERVICE_API_KEY: Optional[str] = os.getenv("AI_SERVICE_API_KEY")
+    AI_SERVICE_API_KEY: Optional[str] = os.getenv("AI_SERVICE_API_KEY", "")
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
     XAI_API_KEY: Optional[str] = os.getenv("XAI_API_KEY")
 

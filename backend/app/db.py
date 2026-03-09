@@ -83,17 +83,27 @@ try:
     engine = create_engine(
         build_db_url(),
         pool_pre_ping=True,
-        pool_recycle=180, connect_args={"connect_timeout": 3},
+        pool_recycle=180, 
+        connect_args={"connect_timeout": 10},
+        # Lazy loading: Bağlantıyı ilk kullanımda kur
+        # Modül yüklenirken bağlantı kontrolü yapma
     )
-    with engine.connect() as conn:
-        conn.execute(text("select 1"))
+    # Bağlantı kontrolünü kaldırdık - ilk kullanımda otomatik kurulacak
 except Exception as e:
-    logger.error(f"Database startup error: {repr(e)}")
-    raise
+    logger.warning(f"Database engine creation warning: {repr(e)}")
+    # Engine oluşturulamazsa bile devam et, bağlantı kullanıldığında tekrar denenecek
+    engine = None
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Engine None olsa bile SessionLocal oluştur, kullanıldığında hata verecek
+if engine:
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+else:
+    # Fallback: Engine yoksa None döndürecek bir sessionmaker
+    SessionLocal = None
 
 def get_db():
+    if SessionLocal is None:
+        raise RuntimeError("Database engine not initialized. Check database connection settings.")
     db = SessionLocal()
     try:
         yield db

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from ..tasks import pdf_tasks
 from ..services import ai_service, pdf_service
 from ..services.tts_manager import text_to_speech
-from ..services.llm_manager import CloudMode, LLMProvider, summarize_text, chat_over_pdf
+from ..services.llm_manager import CloudMode, LLMProvider, summarize_text, chat_over_pdf, general_chat
 from ..deps import verify_api_key
 
 router = APIRouter(
@@ -172,6 +172,75 @@ async def generate_speech(
         raise HTTPException(status_code=500, detail="Ses oluşturulamadı.")
 
     return StreamingResponse(audio_buffer, media_type="audio/mpeg")
+
+
+# ==========================================
+# GENEL CHAT (PDF Gerektirmez - Pro Kullanıcılar İçin)
+# ==========================================
+
+@router.post("/chat/general/start", response_model=StartChatResponse)
+async def start_general_chat(
+    llm_provider: LLMProvider = Query("cloud"),
+    mode: CloudMode = Query("flash"),
+    _: bool = Depends(verify_api_key),
+):
+    """Pro kullanıcılar için genel AI chat oturumu başlatır (PDF gerektirmez)."""
+    session_id = ai_service.create_general_chat_session(
+        llm_provider=llm_provider,
+        mode=mode,
+    )
+    return {"session_id": session_id}
+
+
+class GeneralChatRequest(BaseModel):
+    session_id: str
+    message: str
+    llm_provider: str | None = None
+    mode: str | None = None
+
+
+@router.post("/chat/general")
+async def general_chat(
+    req: GeneralChatRequest,
+    _: bool = Depends(verify_api_key),
+):
+    """Pro kullanıcılar için genel AI chat (PDF gerektirmez)."""
+    try:
+        ai_service._cleanup_sessions()
+        session = ai_service._GENERAL_CHAT_SESSIONS.get(req.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Sohbet oturumu bulunamadı veya süresi dolmuş.")
+
+        history = session["history"]
+
+        history_text = ""
+        for turn in history[-10:]:
+            history_text += f"{turn['role'].upper()}: {turn['content']}\n"
+
+        # Session'daki tercihi kullan, yoksa request'ten geleni, o da yoksa varsayılanı.
+        llm_provider = req.llm_provider or session.get("llm_provider", "cloud")
+        mode = req.mode or session.get("mode", "pro")
+
+        answer = general_chat(
+            history_text=history_text,
+            user_message=req.message,
+            llm_provider=llm_provider,
+            mode=mode,
+        )
+
+        history.append({"role": "user", "content": req.message})
+        history.append({"role": "assistant", "content": answer})
+
+        return {
+            "answer": answer,
+            "llm_provider": llm_provider,
+            "mode": mode if llm_provider == "cloud" else None,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Genel sohbet hatası: {str(e)}")
 
 
 @router.get("/health")

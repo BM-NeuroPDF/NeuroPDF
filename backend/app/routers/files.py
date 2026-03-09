@@ -98,8 +98,9 @@ async def validate_file_size(file: UploadFile, is_guest: bool):
 def get_ai_service_headers() -> dict:
     """AI Service'e yapılan istekler için header'ları hazırlar (API key dahil)."""
     headers = {}
-    if settings.AI_SERVICE_API_KEY:
-        headers["X-API-Key"] = settings.AI_SERVICE_API_KEY
+    api_key = getattr(settings, 'AI_SERVICE_API_KEY', None) or os.getenv("AI_SERVICE_API_KEY", "")
+    if api_key:
+        headers["X-API-Key"] = api_key
     return headers
 
 
@@ -712,6 +713,127 @@ async def send_chat_message(
         raise
     except Exception as e:
         print(f"❌ Chat Message Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==========================================
+# GENEL CHAT (Pro Kullanıcılar İçin - PDF Gerektirmez)
+# ==========================================
+
+def _check_pro_user(user_id: str, supabase: Client) -> bool:
+    """Kullanıcının Pro olup olmadığını kontrol eder."""
+    try:
+        user_response = supabase.table("users")\
+            .select("user_roles(name)")\
+            .eq("id", user_id)\
+            .execute()
+        
+        if user_response.data:
+            user_data = user_response.data[0]
+            if user_data.get("user_roles"):
+                roles_data = user_data["user_roles"]
+                if isinstance(roles_data, list) and len(roles_data) > 0:
+                    role_name = roles_data[0].get("name", "").lower()
+                elif isinstance(roles_data, dict):
+                    role_name = roles_data.get("name", "").lower()
+                else:
+                    return False
+                
+                # "pro user" veya "pro" kontrolü
+                return "pro" in role_name or role_name == "pro"
+        return False
+    except Exception as e:
+        print(f"⚠️ Pro kullanıcı kontrolü hatası: {e}")
+        return False
+
+
+@router.post("/chat/general/start")
+async def start_general_chat(
+    body: dict = Body(...),
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase)
+):
+    """
+    Pro kullanıcılar için genel AI chat oturumu başlatır (PDF gerektirmez).
+    Body: { "llm_provider": "cloud" (opsiyonel), "mode": "flash" (opsiyonel) }
+    """
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Kullanıcı kimliği bulunamadı.")
+    
+    # Pro kullanıcı kontrolü
+    if not _check_pro_user(user_id, supabase):
+        raise HTTPException(status_code=403, detail="Bu özellik sadece Pro kullanıcılar için kullanılabilir.")
+    
+    llm_provider = body.get("llm_provider", "cloud")
+    mode = body.get("mode", "flash")
+    
+    try:
+        # Kullanıcının LLM tercihini DB'den al (opsiyonel)
+        # Şimdilik varsayılan cloud kullanıyoruz
+        
+        # AI Service'e ilet
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            payload = {"llm_provider": llm_provider, "mode": mode}
+            target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/general/start"
+            headers = get_ai_service_headers()
+            response = await client.post(target_url, json=payload, headers=headers)
+            
+            if response.status_code != 200:
+                error_detail = response.json().get("detail", "AI hatası")
+                raise HTTPException(status_code=response.status_code, detail=error_detail)
+            
+            return response.json() # {"session_id": "..."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Genel Chat Start Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/chat/general/message")
+async def send_general_chat_message(
+    body: dict = Body(...),
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase)
+):
+    """
+    Pro kullanıcılar için genel AI chat mesajı gönderir (PDF gerektirmez).
+    Body: { "session_id": "...", "message": "..." }
+    """
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Kullanıcı kimliği bulunamadı.")
+    
+    # Pro kullanıcı kontrolü
+    if not _check_pro_user(user_id, supabase):
+        raise HTTPException(status_code=403, detail="Bu özellik sadece Pro kullanıcılar için kullanılabilir.")
+    
+    session_id = body.get("session_id")
+    message = body.get("message")
+
+    if not session_id or not message:
+        raise HTTPException(status_code=400, detail="Session ID ve mesaj gereklidir.")
+
+    try:
+        # AI Service'e ilet
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            payload = {"session_id": session_id, "message": message}
+            target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/general"
+            headers = get_ai_service_headers()
+            response = await client.post(target_url, json=payload, headers=headers)
+            
+            if response.status_code != 200:
+                error_detail = response.json().get("detail", "AI hatası")
+                raise HTTPException(status_code=response.status_code, detail=error_detail)
+            
+            return response.json() # {"answer": "...", "llm_provider": "...", "mode": "..."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Genel Chat Message Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1369,7 +1491,7 @@ async def get_user_stats(
 
         # 2. Rol Bilgisini Çek
         # Varsayılan rol "Standart" olsun
-        role_name = "Standart"
+        role_name_db = "default user"
         
         try:
             # users tablosundan role_id'yi bulup, user_roles tablosundan ismini alıyoruz.
@@ -1379,7 +1501,7 @@ async def get_user_stats(
                 .eq("id", user_id)\
                 .execute()
             
-            # Gelen veri yapısı genellikle şöyledir: [{'user_roles': {'name': 'Pro'}}]
+            # Gelen veri yapısı genellikle şöyledir: [{'user_roles': {'name': 'pro user'}}]
             if user_response.data:
                 user_data = user_response.data[0]
                 
@@ -1389,14 +1511,23 @@ async def get_user_stats(
                     
                     # Eğer liste ise ilkini al
                     if isinstance(roles_data, list) and len(roles_data) > 0:
-                        role_name = roles_data[0].get("name", "Standart")
+                        role_name_db = roles_data[0].get("name", "default user")
                     # Eğer sözlük (dict) ise direkt al
                     elif isinstance(roles_data, dict):
-                        role_name = roles_data.get("name", "Standart")
+                        role_name_db = roles_data.get("name", "default user")
                         
         except Exception as role_error:
             print(f"⚠️ Rol çekilemedi, varsayılan atandı: {role_error}")
-            # Hata olursa 'Standart' olarak kalsın
+            # Hata olursa 'default user' olarak kalsın
+        
+        # Veritabanındaki rol adını frontend'e uygun formata çevir
+        role_name_lower = role_name_db.lower() if role_name_db else ""
+        if "pro" in role_name_lower:
+            role_name = "Pro"
+        elif "admin" in role_name_lower:
+            role_name = "Admin"
+        else:
+            role_name = "Standart"
 
         return UserStatsResponse(
             summary_count=summary_count, 

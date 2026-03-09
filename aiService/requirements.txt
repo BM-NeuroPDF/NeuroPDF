@@ -13,7 +13,8 @@ pydantic-settings
 python-dotenv
 gTTS
 ollama
-
-
 nltk
+requests
 zeyrek
+pymupdf
+pillow

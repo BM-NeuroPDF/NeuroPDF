@@ -85,3 +85,46 @@ SOHBET GEÇMİŞİ:
 KULLANICI SORUSU:
 {user_message}
 """.strip()
+
+
+def general_chat(
+    history_text: str,
+    user_message: str,
+    llm_provider: LLMProvider = "cloud",
+    mode: CloudMode = "pro",
+) -> str:
+    """Genel AI chat (PDF gerektirmez)."""
+    system_instruction = (
+        "Sen NeuroPDF'in AI asistanısın. Kullanıcılara yardımcı olmak için buradasın.\n"
+        "PDF işlemleri, dosya yönetimi, genel sorular ve teknik konularda yardımcı olabilirsin.\n"
+        "Cevaplarını Türkçe ver, net, pratik ve samimi ol.\n"
+    )
+
+    full_prompt = f"""
+{system_instruction}
+
+SOHBET GEÇMİŞİ:
+---
+{history_text if history_text else "Henüz sohbet başlamadı."}
+---
+
+KULLANICI SORUSU:
+{user_message}
+""".strip()
+
+    if llm_provider == "cloud":
+        return ai_service.gemini_generate(
+            text_content=full_prompt,
+            prompt_instruction="Yukarıdaki sohbet geçmişine göre kullanıcının sorusuna yanıt ver:",
+            mode=mode
+        )
+
+    if llm_provider == "local":
+        result = analyze_text_with_local_llm(
+            full_prompt,
+            task="chat",
+            instruction="Genel AI asistanı gibi yanıt ver. Türkçe, net ve pratik ol."
+        )
+        return result.get("answer") or result.get("summary") or "Local LLM yanıt üretmedi."
+
+    raise HTTPException(status_code=400, detail="Geçersiz llm_provider.")

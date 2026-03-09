@@ -23,6 +23,7 @@ if settings.GEMINI_API_KEY:
 # Session Store (PDF Sohbet Hafızası)
 # ==========================================
 _PDF_CHAT_SESSIONS = {}
+_GENERAL_CHAT_SESSIONS = {}  # Genel chat için (PDF gerektirmez)
 SESSION_TTL_SECONDS = 60 * 60  # 1 saat
 
 
@@ -36,6 +37,9 @@ def _cleanup_sessions():
     expired = [sid for sid, s in _PDF_CHAT_SESSIONS.items() if (now - s["created_at"]) > SESSION_TTL_SECONDS]
     for sid in expired:
         del _PDF_CHAT_SESSIONS[sid]
+    expired_general = [sid for sid, s in _GENERAL_CHAT_SESSIONS.items() if (now - s["created_at"]) > SESSION_TTL_SECONDS]
+    for sid in expired_general:
+        del _GENERAL_CHAT_SESSIONS[sid]
 
 
 def _is_quota_or_rate_limit_error(err: Exception) -> bool:
@@ -160,6 +164,22 @@ def create_pdf_chat_session(
     _PDF_CHAT_SESSIONS[session_id] = {
         "text": pdf_text,
         "filename": filename or "uploaded.pdf",
+        "history": [],
+        "created_at": time.time(),
+        "llm_provider": llm_provider,
+        "mode": mode,
+    }
+    return session_id
+
+
+def create_general_chat_session(
+    llm_provider: str = "cloud",
+    mode: str = "flash"
+) -> str:
+    """Genel AI chat için yeni bir sohbet oturumu başlatır (PDF gerektirmez)."""
+    _cleanup_sessions()
+    session_id = str(uuid.uuid4())
+    _GENERAL_CHAT_SESSIONS[session_id] = {
         "history": [],
         "created_at": time.time(),
         "llm_provider": llm_provider,
