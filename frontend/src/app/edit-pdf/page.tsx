@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import dynamic from "next/dynamic";
 
@@ -36,7 +36,40 @@ import { getMaxUploadBytes } from "@/app/config/fileLimits";
 import Popup from "@/components/ui/Popup";
 import { usePopup } from "@/hooks/usePopup";
 
-const Document = dynamic(() => import("react-pdf").then(mod => mod.Document), { ssr: false });
+// PDF Worker yapılandırmasını dynamic import içinde yap
+const Document = dynamic(
+  () => import("react-pdf").then(async (mod) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/875b7ef5-8e65-4044-b050-49490fad64c5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'edit-pdf/page.tsx:41',message:'Dynamic import start',data:{hasWindow:typeof window !== "undefined"},timestamp:Date.now(),runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    // Worker yapılandırmasını burada yap (dynamic import içinde)
+    // Bu, Document component'i yüklenmeden önce worker'ın yapılandırılmasını garanti eder
+    if (typeof window !== "undefined") {
+      const pdfjs = mod.pdfjs;
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/875b7ef5-8e65-4044-b050-49490fad64c5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'edit-pdf/page.tsx:46',message:'Before worker config check',data:{hasWorkerSrc:!!(pdfjs as any).GlobalWorkerOptions.workerSrc,currentWorkerSrc:(pdfjs as any).GlobalWorkerOptions.workerSrc,version:(pdfjs as any).version},timestamp:Date.now(),runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      // Worker yapılandırmasını her zaman doğru CDN URL'i ile set et (yanlış değer varsa override et)
+      const correctWorkerSrc = "/pdf.worker.mjs";
+      if (!(pdfjs as any).GlobalWorkerOptions.workerSrc || (pdfjs as any).GlobalWorkerOptions.workerSrc === "pdf.worker.mjs" || !(pdfjs as any).GlobalWorkerOptions.workerSrc.startsWith("http")) {
+        (pdfjs as any).GlobalWorkerOptions.workerSrc = correctWorkerSrc;
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/875b7ef5-8e65-4044-b050-49490fad64c5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'edit-pdf/page.tsx:49',message:'Worker config set in dynamic import',data:{workerSrc:(pdfjs as any).GlobalWorkerOptions.workerSrc,wasFixed:true},timestamp:Date.now(),runId:'post-fix',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
+      }
+      // Worker config'i kontrol logu
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/875b7ef5-8e65-4044-b050-49490fad64c5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'edit-pdf/page.tsx:52',message:'Before delay, checking worker',data:{workerSrc:(pdfjs as any).GlobalWorkerOptions.workerSrc},timestamp:Date.now(),runId:'post-fix2',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/875b7ef5-8e65-4044-b050-49490fad64c5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'edit-pdf/page.tsx:55',message:'After delay, before return Document',data:{workerSrc:(pdfjs as any).GlobalWorkerOptions.workerSrc},timestamp:Date.now(),runId:'post-fix2',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+    }
+    return mod.Document;
+  }),
+  { ssr: false }
+);
+
 const Page = dynamic(() => import("react-pdf").then(mod => mod.Page), { ssr: false });
 
 type PageItem = {
@@ -83,6 +116,12 @@ export default function EditPdfPage() {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  // PDF options'ı memoize et (gereksiz reload'ları önlemek için)
+  const pdfOptions = useMemo(() => ({
+    cMapUrl: "/cmaps/",
+    cMapPacked: true,
+  }), []);
 
   const clearError = () => {
     setErrorType("NONE");
@@ -392,8 +431,15 @@ export default function EditPdfPage() {
               file={objectUrl}
               onLoadSuccess={handleLoadSuccess}
               loading={<div className="p-6">{t('loading')}</div>}
-              error={<div className="p-6 text-red-500">{t('pdfError')}</div>}
+              error={(error) => {
+                // #region agent log
+                fetch('http://127.0.0.1:7243/ingest/875b7ef5-8e65-4044-b050-49490fad64c5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'edit-pdf/page.tsx:432',message:'Document error render',data:{error:error?String(error):'null',errorType:typeof error,errorKeys:error?Object.keys(error):[],errorMessage:error?.message,errorStack:error?.stack,errorName:error?.name,fullError:error?JSON.stringify(error):'null'},timestamp:Date.now(),runId:'post-fix2',hypothesisId:'D'})}).catch(()=>{});
+                // #endregion
+                console.error("PDF Document Error:", error);
+                return <div className="p-6 text-red-500">{t('pdfError')}</div>;
+              }}
               className="flex justify-center"
+              options={pdfOptions}
             >
               <DndContext
                 sensors={sensors}

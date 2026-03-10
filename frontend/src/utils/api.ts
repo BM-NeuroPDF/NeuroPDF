@@ -1,7 +1,27 @@
-import { getSession } from "next-auth/react";
+import { getSession, signOut } from "next-auth/react";
 
 // Backend Adresi
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+/**
+ * Token expire durumunda kullanıcıyı login sayfasına yönlendir
+ */
+const handleTokenExpired = async () => {
+  // Sadece browser ortamında çalış
+  if (typeof window === "undefined") return;
+  
+  try {
+    // NextAuth session'ını temizle ve login sayfasına yönlendir
+    await signOut({ 
+      callbackUrl: "/login",
+      redirect: true 
+    });
+  } catch (error) {
+    console.error("Sign out hatası:", error);
+    // Fallback: Manuel yönlendirme
+    window.location.href = "/login";
+  }
+};
 
 export const sendRequest = async (
   endpoint: string,
@@ -52,6 +72,14 @@ export const sendRequest = async (
     const response = await fetch(`${BASE_URL}${endpoint}`, config);
 
     if (!response.ok) {
+      // ✅ Token expire kontrolü (401 Unauthorized)
+      if (response.status === 401) {
+        // Token expire olduğunda kullanıcıyı login sayfasına yönlendir
+        await handleTokenExpired();
+        // Yönlendirme yapıldıktan sonra hata fırlatma (kullanıcı zaten yönlendirildi)
+        throw new Error("Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.");
+      }
+
       const errorData = await response.json().catch(() => ({}));
 
       let errorMessage = `Hata: ${response.status}`;
@@ -78,6 +106,10 @@ export const sendRequest = async (
     }
 
   } catch (error) {
+    // 401 hatası zaten handleTokenExpired ile yönetildi, tekrar loglamaya gerek yok
+    if (error instanceof Error && error.message.includes("Oturum süreniz dolmuş")) {
+      throw error; // Yönlendirme yapıldı, hata mesajını fırlat ama loglama
+    }
     console.error("API İsteği Hatası:", error);
     throw error;
   }

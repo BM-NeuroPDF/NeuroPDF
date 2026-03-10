@@ -30,8 +30,9 @@ def get_supabase() -> Client:
     
     try:
         # ClientOptions karmaşasından kaçınmak için doğrudan httpx kullanıyoruz
-        # verify=False SSL sertifika kontrolünü atlar
-        verify_ssl = False
+        # SSL verification: Production'da açık, development'ta opsiyonel
+        env = os.getenv("ENVIRONMENT", "development").lower()
+        verify_ssl = env not in ["development", "dev", "local"]
         
         # Supabase client'ı oluştururken httpx istemcisini manuel enjekte ediyoruz
         return create_client(
@@ -82,11 +83,21 @@ def build_db_url() -> URL:
 try:
     engine = create_engine(
         build_db_url(),
-        pool_pre_ping=True,
-        pool_recycle=180, 
-        connect_args={"connect_timeout": 10},
+        pool_pre_ping=True,  # Her kullanımdan önce bağlantıyı kontrol et
+        pool_recycle=300,  # 5 dakikada bir bağlantıları yenile (Supabase için önerilen)
+        pool_size=5,  # Minimum bağlantı sayısı
+        max_overflow=10,  # Maksimum ekstra bağlantı sayısı
+        connect_args={
+            "connect_timeout": 30,  # Timeout'u 30 saniyeye çıkar
+            "sslmode": "require",  # SSL zorunlu
+            "keepalives": 1,  # TCP keepalive aktif
+            "keepalives_idle": 30,  # 30 saniye idle sonra keepalive gönder
+            "keepalives_interval": 10,  # Her 10 saniyede bir keepalive
+            "keepalives_count": 5,  # Maksimum 5 keepalive denemesi
+        },
         # Lazy loading: Bağlantıyı ilk kullanımda kur
         # Modül yüklenirken bağlantı kontrolü yapma
+        echo=False,  # SQL sorgularını loglama (production'da False)
     )
     # Bağlantı kontrolünü kaldırdık - ilk kullanımda otomatik kurulacak
 except Exception as e:
@@ -102,10 +113,72 @@ else:
     SessionLocal = None
 
 def get_db():
+    """
+    Database session dependency. 
+    Retry mekanizması ile bağlantı sorunlarını yönetir.
+    Development ortamında DB bağlantısı başarısız olursa None döndürür.
+    """
+    env = os.getenv("ENVIRONMENT", "development").lower()
+    is_development = env in ["development", "dev", "local"]
+    
     if SessionLocal is None:
+        if is_development:
+            logger.warning("Database engine not initialized. Returning None for development.")
+            yield None
+            return
         raise RuntimeError("Database engine not initialized. Check database connection settings.")
-    db = SessionLocal()
+    
+    if engine is None:
+        if is_development:
+            logger.warning("Database engine not available. Returning None for development.")
+            yield None
+            return
+        raise RuntimeError("Database engine not available. Check database connection settings.")
+    
+    # Bağlantıyı test et ve gerekirse yeniden dene
+    max_retries = 2 if is_development else 3
+    retry_delay = 1  # saniye
+    db = None
+    
+    for attempt in range(max_retries):
+        try:
+            db = SessionLocal()
+            # Bağlantıyı test et
+            db.execute(text("SELECT 1"))
+            break
+        except Exception as e:
+            if db:
+                try:
+                    db.close()
+                except:
+                    pass
+            if attempt < max_retries - 1:
+                logger.warning(f"Database connection attempt {attempt + 1} failed, retrying... Error: {repr(e)}")
+                import time
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                logger.error(f"Database connection failed after {max_retries} attempts: {repr(e)}")
+                if is_development:
+                    logger.warning("Development mode: Returning None instead of raising error.")
+                    yield None
+                    return
+                raise RuntimeError(f"Unable to connect to database after {max_retries} attempts. Please check your database connection settings.")
+    
+    if db is None:
+        if is_development:
+            logger.warning("Failed to create database session. Returning None for development.")
+            yield None
+            return
+        raise RuntimeError("Failed to create database session.")
+    
     try:
         yield db
+    except Exception as e:
+        if db:
+            db.rollback()
+        logger.error(f"Database session error: {repr(e)}")
+        raise
     finally:
-        db.close()
+        if db:
+            db.close()

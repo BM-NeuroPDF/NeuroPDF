@@ -72,49 +72,188 @@ def resolve_user_id(user_id: str, current_user: dict) -> str:
 @router.get("/{user_id}/avatar")
 async def get_avatar(
     user_id: str,
-    db: Session = Depends(get_db),
+    db: Optional[Session] = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Kullanıcının aktif avatarını 'users' tablosundaki 'active_avatar_url' alanından çeker.
+    Kullanıcının aktif avatarını çeker.
+    Önce DB'den, DB yoksa Supabase REST API'den çeker.
     """
     # 1. Kullanıcı kimliği doğrulama ('me' kontrolü)
     target_user_id = resolve_user_id(user_id, current_user)
+    logger.info(f"🔍 Avatar lookup started for user: {target_user_id}, DB available: {db is not None}")
     
-    # 2. Users tablosundan kullanıcıyı bul
-    from app.models import User
-    user = db.query(User).filter(User.id == target_user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    active_avatar_url = None
+    
+    # 2. Önce DB'den çekmeyi dene
+    if db is not None:
+        try:
+            from app.models import User
+            user = db.query(User).filter(User.id == target_user_id).first()
+            if user:
+                logger.info(f"User found in DB: {target_user_id}, settings: {user.settings is not None}")
+                if user.settings and user.settings.active_avatar_url:
+                    # Geçersiz avatar URL'lerini temizle (static/defaults/default_avatar.png gibi)
+                    temp_url = user.settings.active_avatar_url
+                    if temp_url and temp_url != "static/defaults/default_avatar.png":
+                        active_avatar_url = temp_url
+                        logger.info(f"✅ Avatar URL found in DB for {target_user_id}: {active_avatar_url}")
+                    else:
+                        logger.warning(f"⚠️ Invalid avatar URL in DB for {target_user_id}: {temp_url}, will create new avatar")
+                        # Geçersiz URL'i temizle
+                        if user.settings:
+                            user.settings.active_avatar_url = None
+                            db.commit()
+                else:
+                    logger.info(f"⚠️ User found but no active_avatar_url in settings for {target_user_id}")
+            else:
+                logger.warning(f"User not found in DB: {target_user_id}")
+        except Exception as e:
+            logger.warning(f"Failed to get avatar from DB: {e}", exc_info=True)
+    
+    # 3. DB'den bulunamadıysa Supabase REST API'den çekmeyi dene
+    if not active_avatar_url:
+        try:
+            from app.db import get_supabase
+            supabase = get_supabase()
+            
+            # user_settings tablosundan active_avatar_url çek
+            logger.info(f"Trying to get avatar from Supabase REST API for {target_user_id}")
+            response = supabase.table("user_settings").select("active_avatar_url").eq("user_id", target_user_id).execute()
+            
+            logger.info(f"Supabase REST API response: {response.data}")
+            if response.data and len(response.data) > 0:
+                temp_url = response.data[0].get("active_avatar_url")
+                # Geçersiz avatar URL'lerini temizle
+                if temp_url and temp_url != "static/defaults/default_avatar.png":
+                    active_avatar_url = temp_url
+                    logger.info(f"✅ Avatar URL found in Supabase REST API for {target_user_id}: {active_avatar_url}")
+                elif temp_url == "static/defaults/default_avatar.png":
+                    logger.warning(f"⚠️ Invalid avatar URL in Supabase for {target_user_id}: {temp_url}, will create new avatar")
+                    # Geçersiz URL'i temizle
+                    try:
+                        supabase.table("user_settings").update({"active_avatar_url": None}).eq("user_id", target_user_id).execute()
+                    except Exception as e:
+                        logger.warning(f"Failed to clean invalid avatar URL: {e}")
+                else:
+                    logger.info(f"⚠️ user_settings found but active_avatar_url is None for {target_user_id}")
+            else:
+                logger.info(f"⚠️ No user_settings found in Supabase REST API for {target_user_id}")
+        except Exception as e:
+            logger.warning(f"Failed to get avatar from Supabase REST API: {e}", exc_info=True)
+    
+    # 4. Avatar URL bulunamadıysa otomatik olarak oluştur
+    if not active_avatar_url:
+        logger.info(f"⚠️ No active avatar URL found for user {target_user_id}, creating default avatar...")
         
-    # 3. Aktif avatar yolunu kontrol et
-    if not user.active_avatar_url:
-        # Varsayılan avatar yoksa 404 döner (Frontend varsayılanı gösterir)
-        raise HTTPException(status_code=404, detail="Active avatar not set")
+        # DB varsa otomatik avatar oluştur
+        if db is not None:
+            try:
+                from app.models import User
+                user = db.query(User).filter(User.id == target_user_id).first()
+                if user:
+                    username = user.username or user.email or "User"
+                    logger.info(f"Creating initial avatar for user {target_user_id} with username: {username}")
+                    # Önce avatar bytes'ını oluştur (storage'a yükleme başarısız olsa bile kullanabilmek için)
+                    avatar_bytes = generate_avatar_from_name(username)
+                    
+                    # Storage'a yüklemeyi dene
+                    try:
+                        avatar = create_initial_avatar_for_user(db, target_user_id, username)
+                        if avatar and avatar.image_path:
+                            active_avatar_url = avatar.image_path
+                            logger.info(f"✅ Default avatar created and saved to storage: {active_avatar_url}")
+                        else:
+                            # Storage'a yükleme başarısız oldu, direkt bytes'ı döndür
+                            logger.warning(f"Storage upload failed, returning generated avatar directly")
+                            from fastapi.responses import Response
+                            return Response(content=avatar_bytes, media_type="image/png")
+                    except Exception as upload_error:
+                        # Storage'a yükleme başarısız oldu, direkt bytes'ı döndür
+                        logger.warning(f"Storage upload failed: {upload_error}, returning generated avatar directly")
+                        from fastapi.responses import Response
+                        return Response(content=avatar_bytes, media_type="image/png")
+                else:
+                    logger.warning(f"User not found in DB for avatar creation: {target_user_id}")
+            except Exception as e:
+                logger.error(f"Error creating initial avatar: {e}", exc_info=True)
+        
+        # Hala avatar URL yoksa 404 döndür
+        if not active_avatar_url:
+            logger.warning(f"❌ No active avatar URL found for user {target_user_id} and failed to create default avatar")
+            raise HTTPException(status_code=404, detail="Active avatar not set")
 
-    # 4. Supabase Storage'dan indir
+    # 5. Supabase Storage'dan indir
     from app.db import get_supabase
     supabase = get_supabase()
     
     try:
-        # Path'i loglayalım (debug için)
-        logger.info(f"Downloading active avatar for {target_user_id}: {user.active_avatar_url}")
+        logger.info(f"Downloading active avatar for {target_user_id}: {active_avatar_url}")
         
         # 'avatars' bucket'ından dosyayı indir
-        avatar_data = supabase.storage.from_("avatars").download(user.active_avatar_url)
+        avatar_data = supabase.storage.from_("avatars").download(active_avatar_url)
         
         # Supabase hata dönerse (dict dönebilir)
-        if isinstance(avatar_data, dict) and avatar_data.get("error"):
+        if isinstance(avatar_data, dict):
+            error_msg = avatar_data.get("error") or avatar_data.get("message", "Unknown error")
+            error_str = str(error_msg).lower()
             logger.error(f"Storage error: {avatar_data}")
+            
+            # Bucket not found hatası için özel mesaj
+            if "bucket not found" in error_str or "not_found" in error_str and "bucket" in error_str:
+                logger.warning("Avatars bucket not found in Supabase Storage")
+                raise HTTPException(status_code=404, detail="Avatar storage bucket not configured. Please create 'avatars' bucket in Supabase Storage.")
+            
+            # Object not found - dosya yok ama bucket var
+            if "object not found" in error_str or ("not_found" in error_str and "object" in error_str):
+                logger.warning(f"Avatar file not found in storage: {active_avatar_url}, generating default avatar")
+                # Storage'da dosya yoksa default avatar oluştur ve döndür
+                try:
+                    if db is not None:
+                        from app.models import User
+                        user = db.query(User).filter(User.id == target_user_id).first()
+                        if user:
+                            username = user.username or user.email or "User"
+                            avatar_bytes = generate_avatar_from_name(username)
+                            logger.info(f"✅ Generated default avatar for {target_user_id} (storage file missing)")
+                            from fastapi.responses import Response
+                            return Response(content=avatar_bytes, media_type="image/png")
+                except Exception as e:
+                    logger.error(f"Failed to generate default avatar: {e}", exc_info=True)
+                # Fallback: Avatar oluşturulamadıysa 404 döndür
+                raise HTTPException(status_code=404, detail="Avatar file not found in storage")
+            
             raise HTTPException(status_code=404, detail="Image file not found in storage")
         
         # Başarılıysa resmi dön
         from fastapi.responses import Response
         return Response(content=avatar_data, media_type="image/png")
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Avatar download failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve avatar file")
+        logger.error(f"Avatar download failed: {e}", exc_info=True)
+        # Hata mesajını daha açıklayıcı yap
+        error_str = str(e).lower()
+        if "bucket not found" in error_str or ("not_found" in error_str and "bucket" in error_str):
+            raise HTTPException(status_code=404, detail="Avatar storage bucket not configured. Please create 'avatars' bucket in Supabase Storage.")
+        if "object not found" in error_str or ("not_found" in error_str and "object" in error_str):
+            # Storage'da dosya yoksa default avatar oluştur ve döndür
+            logger.warning(f"Avatar file not found in storage, generating default avatar for {target_user_id}")
+            try:
+                if db is not None:
+                    from app.models import User
+                    user = db.query(User).filter(User.id == target_user_id).first()
+                    if user:
+                        username = user.username or user.email or "User"
+                        avatar_bytes = generate_avatar_from_name(username)
+                        logger.info(f"✅ Generated default avatar for {target_user_id} (exception fallback)")
+                        from fastapi.responses import Response
+                        return Response(content=avatar_bytes, media_type="image/png")
+            except Exception as gen_error:
+                logger.error(f"Failed to generate default avatar: {gen_error}", exc_info=True)
+            raise HTTPException(status_code=404, detail="Avatar file not found in storage")
+        raise HTTPException(status_code=404, detail="Failed to retrieve avatar file")
 
 
 @router.get("/{user_id}/avatars")

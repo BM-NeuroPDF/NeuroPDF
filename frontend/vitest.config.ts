@@ -10,6 +10,17 @@ export default defineConfig({
         setupFiles: ['./vitest.setup.ts'],
         alias: {
             '@': path.resolve(__dirname, './src')
+        },
+        coverage: {
+            provider: 'v8',
+            reporter: ['text', 'json', 'html'],
+            exclude: [
+                'node_modules/',
+                'src/app/__tests__/',
+                '**/*.config.{ts,tsx}',
+                '**/*.d.ts',
+                '**/types/**',
+            ]
         }
     }
 })

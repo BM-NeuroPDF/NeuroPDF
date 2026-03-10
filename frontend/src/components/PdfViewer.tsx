@@ -10,7 +10,7 @@ import "react-pdf/dist/Page/AnnotationLayer.css";
 // Configure worker from CDN to exactly match installed pdfjs version (.mjs)
 if (typeof window !== "undefined") {
   (pdfjs as any).GlobalWorkerOptions.workerSrc =
-    `https://unpkg.com/pdfjs-dist@${(pdfjs as any).version}/build/pdf.worker.min.mjs`;
+    "/pdf.worker.mjs";
 }
 
 type Props = {

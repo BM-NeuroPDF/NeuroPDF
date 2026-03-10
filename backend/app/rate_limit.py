@@ -29,7 +29,16 @@ def check_rate_limit(request: Request, key: str, limit: int, window: int = 60) -
         else:
             current_count = int(current)
             if current_count >= limit:
-                # Rate limit aşıldı
+                # Rate limit aşıldı - log security event
+                try:
+                    from .security_logger import log_rate_limit_exceeded
+                    log_rate_limit_exceeded(
+                        ip_address=client_ip,
+                        endpoint=key,
+                        request=request
+                    )
+                except Exception:
+                    pass  # Don't fail if logging fails
                 return False
             else:
                 # Sayacı artır

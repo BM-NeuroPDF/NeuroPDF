@@ -30,7 +30,7 @@ const formatTime = (seconds: number) => {
 
 export default function SummarizePdfPage() {
   const { data: session, status } = useSession();
-  const { pdfFile } = usePdf();
+  const { pdfFile, setSessionId, setIsChatActive, setChatMessages } = usePdf();
   
   // ✅ 1. Dil desteği için t() ve language alındı
   const { t, language } = useLanguage();
@@ -197,18 +197,44 @@ export default function SummarizePdfPage() {
 
       if (data && data.summary) {
         setSummary(data.summary);
+        setSummarizing(false); // ✅ Özet başarılı olduğunda hemen durumu güncelle
+        
+        // ✅ PDF text'i varsa ve kullanıcı giriş yapmışsa, PDF chat session'ını arka planda başlat
+        // await kaldırıldı - artık blocking değil, kullanıcı özeti hemen görebilir
+        if (data.pdf_text && session && file) {
+          // Promise olarak arka planda çalıştır, kullanıcıyı bekletme
+          sendRequest("/files/chat/start-from-text", "POST", {
+            pdf_text: data.pdf_text,
+            filename: file.name,
+          })
+          .then((chatRes) => {
+            if (chatRes.session_id) {
+              setSessionId(chatRes.session_id);
+              setIsChatActive(true);
+              setChatMessages([{ 
+                role: "assistant", 
+                content: `👋 Merhaba! **"${file.name}"** dosyasını analiz ettim. Bana bu belgeyle ilgili her şeyi sorabilirsin.` 
+              }]);
+            }
+          })
+          .catch((e) => {
+            console.warn("PDF chat session başlatılamadı:", e);
+            // Hata durumunda sessizce devam et, kullanıcı manuel olarak başlatabilir
+            // Özetleme başarılı olduğu için burada hata göstermiyoruz
+          });
+          // await yok, hemen devam ediyor - özet gösteriliyor
+        }
+
+        if (!session) {
+          try { await guestService.incrementUsage(); } catch (e) { console.error(e); }
+        }
       } else {
         throw new Error("Özet alınamadı.");
-      }
-
-      if (!session) {
-        try { await guestService.incrementUsage(); } catch (e) { console.error(e); }
       }
     } catch (e: any) {
       console.error("PDF Özetleme Hatası:", e);
       setErrorType("SUMMARY_ERROR"); // Genel özet hatası
-    } finally {
-      setSummarizing(false);
+      setSummarizing(false); // ✅ Hata durumunda da durumu güncelle
     }
   };
 

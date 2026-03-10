@@ -1,5 +1,6 @@
 import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator
 from typing import Optional
 import logging
 
@@ -32,6 +33,7 @@ class Settings(BaseSettings):
     AI_SERVICE_API_KEY: Optional[str] = os.getenv("AI_SERVICE_API_KEY", "")
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
     XAI_API_KEY: Optional[str] = os.getenv("XAI_API_KEY")
+    HUGGINGFACE_API_KEY: Optional[str] = os.getenv("HUGGINGFACE_API_KEY", "")  # Opsiyonel, rate limit için önerilir
 
     # --- User & File Limits ---
     MAX_GUEST_USAGE: int = int(os.getenv("MAX_GUEST_USAGE", "3"))
@@ -54,6 +56,37 @@ class Settings(BaseSettings):
                     self.REDIS_PORT = int(port_part.split("/")[0])
             except Exception:
                 pass
+
+    @model_validator(mode='after')
+    def validate_production_settings(self):
+        """Validate critical settings in production environment"""
+        env = os.getenv("ENVIRONMENT", "development").lower()
+        
+        # JWT_SECRET validation
+        if self.JWT_SECRET == "fallback_secret_change_this":
+            if env in ["production", "prod"]:
+                raise RuntimeError(
+                    "JWT_SECRET must be set to a secure value in production! "
+                    "Do not use the default fallback secret."
+                )
+        
+        # Production environment variable validation
+        if env in ["production", "prod"]:
+            required_vars = [
+                "JWT_SECRET",
+                "SUPABASE_URL",
+                "SUPABASE_KEY",
+                "DB_USER",
+                "DB_PASSWORD",
+                "DB_HOST"
+            ]
+            missing = [var for var in required_vars if not os.getenv(var)]
+            if missing:
+                raise RuntimeError(
+                    f"Missing required environment variables in production: {', '.join(missing)}"
+                )
+        
+        return self
 
     model_config = SettingsConfigDict(
         env_file=None,

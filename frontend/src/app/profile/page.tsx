@@ -76,6 +76,17 @@ export default function ProfilePage() {
           
           // Avatarı çek
           await fetchUserAvatar();
+          
+          // LLM tercihini çek
+          try {
+            const llmData = await sendRequest("/files/user/llm-choice");
+            if (llmData && llmData.provider) {
+              setLlmChoice(llmData.provider as 'local' | 'cloud');
+            }
+          } catch (e) {
+            console.error("LLM tercihi çekilemedi:", e);
+            // Hata durumunda default değeri kullan
+          }
         } catch (e) {
           console.error("Veri çekilemedi:", e);
         }

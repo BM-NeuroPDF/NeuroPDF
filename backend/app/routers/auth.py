@@ -56,7 +56,7 @@ def google_login(request: Request, payload: auth_schemas.GoogleExchangeIn, supab
         settings_insert = {
             "user_id": new_id,
             "eula_accepted": False,
-            "active_avatar_url": "static/defaults/default_avatar.png"
+            "active_avatar_url": None  # Avatar create_user_avatar tarafından oluşturulacak
         }
         supabase.table("user_settings").insert(settings_insert).execute()
         
@@ -142,7 +142,7 @@ def register_user(request: Request, payload: auth_schemas.RegisterIn, supabase: 
     settings_insert = {
         "user_id": new_id,
         "eula_accepted": True,
-        "active_avatar_url": "static/defaults/default_avatar.png"
+        "active_avatar_url": None  # Avatar create_user_avatar tarafından oluşturulacak
     }
     supabase.table("user_settings").insert(settings_insert).execute()
 
@@ -172,12 +172,25 @@ def register_user(request: Request, payload: auth_schemas.RegisterIn, supabase: 
 
 @router.post("/login", response_model=auth_schemas.AuthOut)
 def login(request: Request, payload: auth_schemas.LoginIn, supabase: Client = Depends(get_supabase)):
+    from ..security_logger import log_failed_login, log_successful_login, log_rate_limit_exceeded
+    
     if not check_rate_limit(request, "auth:login", settings.RATE_LIMIT_AUTH_PER_MINUTE, 60):
+        log_rate_limit_exceeded(
+            ip_address=request.client.host if request.client else None,
+            endpoint="/auth/login",
+            request=request
+        )
         raise HTTPException(status_code=429, detail="Too many requests")
 
     # 1. Buls auth records (email = provider_key in local strategy)
     auth_res = supabase.table("user_auth").select("*").eq("provider_key", payload.email).eq("provider", "local").execute()
-    if not auth_res.data: raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not auth_res.data:
+        log_failed_login(
+            email=payload.email,
+            ip_address=request.client.host if request.client else None,
+            request=request
+        )
+        raise HTTPException(status_code=401, detail="Invalid credentials")
     
     auth_record = auth_res.data[0]
     user_id = auth_record["user_id"]
@@ -192,7 +205,13 @@ def login(request: Request, payload: auth_schemas.LoginIn, supabase: Client = De
             is_valid = True
             supabase.table("user_auth").update({"password_hash": security.hash_password(payload.password)}).eq("id", auth_record["id"]).execute()
 
-    if not is_valid: raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not is_valid:
+        log_failed_login(
+            email=payload.email,
+            ip_address=request.client.host if request.client else None,
+            request=request
+        )
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # 3. Get user & settings for payload
     user_res = supabase.table("users").select("*").eq("id", user_id).execute()
@@ -202,6 +221,14 @@ def login(request: Request, payload: auth_schemas.LoginIn, supabase: Client = De
     eula_accepted = settings_res.data[0]["eula_accepted"] if settings_res.data else False
 
     jwt_user = {**user, "email": payload.email, "eula_accepted": eula_accepted}
+
+    # Log successful login
+    log_successful_login(
+        user_id=str(user_id),
+        email=payload.email,
+        ip_address=request.client.host if request.client else None,
+        request=request
+    )
 
     return auth_schemas.AuthOut(
         access_token=security.create_jwt(jwt_user),

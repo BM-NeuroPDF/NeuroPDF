@@ -58,12 +58,18 @@ def _generate_with_retry(model, prompt: str, attempts: int = 5):
         except Exception as e:
             last_err = e
             if _is_quota_or_rate_limit_error(e):
-                # Üstel bekleme (Exponential Backoff)
-                sleep_s = min(60, (2 ** i)) + random.random() * 0.5
+                # Üstel bekleme (Exponential Backoff) - daha uzun bekleme süreleri
+                # İlk denemelerde kısa, son denemelerde daha uzun bekle
+                base_delay = min(120, (2 ** i) * 5)  # 5s, 10s, 20s, 40s, 80s (max 120s)
+                sleep_s = base_delay + random.random() * 2  # Rastgele 0-2s ekle
                 print(f"⚠️ Gemini Rate Limit ({i+1}/{attempts}). {sleep_s:.2f}s bekleniyor...")
                 time.sleep(sleep_s)
                 continue
             raise 
+    # Tüm denemeler başarısız oldu
+    error_msg = str(last_err) if last_err else "Unknown error"
+    if "quota" in error_msg.lower() and "exceeded" in error_msg.lower():
+        print(f"❌ Gemini API quota aşıldı. Lütfen Local LLM kullanmayı deneyin veya birkaç saat sonra tekrar deneyin.")
     raise last_err
 
 
@@ -92,8 +98,8 @@ def gemini_generate(text_content: str, prompt_instruction: str, mode: str = "fla
     model = flash_model if mode == "flash" else pro_model
     
     try:
-        # Retry mekanizması ile çağır
-        response = _generate_with_retry(model, full_prompt, attempts=3)
+        # Retry mekanizması ile çağır (5 deneme, daha uzun bekleme süreleri)
+        response = _generate_with_retry(model, full_prompt, attempts=5)
         
         if getattr(response, "candidates", None):
             return response.text

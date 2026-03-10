@@ -1,5 +1,5 @@
 # app/routers/files.py
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Header, Body
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Header, Body, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from typing import Dict, List, Optional
 from pypdf import PdfReader, PdfWriter
@@ -10,7 +10,7 @@ import html
 import io
 import re
 import os
-import jwt # ✅ EKLENDİ: Token çözümleme için gerekli
+# jwt import removed - using get_current_user dependency instead
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -20,7 +20,7 @@ from ..config import settings
 from ..db import get_supabase, Client, get_db
 from ..storage import save_pdf_to_db, get_pdf_from_db, delete_pdf_from_db, list_user_pdfs
 # ✅ DÜZELTİLDİ: auth.py'den import edildi ve eski fonksiyon kaldırıldı
-from ..deps import get_current_user 
+from ..deps import get_current_user, get_current_user_optional 
 from ..models import UserStatsResponse, User
 import logging
 
@@ -107,14 +107,14 @@ def get_ai_service_headers() -> dict:
 def get_user_llm_provider(db: Session, user_id: str) -> str:
     """
     Kullanıcının DB'deki LLM tercihine göre provider string'i döndürür.
-    llm_choice_id: 0 = "local", 1 = "cloud"
+    llm_choice_id: 1 = "local", 2 = "cloud"
     Eğer kullanıcı bulunamazsa default "local" döner.
     """
     try:
         user = db.query(User).filter(User.id == user_id).first()
         if user:
-            # llm_choice_id: 0 = local llm, 1 = cloud llm
-            return "local" if getattr(user, 'llm_choice_id', 0) == 0 else "cloud"
+            # llm_choice_id: 1 = local llm, 2 = cloud llm
+            return "local" if getattr(user, 'llm_choice_id', 1) == 1 else "cloud"
         return "local" 
     except Exception as e:
         logger.warning(f"Failed to get user LLM choice for {user_id}: {e}")
@@ -127,24 +127,66 @@ def get_user_llm_provider(db: Session, user_id: str) -> str:
 class UpdateLlmChoiceRequest(BaseModel):
     provider: str  # "local" veya "cloud"
 
-@router.post("/user/update-llm")
-async def update_llm_choice(
-    req: UpdateLlmChoiceRequest,
+@router.get("/user/llm-choice")
+async def get_llm_choice(
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Optional[Session] = Depends(get_db)
 ):
     """
-    Kullanıcının varsayılan LLM tercihini günceller.
-    provider: 'local' -> 0
-    provider: 'cloud' -> 1
+    Kullanıcının mevcut LLM tercihini döndürür.
     """
     try:
         user_id = current_user.get("sub")
         if not user_id:
             raise HTTPException(status_code=401, detail="User ID not found")
 
-        # Provider string'ini ID'ye çevir (DB şemanıza göre: 0=Local, 1=Cloud)
-        choice_id = 1 if req.provider == "cloud" else 0
+        if db is None:
+            # DB bağlantısı yoksa default değeri döndür
+            logger.warning("Database connection unavailable, returning default LLM choice")
+            return {"provider": "local", "choice_id": 1}
+
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            # Kullanıcı bulunamazsa default değeri döndür
+            return {"provider": "local", "choice_id": 1}
+        
+        # llm_choice_id: 1 = local, 2 = cloud
+        choice_id = getattr(user, 'llm_choice_id', 1)
+        provider = "cloud" if choice_id == 2 else "local"
+        
+        return {"provider": provider, "choice_id": choice_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"LLM choice get error: {e}", exc_info=True)
+        # Hata durumunda default değeri döndür
+        return {"provider": "local", "choice_id": 1}
+
+@router.post("/user/update-llm")
+async def update_llm_choice(
+    req: UpdateLlmChoiceRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Optional[Session] = Depends(get_db)
+):
+    """
+    Kullanıcının varsayılan LLM tercihini günceller.
+    provider: 'local' -> 1
+    provider: 'cloud' -> 2
+    """
+    try:
+        user_id = current_user.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User ID not found")
+
+        if db is None:
+            raise HTTPException(
+                status_code=503, 
+                detail="Veritabanı bağlantısı şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin."
+            )
+
+        # Provider string'ini ID'ye çevir (DB şemanıza göre: 1=Local, 2=Cloud)
+        choice_id = 2 if req.provider == "cloud" else 1
         
         # Kullanıcıyı bul ve güncelle
         user = db.query(User).filter(User.id == user_id).first()
@@ -160,7 +202,8 @@ async def update_llm_choice(
         raise
     except Exception as e:
         logger.error(f"LLM update error: {e}", exc_info=True)
-        db.rollback()
+        if db:
+            db.rollback()
         raise HTTPException(status_code=500, detail="Tercih güncellenemedi")
 
 # --- GÜNCELLENMİŞ VE LOGLAYAN HELPER FONKSİYONU ---
@@ -243,9 +286,10 @@ def parse_page_ranges(range_str: str, max_pages: int) -> list[int]:
 @router.post("/summarize")
 async def summarize_file(
     file: UploadFile = File(...),
-    authorization: Optional[str] = Header(None),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
     supabase: Client = Depends(get_supabase),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     print("\n--- SUMMARIZE İSTEĞİ ---")
 
@@ -253,16 +297,9 @@ async def summarize_file(
         raise HTTPException(status_code=400, detail="Sadece PDF dosyaları kabul edilir.")
 
     # USER ID ÇÖZÜMLEME
-    user_id = None
-    if authorization:
-        try:
-            token = authorization.split("Bearer ")[1] if "Bearer " in authorization else authorization
-            payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
-            user_id = payload.get("sub")
-            print(f"✅ Token Çözüldü. User ID: {user_id}")
-        except Exception as e:
-            print(f"⚠️ Token Hatası (Misafir sayılacak): {str(e)}")
-            pass
+    user_id = current_user.get("sub") if current_user else None
+    if user_id:
+        print(f"✅ Token Çözüldü. User ID: {user_id}")
     else:
         print("👤 Misafir Kullanıcı")
 
@@ -273,7 +310,7 @@ async def summarize_file(
         file_content = await file.read()
 
         # ==========================================
-        # PDF HASH
+        # PDF HASH (Bir kez hesapla, tekrar kullan)
         # ==========================================
         pdf_hash = generate_pdf_hash(file_content)
         print(f"🔑 PDF Hash: {pdf_hash}")
@@ -285,19 +322,36 @@ async def summarize_file(
             llm_choice_id = 1  # local default
             provider_string = "local"
         else:
-            llm_choice_id, provider_string = get_user_llm_choice(db, user_id)
+            if db is None:
+                # DB bağlantısı yoksa default değerleri kullan
+                llm_choice_id = 1
+                provider_string = "local"
+            else:
+                llm_choice_id, provider_string = get_user_llm_choice(db, user_id)
 
         # ==========================================
-        # CACHE KONTROLÜ
+        # CACHE KONTROLÜ (Hash'i tekrar hesaplamadan kullan)
         # ==========================================
-        cached_summary = await check_summarize_cache(
-            file_content, db, llm_choice_id=llm_choice_id, user_id=user_id
-        )
+        cached_summary = None
+        if db is not None:
+            cached_summary = await check_summarize_cache_by_hash(
+                pdf_hash, db, llm_choice_id=llm_choice_id, user_id=user_id
+            )
 
         if cached_summary:
+            # Cache'den özet geldiğinde PDF text'ini extract et
+            try:
+                from io import BytesIO
+                reader = PdfReader(BytesIO(file_content))
+                pdf_text = "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
+            except Exception as e:
+                print(f"⚠️ PDF text extraction failed: {e}")
+                pdf_text = None
+            
             return {
                 "status": "success",
                 "summary": cached_summary,
+                "pdf_text": pdf_text,  # PDF text'ini de döndür (chat için)
                 "pdf_hash": pdf_hash,
                 "pdf_blob": None,
                 "cached": True
@@ -311,7 +365,9 @@ async def summarize_file(
 
         print(f"📡 AI Service İstek: {ai_service_url} (llm_provider: {provider_string})")
 
-        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+        # Local LLM için daha uzun timeout (gemma2:9b tek adımda ~7 dk sürebilir)
+        timeout_duration = 600.0 if provider_string == "local" else 120.0
+        async with httpx.AsyncClient(timeout=timeout_duration, follow_redirects=True) as client:
             headers = get_ai_service_headers()
             params = {"llm_provider": provider_string, "pdf_hash": pdf_hash}
             response = await client.post(ai_service_url, files=files, params=params, headers=headers)
@@ -322,23 +378,31 @@ async def summarize_file(
 
             result = response.json()
 
+            # ✅ OPTİMİZASYON: Kullanıcı istatistikleri ve cache kaydetme arka planda yapılsın
+            # Response'u hemen döndür, kullanıcıyı bekletme
+            
             if not is_guest:
-                await increment_user_usage(user_id, supabase, "summary")
+                # Kullanıcı istatistiklerini arka planda güncelle (non-blocking)
+                background_tasks.add_task(increment_user_usage, user_id, supabase, "summary")
+            
+            # Cache'i arka planda kaydet (non-blocking)
+            # Not: DB session'ı background task'ta kullanmak için yeni session oluşturulmalı
+            if db is not None:
+                summary_text = result.get("summary")
+                # DB session'ı background task'ta kullanmak için yeni session oluştur
+                background_tasks.add_task(
+                    save_summarize_cache_background,
+                    pdf_hash,
+                    summary_text,
+                    llm_choice_id,
+                    user_id
+                )
 
-            # ==========================================
-            # CACHE KAYDET
-            # ==========================================
-            await save_summarize_cache(
-                file_content,
-                result.get("summary"),
-                db,
-                llm_choice_id=llm_choice_id,
-                user_id=user_id
-            )
-
+        # ✅ Response'u hemen döndür (kullanıcı bekletilmez)
         return {
             "status": "success",
             "summary": result.get("summary"),
+            "pdf_text": result.get("pdf_text"),  # PDF text'ini de döndür (chat için)
             "pdf_hash": pdf_hash,
             "pdf_blob": None,
             "cached": False
@@ -520,8 +584,18 @@ async def check_summarize_cache(
     llm_choice_id: int,
     user_id: Optional[str] = None
 ) -> Optional[str]:
+    """PDF bytes'ından hash hesaplayarak cache kontrolü yapar."""
     pdf_hash = generate_pdf_hash(pdf_bytes)
+    return await check_summarize_cache_by_hash(pdf_hash, db, llm_choice_id, user_id)
 
+
+async def check_summarize_cache_by_hash(
+    pdf_hash: str,
+    db: Session,
+    llm_choice_id: int,
+    user_id: Optional[str] = None
+) -> Optional[str]:
+    """Hash'ten direkt cache kontrolü yapar (optimize edilmiş versiyon)."""
     # CLOUD → user_id dikkate alınmaz
     if llm_choice_id == 2:  # cloud
         query = text("""
@@ -579,19 +653,70 @@ async def save_summarize_cache(
     llm_choice_id: int,
     user_id: Optional[str] = None
 ):
+    """PDF bytes'ından hash hesaplayarak cache kaydeder."""
     pdf_hash = generate_pdf_hash(pdf_bytes)
-    query = text("""
-        INSERT INTO summary_cache (pdf_hash, summary, llm_choice_id, user_id, created_at)
-        VALUES (:hash, :summary, :llm_choice_id, :user_id, NOW())
-    """)
-    db.execute(query, {
-        "hash": pdf_hash,
-        "summary": summary,
-        "llm_choice_id": llm_choice_id,
-        "user_id": user_id
-    })
-    db.commit()
-    print(f"✅ Cache kaydedildi: Hash {pdf_hash}, LLM Choice ID {llm_choice_id}, User {user_id}")
+    await save_summarize_cache_by_hash(pdf_hash, summary, db, llm_choice_id, user_id)
+
+
+async def save_summarize_cache_by_hash(
+    pdf_hash: str,
+    summary: str,
+    db: Session,
+    llm_choice_id: int,
+    user_id: Optional[str] = None
+):
+    """Hash'ten direkt cache kaydeder (optimize edilmiş versiyon)."""
+    try:
+        query = text("""
+            INSERT INTO summary_cache (pdf_hash, summary, llm_choice_id, user_id, created_at)
+            VALUES (:hash, :summary, :llm_choice_id, :user_id, NOW())
+            ON CONFLICT (pdf_hash, llm_choice_id, user_id) 
+            DO UPDATE SET summary = EXCLUDED.summary, created_at = NOW()
+        """)
+        db.execute(query, {
+            "hash": pdf_hash,
+            "summary": summary,
+            "llm_choice_id": llm_choice_id,
+            "user_id": user_id
+        })
+        db.commit()
+        print(f"✅ Cache kaydedildi: Hash {pdf_hash}, LLM Choice ID {llm_choice_id}, User {user_id}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Cache kaydetme hatası: {e}", exc_info=True)
+        # Hata olsa bile devam et, kritik değil
+
+
+def save_summarize_cache_background(
+    pdf_hash: str,
+    summary: str,
+    llm_choice_id: int,
+    user_id: Optional[str] = None
+):
+    """Background task için sync versiyon - Yeni DB session oluşturur."""
+    from ..db import SessionLocal
+    db = SessionLocal()
+    try:
+        query = text("""
+            INSERT INTO summary_cache (pdf_hash, summary, llm_choice_id, user_id, created_at)
+            VALUES (:hash, :summary, :llm_choice_id, :user_id, NOW())
+            ON CONFLICT (pdf_hash, llm_choice_id, user_id) 
+            DO UPDATE SET summary = EXCLUDED.summary, created_at = NOW()
+        """)
+        db.execute(query, {
+            "hash": pdf_hash,
+            "summary": summary,
+            "llm_choice_id": llm_choice_id,
+            "user_id": user_id
+        })
+        db.commit()
+        print(f"✅ Cache kaydedildi (background): Hash {pdf_hash}, LLM Choice ID {llm_choice_id}, User {user_id}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Cache kaydetme hatası (background): {e}", exc_info=True)
+        # Hata olsa bile devam et, kritik değil
+    finally:
+        db.close()
 
 # ==========================================
 # USER LLM CHOICE ID ALMA
@@ -624,6 +749,67 @@ def get_user_llm_choice(db: Session, user_id: str):
 # ==========================================
 # CHAT Start
 # ==========================================
+
+@router.post("/chat/start-from-text")
+async def start_chat_from_text(
+    body: dict = Body(...),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    PDF text'ini direkt kullanarak chat session başlatır (dosya yüklemeden).
+    Body: { "pdf_text": "...", "filename": "...", "llm_provider": "cloud|local" }
+    """
+    pdf_text = body.get("pdf_text")
+    filename = body.get("filename", "document.pdf")
+    
+    if not pdf_text:
+        raise HTTPException(status_code=400, detail="PDF text gereklidir.")
+    
+    try:
+        # Kullanıcının LLM tercihini DB'den al
+        user_id = current_user.get("sub")
+        if db and user_id:
+            try:
+                llm_provider = get_user_llm_provider(db, user_id)
+            except Exception as e:
+                print(f"⚠️ LLM provider alınamadı, default kullanılıyor: {e}")
+                llm_provider = "local"
+        else:
+            llm_provider = "local"
+        print(f"📊 Kullanıcı LLM Tercihi: {llm_provider}")
+        
+        # AI Service'e PDF text'ini gönder
+        async with httpx.AsyncClient() as client:
+            target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/start-from-text"
+            payload = {
+                "pdf_text": pdf_text,
+                "filename": filename,
+                "llm_provider": body.get("llm_provider", llm_provider),
+                "mode": body.get("mode", "pro" if body.get("llm_provider", llm_provider) == "cloud" else "flash")
+            }
+            headers = get_ai_service_headers()
+            response = await client.post(target_url, json=payload, headers=headers, timeout=60.0)
+            
+            if response.status_code != 200:
+                print(f"❌ AI Service Hatası: {response.text}")
+                raise HTTPException(status_code=502, detail="Yapay zeka servisi başlatılamadı.")
+            
+            data = response.json()
+            print(f"✅ Chat Oturumu Başladı (Text'ten): {data['session_id']}")
+            
+            return {"session_id": data["session_id"], "filename": filename}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Chat Start From Text Error: {e}")
+        print(f"Traceback: {error_trace}")
+        logger.error(f"Chat Start From Text Error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e) if str(e) else "Chat session başlatılamadı")
+
 
 @router.post("/chat/start")  # 👈 {file_id} kaldırıldı
 async def start_chat_session(
@@ -704,7 +890,30 @@ async def send_chat_message(
             response = await client.post(target_url, json=payload, headers=headers)
             
             if response.status_code != 200:
-                error_detail = response.json().get("detail", "AI hatası")
+                # Response'u parse etmeyi dene
+                try:
+                    error_detail = response.json().get("detail", "AI hatası")
+                except Exception:
+                    error_detail = response.text or f"AI Service hatası: {response.status_code}"
+                
+                print(f"❌ AI Service Hatası ({response.status_code}): {error_detail}")
+                
+                # Gemini quota/rate limit hatası için daha kullanıcı dostu mesaj
+                if response.status_code == 429:
+                    error_lower = error_detail.lower()
+                    if "quota" in error_lower or "gemini" in error_lower or "rate limit" in error_lower:
+                        # Quota aşıldıysa Local LLM öner
+                        if "quota" in error_lower and "exceeded" in error_lower:
+                            raise HTTPException(
+                                status_code=429,
+                                detail="Gemini API günlük kotası aşıldı. Lütfen profil sayfasından Local LLM'e geçin veya yarın tekrar deneyin."
+                            )
+                        else:
+                            # Rate limit (çok fazla istek) - kısa süre bekle
+                            raise HTTPException(
+                                status_code=429,
+                                detail="Gemini API çok yoğun. Lütfen birkaç dakika sonra tekrar deneyin veya Local LLM kullanmayı deneyin."
+                            )
                 raise HTTPException(status_code=response.status_code, detail=error_detail)
             
             return response.json() # {"answer": "..."}
@@ -712,8 +921,13 @@ async def send_chat_message(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Chat Message Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        error_trace = traceback.format_exc()
+        error_msg = str(e) if e else "Bilinmeyen hata"
+        print(f"❌ Chat Message Error: {error_msg}")
+        print(f"Traceback: {error_trace}")
+        logger.error(f"Chat Message Error: {error_msg}", exc_info=True)
+        raise HTTPException(status_code=500, detail=error_msg if error_msg else "Chat mesajı gönderilemedi")
 
 
 # ==========================================
@@ -772,12 +986,12 @@ async def start_general_chat(
         # Kullanıcının LLM tercihini DB'den al (opsiyonel)
         # Şimdilik varsayılan cloud kullanıyoruz
         
-        # AI Service'e ilet
+        # AI Service'e ilet (query parameters olarak gönder)
         async with httpx.AsyncClient(timeout=60.0) as client:
-            payload = {"llm_provider": llm_provider, "mode": mode}
+            params = {"llm_provider": llm_provider, "mode": mode}
             target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/general/start"
             headers = get_ai_service_headers()
-            response = await client.post(target_url, json=payload, headers=headers)
+            response = await client.post(target_url, params=params, headers=headers)
             
             if response.status_code != 200:
                 error_detail = response.json().get("detail", "AI hatası")
@@ -785,11 +999,21 @@ async def start_general_chat(
             
             return response.json() # {"session_id": "..."}
 
+    except httpx.TimeoutException:
+        logger.error("AI Service timeout - genel chat start endpoint yanıt vermiyor", exc_info=True)
+        raise HTTPException(status_code=504, detail="AI servisi yanıt vermiyor. Lütfen daha sonra tekrar deneyin.")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"AI Service HTTP error: {e.response.status_code} - {e.response.text}", exc_info=True)
+        raise HTTPException(status_code=e.response.status_code, detail=f"AI servisi hatası: {e.response.text}")
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
         print(f"❌ Genel Chat Start Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Traceback: {error_trace}")
+        logger.error(f"Genel Chat Start Error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e) if str(e) else "Genel chat session başlatılamadı")
 
 
 @router.post("/chat/general/message")
@@ -826,6 +1050,22 @@ async def send_general_chat_message(
             
             if response.status_code != 200:
                 error_detail = response.json().get("detail", "AI hatası")
+                # Gemini quota/rate limit hatası için daha kullanıcı dostu mesaj
+                if response.status_code == 429:
+                    error_lower = error_detail.lower()
+                    if "quota" in error_lower or "gemini" in error_lower or "rate limit" in error_lower:
+                        # Quota aşıldıysa Local LLM öner
+                        if "quota" in error_lower and "exceeded" in error_lower:
+                            raise HTTPException(
+                                status_code=429,
+                                detail="Gemini API günlük kotası aşıldı. Lütfen profil sayfasından Local LLM'e geçin veya yarın tekrar deneyin."
+                            )
+                        else:
+                            # Rate limit (çok fazla istek) - kısa süre bekle
+                            raise HTTPException(
+                                status_code=429,
+                                detail="Gemini API çok yoğun. Lütfen birkaç dakika sonra tekrar deneyin veya Local LLM kullanmayı deneyin."
+                            )
                 raise HTTPException(status_code=response.status_code, detail=error_detail)
             
             return response.json() # {"answer": "...", "llm_provider": "...", "mode": "..."}
@@ -1099,7 +1339,7 @@ def clean_markdown_for_tts(text: str) -> str:
 @router.post("/listen-summary")
 async def listen_summary(
     request: TTSRequest,
-    authorization: Optional[str] = Header(None),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
     supabase: Client = Depends(get_supabase)
 ):
     print("\n--- LISTEN (TTS) İSTEĞİ ---")
@@ -1107,16 +1347,9 @@ async def listen_summary(
         raise HTTPException(status_code=400, detail="Metin boş olamaz.")
 
     # USER ID ÇÖZÜMLEME
-    user_id = None
-    if authorization:
-        try:
-            token = authorization.split("Bearer ")[1] if "Bearer " in authorization else authorization
-            import jwt
-            payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
-            user_id = payload.get("sub")
-            print(f"✅ Token Çözüldü. User ID: {user_id}")
-        except:
-            pass
+    user_id = current_user.get("sub") if current_user else None
+    if user_id:
+        print(f"✅ Token Çözüldü. User ID: {user_id}")
 
     cleaned_text = clean_markdown_for_tts(request.text)
     ai_tts_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/tts"
@@ -1150,22 +1383,14 @@ async def listen_summary(
 @router.post("/upload")
 async def upload_pdf(
     file: UploadFile = File(...),
-    authorization: Optional[str] = Header(None),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
     x_guest_id: Optional[str] = Header(None, alias="X-Guest-ID"),
     db: Session = Depends(get_db)
 ):
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Only PDF files allowed")
     
-    user_id = None
-    if authorization:
-        try:
-            token = authorization.split("Bearer ")[1] if "Bearer " in authorization else authorization
-            import jwt
-            payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
-            user_id = payload.get("sub")
-        except:
-            pass
+    user_id = current_user.get("sub") if current_user else None
     
     if not user_id:
         user_id = x_guest_id or "guest"
@@ -1255,7 +1480,7 @@ async def delete_file(
 @router.post("/convert-text")
 async def convert_text_from_pdf(
     file: UploadFile = File(...),
-    authorization: Optional[str] = Header(None),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
     supabase: Client = Depends(get_supabase)
 ):
     """PDF'den metin çıkarır."""
@@ -1264,15 +1489,9 @@ async def convert_text_from_pdf(
         raise HTTPException(status_code=400, detail="PDF gerekli")
     
     # USER ID ÇÖZÜMLEME
-    user_id = None
-    if authorization:
-        try:
-            token = authorization.split("Bearer ")[1] if "Bearer " in authorization else authorization
-            import jwt
-            payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
-            user_id = payload.get("sub")
-            print(f"✅ Token Çözüldü. User ID: {user_id}")
-        except: pass
+    user_id = current_user.get("sub") if current_user else None
+    if user_id:
+        print(f"✅ Token Çözüldü. User ID: {user_id}")
 
     try:
         pdf_content = await file.read()
@@ -1299,22 +1518,16 @@ async def convert_text_from_pdf(
 async def extract_pdf_pages(
     file: UploadFile = File(...),
     page_range: str = Form(...),
-    authorization: Optional[str] = Header(None),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
     supabase: Client = Depends(get_supabase)
 ):
     """Sayfa ayıklama."""
     logger.debug("EXTRACT-PAGES İSTEĞİ alındı")
     
     # USER ID ÇÖZÜMLEME
-    user_id = None
-    if authorization:
-        try:
-            token = authorization.split("Bearer ")[1] if "Bearer " in authorization else authorization
-            import jwt
-            payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
-            user_id = payload.get("sub")
-            logger.debug(f"Token çözüldü. User ID: {user_id}")
-        except: pass
+    user_id = current_user.get("sub") if current_user else None
+    if user_id:
+        logger.debug(f"Token çözüldü. User ID: {user_id}")
 
     try:
         reader = PdfReader(io.BytesIO(await file.read()))
@@ -1345,7 +1558,7 @@ async def extract_pdf_pages(
 @router.post("/merge-pdfs")
 async def merge_pdfs(
     files: List[UploadFile] = File(...),
-    authorization: Optional[str] = Header(None),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
     supabase: Client = Depends(get_supabase)
 ):
     """PDF Birleştirme."""
@@ -1354,15 +1567,9 @@ async def merge_pdfs(
         raise HTTPException(status_code=400, detail="En az 2 PDF gerekli.")
 
     # USER ID ÇÖZÜMLEME
-    user_id = None
-    if authorization:
-        try:
-            token = authorization.split("Bearer ")[1] if "Bearer " in authorization else authorization
-            import jwt
-            payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
-            user_id = payload.get("sub")
-            print(f"✅ Token Çözüldü. User ID: {user_id}")
-        except: pass
+    user_id = current_user.get("sub") if current_user else None
+    if user_id:
+        print(f"✅ Token Çözüldü. User ID: {user_id}")
         
     try:
         writer = PdfWriter()
@@ -1418,31 +1625,43 @@ async def save_processed_pdf(
 async def reorder_pdf(
     file: UploadFile = File(...),
     page_numbers: str = Form(...),
-    authorization: Optional[str] = Header(None),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
     supabase: Client = Depends(get_supabase)
 ):
     """Sayfa Sıralama."""
     print("\n--- REORDER-PDF İSTEĞİ ---")
     
     # USER ID ÇÖZÜMLEME
-    user_id = None
-    if authorization:
-        try:
-            token = authorization.split("Bearer ")[1] if "Bearer " in authorization else authorization
-            import jwt
-            payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
-            user_id = payload.get("sub")
-            print(f"✅ Token Çözüldü. User ID: {user_id}")
-        except: pass
+    user_id = current_user.get("sub") if current_user else None
+    if user_id:
+        print(f"✅ Token Çözüldü. User ID: {user_id}")
 
     try:
-        reader = PdfReader(io.BytesIO(await file.read()))
-        writer = PdfWriter()
-        order = [int(x.strip())-1 for x in page_numbers.split(',')]
+        file_content = await file.read()
+        if not file_content or len(file_content) == 0:
+            raise HTTPException(status_code=400, detail="Dosya boş veya okunamadı.")
         
+        reader = PdfReader(io.BytesIO(file_content))
+        
+        if len(reader.pages) == 0:
+            raise HTTPException(status_code=400, detail="PDF dosyası geçersiz veya sayfa içermiyor.")
+        
+        writer = PdfWriter()
+        
+        # Sayfa numaralarını parse et
+        try:
+            order = [int(x.strip())-1 for x in page_numbers.split(',') if x.strip()]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Sayfa numaraları geçersiz format.")
+        
+        if not order:
+            raise HTTPException(status_code=400, detail="Sayfa numaraları boş.")
+        
+        # Sayfa numaralarını kontrol et
         if any(p < 0 or p >= len(reader.pages) for p in order):
-             raise HTTPException(status_code=400, detail="Hatalı sayfa numarası.")
+            raise HTTPException(status_code=400, detail=f"Hatalı sayfa numarası. PDF'de {len(reader.pages)} sayfa var.")
 
+        # Sayfaları sıraya göre ekle
         for i in order:
             writer.add_page(reader.pages[i])
                 
@@ -1450,14 +1669,24 @@ async def reorder_pdf(
         writer.write(out)
         out.seek(0)
         
+        if out.tell() == 0:
+            raise HTTPException(status_code=500, detail="PDF oluşturulamadı.")
+        
         # İSTATİSTİK
         if user_id:
             await increment_user_usage(user_id, supabase, "tool")
             
         return StreamingResponse(out, media_type="application/pdf", headers={"Content-Disposition": 'attachment; filename="reordered.pdf"'})
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Hata: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        error_trace = traceback.format_exc()
+        error_msg = str(e) if e else "Bilinmeyen hata"
+        print(f"❌ Reorder PDF Error: {error_msg}")
+        print(f"Traceback: {error_trace}")
+        logger.error(f"Reorder PDF Error: {error_msg}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Sayfa sıralama hatası: {error_msg}")
 
 
 

@@ -1,5 +1,6 @@
 # aiservice/app/routers/analysis.py
 
+import asyncio
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -7,7 +8,7 @@ from pydantic import BaseModel
 from ..tasks import pdf_tasks
 from ..services import ai_service, pdf_service
 from ..services.tts_manager import text_to_speech
-from ..services.llm_manager import CloudMode, LLMProvider, summarize_text, chat_over_pdf, general_chat
+from ..services.llm_manager import CloudMode, LLMProvider, summarize_text, chat_over_pdf, general_chat as llm_general_chat
 from ..deps import verify_api_key
 
 router = APIRouter(
@@ -31,11 +32,15 @@ async def summarize_synchronous(
             "Ana konuları ve önemli noktaları madde madde belirt."
         )
 
-        summary = summarize_text(text, prompt, llm_provider=llm_provider, mode=mode)
+        # Blocking LLM çağrısını thread pool'da çalıştır (event loop'u bloklamaz)
+        summary = await asyncio.to_thread(
+            summarize_text, text, prompt, llm_provider=llm_provider, mode=mode
+        )
 
         return {
             "status": "completed",
             "summary": summary,
+            "pdf_text": text,  # PDF text'ini de döndür (chat için)
             "llm_provider": llm_provider,
             "mode": mode if llm_provider == "cloud" else None,
             "method": "synchronous",
@@ -98,6 +103,28 @@ async def start_chat(
     return {"session_id": session_id}
 
 
+class StartChatFromTextRequest(BaseModel):
+    pdf_text: str
+    filename: str = "document.pdf"
+    llm_provider: LLMProvider = "cloud"
+    mode: CloudMode = "flash"
+
+
+@router.post("/chat/start-from-text", response_model=StartChatResponse)
+async def start_chat_from_text(
+    req: StartChatFromTextRequest,
+    _: bool = Depends(verify_api_key),
+):
+    """PDF text'ini direkt kullanarak chat session başlatır (dosya yüklemeden)."""
+    session_id = ai_service.create_pdf_chat_session(
+        req.pdf_text,
+        filename=req.filename,
+        llm_provider=req.llm_provider,
+        mode=req.mode,
+    )
+    return {"session_id": session_id}
+
+
 class ChatRequest(BaseModel):
     session_id: str
     message: str
@@ -131,7 +158,9 @@ async def chat_about_pdf(
         llm_provider = req.llm_provider or session.get("llm_provider", "cloud")
         mode = req.mode or session.get("mode", "pro")
 
-        answer = chat_over_pdf(
+        # Blocking LLM çağrısını thread pool'da çalıştır (event loop'u bloklamaz)
+        answer = await asyncio.to_thread(
+            chat_over_pdf,
             session_text=pdf_context,
             filename=filename,
             history_text=history_text,
@@ -152,7 +181,12 @@ async def chat_about_pdf(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Sohbet hatası: {str(e)}")
+        import traceback
+        error_trace = traceback.format_exc()
+        error_msg = str(e) if e else "Bilinmeyen hata"
+        print(f"❌ Chat About PDF Error: {error_msg}")
+        print(f"Traceback: {error_trace}")
+        raise HTTPException(status_code=500, detail=f"Sohbet hatası: {error_msg}")
 
 
 class TTSRequest(BaseModel):
@@ -167,7 +201,8 @@ async def generate_speech(
     if not request.text:
         raise HTTPException(status_code=400, detail="Metin boş olamaz.")
 
-    audio_buffer = text_to_speech(request.text)
+    # Blocking TTS çağrısını thread pool'da çalıştır
+    audio_buffer = await asyncio.to_thread(text_to_speech, request.text)
     if not audio_buffer:
         raise HTTPException(status_code=500, detail="Ses oluşturulamadı.")
 
@@ -221,7 +256,9 @@ async def general_chat(
         llm_provider = req.llm_provider or session.get("llm_provider", "cloud")
         mode = req.mode or session.get("mode", "pro")
 
-        answer = general_chat(
+        # Blocking LLM çağrısını thread pool'da çalıştır (event loop'u bloklamaz)
+        answer = await asyncio.to_thread(
+            llm_general_chat,
             history_text=history_text,
             user_message=req.message,
             llm_provider=llm_provider,
@@ -240,6 +277,10 @@ async def general_chat(
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ General Chat Error: {str(e)}")
+        print(f"Traceback: {error_trace}")
         raise HTTPException(status_code=500, detail=f"Genel sohbet hatası: {str(e)}")
 
 

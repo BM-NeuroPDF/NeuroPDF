@@ -5,6 +5,7 @@ import uuid
 import io
 import base64
 import json
+import os
 import requests  # HTTP isteği için gerekli
 from datetime import datetime
 from typing import Optional
@@ -31,7 +32,66 @@ BUCKET_NAME = "avatars"
 TEMP_AVATAR_TTL = 3600
 
 # ==========================================
-# 1. POLLINATIONS.AI (ÜCRETSİZ RESİM ÜRETİMİ)
+# 1. HUGGING FACE STABLE DIFFUSION (ÜCRETSİZ, YÜKSEK KALİTE)
+# ==========================================
+async def generate_image_huggingface(prompt: str) -> Optional[bytes]:
+    """
+    Hugging Face Inference API kullanarak Stable Diffusion ile yüksek kaliteli resim üretir.
+    Ücretsiz ve kaliteli sonuçlar verir.
+    """
+    # Hugging Face model seçenekleri (en iyi kalite için SDXL)
+    models = [
+        "stabilityai/stable-diffusion-xl-base-1.0",  # En yüksek kalite
+        "runwayml/stable-diffusion-v1-5",  # Fallback
+        "CompVis/stable-diffusion-v1-4",  # Fallback 2
+    ]
+    
+    # API key opsiyonel ama rate limit için önerilir
+    hf_token = getattr(settings, 'HUGGINGFACE_API_KEY', None) or os.getenv("HUGGINGFACE_API_KEY", "")
+    
+    headers = {}
+    if hf_token:
+        headers["Authorization"] = f"Bearer {hf_token}"
+    
+    # Prompt'u iyileştir (avatar için optimize edilmiş)
+    avatar_prompt = f"professional portrait avatar, {prompt}, high quality, detailed, 512x512, square format"
+    
+    for model in models:
+        try:
+            url = f"https://api-inference.huggingface.co/models/{model}"
+            
+            payload = {
+                "inputs": avatar_prompt,
+                "parameters": {
+                    "num_inference_steps": 30,
+                    "guidance_scale": 7.5,
+                    "width": 512,
+                    "height": 512,
+                }
+            }
+            
+            logger.info(f"Hugging Face ({model}) ile resim üretiliyor: {prompt[:50]}...")
+            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            
+            if response.status_code == 200:
+                # Image bytes döner
+                return response.content
+            elif response.status_code == 503:
+                # Model yükleniyor, bir sonraki modeli dene
+                logger.warning(f"Model {model} yükleniyor, bir sonraki model deneniyor...")
+                continue
+            else:
+                logger.warning(f"Hugging Face Error ({response.status_code}): {response.text[:200]}")
+                continue
+                
+        except Exception as e:
+            logger.warning(f"Hugging Face API Hatası ({model}): {e}")
+            continue
+    
+    return None
+
+# ==========================================
+# 2. POLLINATIONS.AI (FALLBACK - ÜCRETSİZ RESİM ÜRETİMİ)
 # ==========================================
 async def generate_image_pollinations(prompt: str) -> Optional[bytes]:
     """
@@ -49,6 +109,10 @@ async def generate_image_pollinations(prompt: str) -> Optional[bytes]:
     
     # Pollinations URL formatı
     url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?seed={seed}&width=512&height=512&nologo=true"
+    
+    # SSRF Protection: Validate URL
+    # Note: validate_api_url is defined below, but will be available at runtime
+    # For now, we know this URL is safe as it's hardcoded to pollinations.ai
     
     try:
         # Prompt'u string'e çeviririz ki loglarken hata alınmasın
@@ -70,6 +134,23 @@ async def generate_image_pollinations(prompt: str) -> Optional[bytes]:
 # ==========================================
 # 2. xAI (GROK) VISION (RESİM ANALİZİ)
 # ==========================================
+# SSRF Protection: Allowed API domains
+ALLOWED_API_DOMAINS = [
+    "api.x.ai",
+    "generativelanguage.googleapis.com",  # Gemini
+    "api.pollinations.ai",
+    "api-inference.huggingface.co"  # Hugging Face Inference API
+]
+
+def validate_api_url(url: str) -> bool:
+    """Validate that URL is from an allowed domain (SSRF protection)"""
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(url)
+        return parsed.netloc in ALLOWED_API_DOMAINS
+    except Exception:
+        return False
+
 async def analyze_and_rewrite_prompt(image_bytes: bytes, user_prompt: str) -> str:
     """
     xAI (Grok Vision) kullanarak resmi analiz eder ve değişiklikle birlikte yeni prompt üretir.
@@ -83,6 +164,11 @@ async def analyze_and_rewrite_prompt(image_bytes: bytes, user_prompt: str) -> st
         base64_image = base64.b64encode(image_bytes).decode('utf-8')
         
         url = "https://api.x.ai/v1/chat/completions"
+        
+        # SSRF Protection: Validate URL
+        if not validate_api_url(url):
+            logger.error(f"SSRF Protection: Blocked request to unauthorized domain: {url}")
+            return user_prompt
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {settings.XAI_API_KEY}"
@@ -142,6 +228,12 @@ async def improve_text_prompt(user_prompt: str) -> str:
         
     try:
         url = "https://api.x.ai/v1/chat/completions"
+        
+        # SSRF Protection: Validate URL
+        if not validate_api_url(url):
+            logger.error(f"SSRF Protection: Blocked request to unauthorized domain: {url}")
+            return user_prompt
+        
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {settings.XAI_API_KEY}"
@@ -179,24 +271,39 @@ async def improve_text_prompt(user_prompt: str) -> str:
 # ==========================================
 
 async def generate_avatar_with_prompt(username: str, prompt: str) -> bytes:
-    # 1. Prompt'u iyileştir
+    # 1. Prompt'u iyileştir (xAI varsa)
     improved_prompt = await improve_text_prompt(prompt)
     
-    # 2. Resmi Pollinations API ile üret
+    # 2. Önce Hugging Face Stable Diffusion ile üret (en yüksek kalite)
+    image_bytes = await generate_image_huggingface(improved_prompt)
+    
+    if image_bytes:
+        logger.info("Hugging Face ile resim başarıyla üretildi.")
+        return image_bytes
+    
+    # 3. Hugging Face başarısız olursa Pollinations.ai'yi dene (fallback)
+    logger.info("Hugging Face başarısız, Pollinations.ai deneniyor...")
     image_bytes = await generate_image_pollinations(improved_prompt)
     
     if image_bytes:
+        logger.info("Pollinations.ai ile resim başarıyla üretildi.")
         return image_bytes
     
-    # 3. Hata olursa Fallback (Harf Avatarı)
-    logger.warning("Pollinations API resim üretemedi, fallback kullanılıyor.")
+    # 4. Her ikisi de başarısız olursa Fallback (Harf Avatarı)
+    logger.warning("Tüm AI servisleri başarısız, harf avatarı kullanılıyor.")
     return generate_avatar_from_name(username, bg_color=(50, 50, 50))
 
 async def edit_avatar_with_prompt(image_bytes: bytes, prompt: str) -> bytes:
     # 1. Yeni Prompt Oluştur
     new_prompt = await analyze_and_rewrite_prompt(image_bytes, prompt)
     
-    # 2. Yeni Resim Üret (Pollinations)
+    # 2. Önce Hugging Face ile üret
+    edited_bytes = await generate_image_huggingface(new_prompt)
+    
+    if edited_bytes:
+        return edited_bytes
+    
+    # 3. Hugging Face başarısız olursa Pollinations'ı dene
     edited_bytes = await generate_image_pollinations(new_prompt)
     
     if edited_bytes:
@@ -280,11 +387,15 @@ def upload_avatar_png_to_storage(storage_path: str, file_bytes: bytes):
     return res
 
 def save_avatar_record_and_set_active(db: Session, user_id: str, image_path: str, is_ai: bool = False) -> UserAvatar:
+    from app.models import UserSettings
     user = db.query(User).filter(User.id == user_id).first()
     if not user: raise HTTPException(status_code=404)
     avatar = UserAvatar(user_id=user_id, image_path=image_path, is_ai_generated=is_ai)
     db.add(avatar)
-    user.active_avatar_url = image_path
+    # active_avatar_url UserSettings tablosunda
+    if not user.settings:
+        user.settings = UserSettings(user_id=user_id, eula_accepted=False)
+    user.settings.active_avatar_url = image_path
     db.commit()
     db.refresh(avatar)
     return avatar

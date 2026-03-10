@@ -93,10 +93,10 @@ export default function EulaGuard({ children }: { children: React.ReactNode }) {
       } else {
         // Backend "Invalid token" derse çıkış yap
         if (res.status === 401) {
-           alert("Oturum geçersiz. Çıkış yapılıyor...");
-           await signOut({ callbackUrl: "/login" });
+          // Token expire - kullanıcıyı login sayfasına yönlendir
+          await signOut({ callbackUrl: "/login", redirect: true });
         } else {
-           alert(language === 'tr' ? "Bir hata oluştu." : "An error occurred.");
+          alert(language === 'tr' ? "Bir hata oluştu." : "An error occurred.");
         }
       }
     } catch (error) {
