@@ -47,9 +47,22 @@ def _is_quota_or_rate_limit_error(err: Exception) -> bool:
     return ("429" in msg) or ("Quota exceeded" in msg) or ("rate limit" in msg.lower())
 
 
+def _is_quota_exceeded_error(err: Exception) -> bool:
+    """Check if error is permanent quota exceeded (not retryable)"""
+    msg = str(err).lower()
+    # Check for permanent quota exhaustion patterns
+    return (
+        ("quota exceeded" in msg) or
+        ("limit: 0" in msg) or
+        ("free_tier" in msg and "quota" in msg) or
+        ("exceeded your current quota" in msg)
+    )
+
+
 def _generate_with_retry(model, prompt: str, attempts: int = 5):
     """
     API çağrısını yapar. 429 hatası alırsa bekleyip tekrar dener.
+    Quota exceeded hatası için retry yapmaz, hemen hata döner.
     """
     last_err = None
     for i in range(attempts):
@@ -57,6 +70,13 @@ def _generate_with_retry(model, prompt: str, attempts: int = 5):
             return model.generate_content(prompt)
         except Exception as e:
             last_err = e
+            # Quota exceeded is permanent - don't retry, fail immediately
+            if _is_quota_exceeded_error(e):
+                error_msg = str(e)
+                print(f"❌ Gemini API quota aşıldı (retry yapılmıyor). Lütfen Local LLM kullanmayı deneyin.")
+                raise HTTPException(status_code=429, detail=f"Gemini API kotası aşıldı: {error_msg}")
+            
+            # Temporary rate limit - retry with exponential backoff
             if _is_quota_or_rate_limit_error(e):
                 # Üstel bekleme (Exponential Backoff) - daha uzun bekleme süreleri
                 # İlk denemelerde kısa, son denemelerde daha uzun bekle
@@ -66,10 +86,9 @@ def _generate_with_retry(model, prompt: str, attempts: int = 5):
                 time.sleep(sleep_s)
                 continue
             raise 
-    # Tüm denemeler başarısız oldu
+    # Tüm denemeler başarısız oldu (temporary rate limits)
     error_msg = str(last_err) if last_err else "Unknown error"
-    if "quota" in error_msg.lower() and "exceeded" in error_msg.lower():
-        print(f"❌ Gemini API quota aşıldı. Lütfen Local LLM kullanmayı deneyin veya birkaç saat sonra tekrar deneyin.")
+    print(f"❌ Gemini Rate Limit: Tüm denemeler başarısız oldu.")
     raise last_err
 
 

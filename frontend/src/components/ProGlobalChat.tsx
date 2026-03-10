@@ -160,6 +160,24 @@ export default function ProGlobalChat() {
     } catch (e: any) {
       console.error("Chat mesaj hatası:", e);
       
+      // 429 Quota Error - Show helpful message guiding to Local LLM
+      const errorMessage = e?.message || String(e);
+      if (
+        errorMessage.includes("429") ||
+        errorMessage.includes("kotası aşıldı") ||
+        errorMessage.includes("quota") ||
+        errorMessage.includes("Quota exceeded") ||
+        errorMessage.includes("Gemini API")
+      ) {
+        const errorMsg = "⚠️ Gemini API kotası aşıldı. Local LLM kullanmak için profil sayfasından ayarları değiştirin.";
+        if (isPdfChat) {
+          setPdfChatMessages((prev) => [...prev, { role: "assistant", content: errorMsg }]);
+        } else {
+          setChatMessages((prev) => [...prev, { role: "assistant", content: errorMsg }]);
+        }
+        return; // Don't continue to other error handlers
+      }
+      
       // Session kaybolduysa (404) otomatik olarak yeni session başlat
       if (e?.message?.includes("Sohbet oturumu bulunamadı") || e?.message?.includes("404") || e?.message?.includes("session")) {
         console.log("Session kayboldu, yeni session başlatılıyor...");

@@ -35,8 +35,9 @@ def chat_over_pdf(
     user_message: str,
     llm_provider: LLMProvider = "cloud",
     mode: CloudMode = "pro",
+    history: Optional[list] = None,
 ) -> str:
-    # 1. Prompt'u Hazırla
+    # 1. Prompt'u Hazırla (cloud için)
     full_prompt = _build_chat_prompt(session_text, filename, history_text, user_message)
 
     if llm_provider == "cloud":
@@ -50,10 +51,23 @@ def chat_over_pdf(
         )
 
     if llm_provider == "local":
+        # Local LLM için history array kullan ve PDF context'i instruction'a ekle
+        pdf_context_instruction = f"""PDF asistanı gibi yanıt ver. Türkçe, net ve pratik ol.
+
+DOSYA: {filename}
+
+PDF İÇERİĞİ:
+---
+{session_text[:12000]}  # PDF context'i kırp (local LLM limiti için)
+---
+
+PDF içeriğine dayanarak cevap ver. Eğer PDF'te açıkça yoksa, bunu belirt."""
+        
         result = analyze_text_with_local_llm(
-            full_prompt,
+            user_message,  # Sadece kullanıcı mesajı
             task="chat",
-            instruction="PDF asistanı gibi yanıt ver. Türkçe, net ve pratik ol."
+            instruction=pdf_context_instruction,
+            history=history  # Tam history array'i geçir
         )
         return result.get("answer") or result.get("summary") or "Local LLM yanıt üretmedi."
 
@@ -92,6 +106,7 @@ def general_chat(
     user_message: str,
     llm_provider: LLMProvider = "cloud",
     mode: CloudMode = "pro",
+    history: Optional[list] = None,
 ) -> str:
     """Genel AI chat (PDF gerektirmez)."""
     system_instruction = (
@@ -120,10 +135,12 @@ KULLANICI SORUSU:
         )
 
     if llm_provider == "local":
+        # Local LLM için history array kullan
         result = analyze_text_with_local_llm(
-            full_prompt,
+            user_message,  # Sadece kullanıcı mesajı
             task="chat",
-            instruction="Genel AI asistanı gibi yanıt ver. Türkçe, net ve pratik ol."
+            instruction=system_instruction,
+            history=history  # Tam history array'i geçir
         )
         return result.get("answer") or result.get("summary") or "Local LLM yanıt üretmedi."
 

@@ -767,7 +767,7 @@ async def start_chat_from_text(
         raise HTTPException(status_code=400, detail="PDF text gereklidir.")
     
     try:
-        # Kullanıcının LLM tercihini DB'den al
+        # Kullanıcının LLM tercihini DB'den al (öncelik DB'deki tercih)
         user_id = current_user.get("sub")
         if db and user_id:
             try:
@@ -776,8 +776,14 @@ async def start_chat_from_text(
                 print(f"⚠️ LLM provider alınamadı, default kullanılıyor: {e}")
                 llm_provider = "local"
         else:
+            # Guest kullanıcılar için default local
             llm_provider = "local"
-        print(f"📊 Kullanıcı LLM Tercihi: {llm_provider}")
+        print(f"📊 Kullanıcı LLM Tercihi (DB'den): {llm_provider}")
+        
+        # Mode belirleme: cloud ise pro, local ise flash (mode parametresi local için geçersiz)
+        mode = body.get("mode", "pro" if llm_provider == "cloud" else "flash")
+        if llm_provider == "local":
+            mode = "flash"  # Local LLM için mode parametresi kullanılmaz ama tutarlılık için
         
         # AI Service'e PDF text'ini gönder
         async with httpx.AsyncClient() as client:
@@ -785,8 +791,8 @@ async def start_chat_from_text(
             payload = {
                 "pdf_text": pdf_text,
                 "filename": filename,
-                "llm_provider": body.get("llm_provider", llm_provider),
-                "mode": body.get("mode", "pro" if body.get("llm_provider", llm_provider) == "cloud" else "flash")
+                "llm_provider": llm_provider,  # DB'den gelen değeri kullan (body override yok)
+                "mode": mode
             }
             headers = get_ai_service_headers()
             response = await client.post(target_url, json=payload, headers=headers, timeout=60.0)
@@ -883,7 +889,7 @@ async def send_chat_message(
 
     try:
         # AI Service'e ilet (/chat)
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=240.0) as client:
             payload = {"session_id": session_id, "message": message}
             target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat"
             headers = get_ai_service_headers()
@@ -918,6 +924,11 @@ async def send_chat_message(
             
             return response.json() # {"answer": "..."}
 
+    except httpx.ReadTimeout:
+        raise HTTPException(
+            status_code=504,
+            detail="AI yanıtı zaman aşımına uğradı. Lütfen tekrar deneyin veya Local LLM kullanın."
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -979,12 +990,23 @@ async def start_general_chat(
     if not _check_pro_user(user_id, supabase):
         raise HTTPException(status_code=403, detail="Bu özellik sadece Pro kullanıcılar için kullanılabilir.")
     
-    llm_provider = body.get("llm_provider", "cloud")
-    mode = body.get("mode", "flash")
-    
     try:
-        # Kullanıcının LLM tercihini DB'den al (opsiyonel)
-        # Şimdilik varsayılan cloud kullanıyoruz
+        # Kullanıcının LLM tercihini DB'den al (öncelik DB'deki tercih)
+        if db and user_id:
+            try:
+                llm_provider = get_user_llm_provider(db, user_id)
+            except Exception as e:
+                print(f"⚠️ LLM provider alınamadı, default kullanılıyor: {e}")
+                llm_provider = "local"
+        else:
+            # Fallback: body'den al veya default local
+            llm_provider = body.get("llm_provider", "local")
+        print(f"📊 Genel Chat - Kullanıcı LLM Tercihi (DB'den): {llm_provider}")
+        
+        # Mode belirleme: cloud ise flash/pro, local ise flash (mode parametresi local için geçersiz)
+        mode = body.get("mode", "flash")
+        if llm_provider == "local":
+            mode = "flash"  # Local LLM için mode parametresi kullanılmaz ama tutarlılık için
         
         # AI Service'e ilet (query parameters olarak gönder)
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -1042,7 +1064,7 @@ async def send_general_chat_message(
 
     try:
         # AI Service'e ilet
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=240.0) as client:
             payload = {"session_id": session_id, "message": message}
             target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/general"
             headers = get_ai_service_headers()
@@ -1070,6 +1092,11 @@ async def send_general_chat_message(
             
             return response.json() # {"answer": "...", "llm_provider": "...", "mode": "..."}
 
+    except httpx.ReadTimeout:
+        raise HTTPException(
+            status_code=504,
+            detail="AI yanıtı zaman aşımına uğradı. Lütfen tekrar deneyin veya Local LLM kullanın."
+        )
     except HTTPException:
         raise
     except Exception as e:

@@ -159,6 +159,7 @@ async def chat_about_pdf(
         mode = req.mode or session.get("mode", "pro")
 
         # Blocking LLM çağrısını thread pool'da çalıştır (event loop'u bloklamaz)
+        # History array'i geçir (local LLM için), history_text string'i de geçir (cloud için)
         answer = await asyncio.to_thread(
             chat_over_pdf,
             session_text=pdf_context,
@@ -167,6 +168,7 @@ async def chat_about_pdf(
             user_message=req.message,
             llm_provider=llm_provider,
             mode=mode,
+            history=history[-10:] if history else None,  # Son 10 mesajı geçir (context window için)
         )
 
         history.append({"role": "user", "content": req.message})
@@ -257,12 +259,14 @@ async def general_chat(
         mode = req.mode or session.get("mode", "pro")
 
         # Blocking LLM çağrısını thread pool'da çalıştır (event loop'u bloklamaz)
+        # History array'i geçir (local LLM için), history_text string'i de geçir (cloud için)
         answer = await asyncio.to_thread(
             llm_general_chat,
             history_text=history_text,
             user_message=req.message,
             llm_provider=llm_provider,
             mode=mode,
+            history=history[-10:] if history else None,  # Son 10 mesajı geçir (context window için)
         )
 
         history.append({"role": "user", "content": req.message})

@@ -18,33 +18,51 @@ def _truncate_text(text: str, max_chars: int = MAX_INPUT_CHARS) -> str:
     return text[:max_chars] + "\n\n[... metin kırpıldı ...]"
 
 
-def analyze_text_with_local_llm(text: str, task: str = "summarize", instruction: str = "") -> dict:
+def analyze_text_with_local_llm(text: str, task: str = "summarize", instruction: str = "", history: list = None) -> dict:
     """
     task:
       - summarize: tek adımda düzelt + özetle (optimize edilmiş)
       - chat: gelen prompt'u direkt cevapla (PDF chat gibi)
+    
+    history: Chat geçmişi (list of dicts with "role" and "content" keys)
+             Örnek: [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
     """
     client = ollama.Client(host=OLLAMA_HOST)
 
-    # Metni güvenli uzunluğa kırp
-    text = _truncate_text(text)
-
     if task == "chat":
-        # Chat için tek aşama yeterli
+        # Chat için history desteği ile
         system_prompt = instruction or "Türkçe cevap ver."
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # History varsa ekle (son 10 mesajı al, context window'u aşmamak için)
+        if history:
+            # Son 10 mesajı al (context window limiti için)
+            recent_history = history[-10:] if len(history) > 10 else history
+            for turn in recent_history:
+                # Ollama için role'leri kontrol et (user, assistant, system)
+                role = turn.get("role", "user")
+                if role not in ["user", "assistant", "system"]:
+                    role = "user"  # Geçersiz role'ler için default
+                messages.append({"role": role, "content": turn.get("content", "")})
+        
+        # Mevcut kullanıcı mesajını ekle
+        # Metni kırpma - history ile birlikte gönderiyoruz, truncation yukarıda yapıldı
+        user_message = text if len(text) <= MAX_INPUT_CHARS else _truncate_text(text)
+        messages.append({"role": "user", "content": user_message})
+        
         try:
             resp = client.chat(
                 model=OLLAMA_MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": text},
-                ],
+                messages=messages,
                 options={"temperature": 0.3, "num_ctx": 8192},
             )
             answer = resp["message"]["content"]
             return {"answer": answer}
         except Exception as e:
             return {"answer": f"Local LLM hatası: {str(e)}"}
+    
+    # Metni güvenli uzunluğa kırp (summarize için)
+    text = _truncate_text(text)
 
     # ==========================================
     # SUMMARIZE: Tek adımda düzelt + özetle (2 adımdan optimize edildi)
