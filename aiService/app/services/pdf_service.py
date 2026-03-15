@@ -35,6 +35,9 @@ def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
 
     except PyPDF2.errors.PdfReadError:
         raise HTTPException(status_code=400, detail="Geçersiz veya bozuk PDF dosyası.")
+    except HTTPException:
+        # Re-raise HTTPException as-is (don't wrap it)
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF işleme hatası: {str(e)}")
 
@@ -71,5 +74,8 @@ def extract_text_from_pdf_path(storage_path: str) -> str:
         raise HTTPException(status_code=404, detail=f"Dosya bulunamadı: {storage_path}")
     except PyPDF2.errors.PdfReadError:
         raise HTTPException(status_code=400, detail="Geçersiz veya bozuk PDF dosyası.")
+    except HTTPException:
+        # Re-raise HTTPException as-is (don't wrap it)
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF işleme hatası: {str(e)}")

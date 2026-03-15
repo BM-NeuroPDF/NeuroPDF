@@ -89,7 +89,8 @@ class Settings(BaseSettings):
         return self
 
     model_config = SettingsConfigDict(
-        env_file=None,
+        env_file=".env",  # Load .env file automatically
+        env_file_encoding="utf-8",
         env_prefix="",
         case_sensitive=False,
         extra="ignore"

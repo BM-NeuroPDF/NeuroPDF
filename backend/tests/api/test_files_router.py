@@ -113,7 +113,7 @@ class TestSummarizeFile:
         assert "summary" in data
         assert "pdf_text" in data
     
-    @patch("app.routers.files.check_summarize_cache")
+    @patch("app.routers.files.check_summarize_cache_by_hash")
     @patch("app.routers.files.get_user_llm_choice")
     def test_summarize_file_cached(
         self,
@@ -126,7 +126,10 @@ class TestSummarizeFile:
         """Test PDF summarization with cached result"""
         # Setup mocks
         mock_get_llm_choice.return_value = (2, "cloud")
-        mock_check_cache.return_value = "Cached summary"
+        # check_summarize_cache_by_hash is async, so we need to make it return a coroutine
+        async def mock_cache_return(*args, **kwargs):
+            return "Cached summary"
+        mock_check_cache.side_effect = mock_cache_return
         
         files = {"file": ("test.pdf", sample_pdf, "application/pdf")}
         
@@ -355,7 +358,10 @@ class TestLLMChoiceEndpoints:
         
         assert response.status_code == 200
         data = response.json()
-        assert "llm_choice_id" in data
+        assert "choice_id" in data
+        assert "provider" in data
+        assert data["choice_id"] == 2
+        assert data["provider"] == "cloud"
     
     def test_update_llm_choice(
         self,
@@ -367,12 +373,16 @@ class TestLLMChoiceEndpoints:
         mock_user.id = "test-user-id"
         mock_db.query.return_value.filter.return_value.first.return_value = mock_user
         
-        payload = {"llm_choice_id": 1}  # local
+        payload = {"provider": "local"}  # local
         
         response = client.post("/files/user/update-llm", json=payload)
         
         assert response.status_code == 200
         assert mock_db.commit.called
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["provider"] == "local"
+        assert data["choice_id"] == 1
 
 
 # ==========================================
@@ -401,18 +411,34 @@ class TestFileManagementEndpoints:
     def test_list_user_files(
         self,
         override_dependencies,
-        mock_supabase
+        mock_db
     ):
         """Test listing user files"""
-        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
-            {"id": 1, "filename": "test.pdf"}
-        ]
+        from app.models import PDF
+        mock_pdf = MagicMock()
+        mock_pdf.id = 1
+        mock_pdf.filename = "test.pdf"
+        mock_pdf.file_size = 1024
+        mock_pdf.created_at = None
+        
+        # Mock the query chain: db.query(PDF).filter(...).order_by(...).all()
+        mock_query = MagicMock()
+        mock_filter = MagicMock()
+        mock_order_by = MagicMock()
+        mock_order_by.all.return_value = [mock_pdf]
+        mock_filter.order_by.return_value = mock_order_by
+        mock_query.filter.return_value = mock_filter
+        mock_db.query.return_value = mock_query
         
         response = client.get("/files/my-files")
         
         assert response.status_code == 200
         data = response.json()
-        assert isinstance(data, list)
+        assert isinstance(data, dict)
+        assert "files" in data
+        assert "total" in data
+        assert isinstance(data["files"], list)
+        assert len(data["files"]) == 1
     
     def test_delete_file(
         self,
@@ -450,14 +476,14 @@ class TestPDFOperations:
         mock_reader.return_value = mock_reader_instance
         
         mock_writer_instance = MagicMock()
+        mock_writer_instance.write = MagicMock()
         mock_writer.return_value = mock_writer_instance
         
-        payload = {
-            "file_content": sample_pdf.hex(),  # Hex encoded
-            "page_ranges": "1-2"
-        }
+        # Use multipart/form-data as endpoint expects UploadFile and Form
+        files = {"file": ("test.pdf", sample_pdf, "application/pdf")}
+        data = {"page_range": "1-2"}
         
-        response = client.post("/files/extract-pages", json=payload)
+        response = client.post("/files/extract-pages", files=files, data=data)
         
         # Should return PDF bytes or success status
         assert response.status_code in [200, 201]
@@ -477,16 +503,16 @@ class TestPDFOperations:
         mock_reader.return_value = mock_reader_instance
         
         mock_writer_instance = MagicMock()
+        mock_writer_instance.write = MagicMock()
         mock_writer.return_value = mock_writer_instance
         
-        payload = {
-            "pdfs": [
-                {"content": sample_pdf.hex(), "filename": "test1.pdf"},
-                {"content": sample_pdf.hex(), "filename": "test2.pdf"}
-            ]
-        }
+        # Use multipart/form-data as endpoint expects List[UploadFile]
+        files = [
+            ("files", ("test1.pdf", sample_pdf, "application/pdf")),
+            ("files", ("test2.pdf", sample_pdf, "application/pdf"))
+        ]
         
-        response = client.post("/files/merge-pdfs", json=payload)
+        response = client.post("/files/merge-pdfs", files=files)
         
         # Should return merged PDF or success status
         assert response.status_code in [200, 201]

@@ -59,7 +59,7 @@ def override_dependencies(mock_db, mock_user):
 class TestGetAvatar:
     """Test GET /{user_id}/avatar endpoint"""
     
-    @patch("app.routers.user_avatar_routes.get_supabase")
+    @patch("app.db.get_supabase")
     def test_get_avatar_from_db(
         self,
         mock_get_supabase,
@@ -86,7 +86,7 @@ class TestGetAvatar:
         assert response.status_code == 200
         assert response.headers["content-type"] == "image/png"
     
-    @patch("app.routers.user_avatar_routes.get_supabase")
+    @patch("app.db.get_supabase")
     @patch("app.routers.user_avatar_routes.generate_avatar_from_name")
     @patch("app.routers.user_avatar_routes.upload_avatar_png_to_storage")
     @patch("app.routers.user_avatar_routes.save_avatar_record_and_set_active")

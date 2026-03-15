@@ -667,18 +667,75 @@ async def save_summarize_cache_by_hash(
 ):
     """Hash'ten direkt cache kaydeder (optimize edilmiş versiyon)."""
     try:
-        query = text("""
-            INSERT INTO summary_cache (pdf_hash, summary, llm_choice_id, user_id, created_at)
-            VALUES (:hash, :summary, :llm_choice_id, :user_id, NOW())
-            ON CONFLICT (pdf_hash, llm_choice_id, user_id) 
-            DO UPDATE SET summary = EXCLUDED.summary, created_at = NOW()
-        """)
-        db.execute(query, {
-            "hash": pdf_hash,
-            "summary": summary,
-            "llm_choice_id": llm_choice_id,
-            "user_id": user_id
-        })
+        # Önce mevcut kaydı kontrol et
+        if user_id:
+            check_query = text("""
+                SELECT id FROM summary_cache
+                WHERE pdf_hash = :hash 
+                  AND llm_choice_id = :llm_choice_id
+                  AND user_id = :user_id
+                LIMIT 1
+            """)
+            existing = db.execute(check_query, {
+                "hash": pdf_hash,
+                "llm_choice_id": llm_choice_id,
+                "user_id": user_id
+            }).first()
+        else:
+            check_query = text("""
+                SELECT id FROM summary_cache
+                WHERE pdf_hash = :hash 
+                  AND llm_choice_id = :llm_choice_id
+                  AND user_id IS NULL
+                LIMIT 1
+            """)
+            existing = db.execute(check_query, {
+                "hash": pdf_hash,
+                "llm_choice_id": llm_choice_id
+            }).first()
+        
+        if existing:
+            # Güncelle
+            if user_id:
+                update_query = text("""
+                    UPDATE summary_cache
+                    SET summary = :summary, created_at = NOW()
+                    WHERE pdf_hash = :hash 
+                      AND llm_choice_id = :llm_choice_id
+                      AND user_id = :user_id
+                """)
+                db.execute(update_query, {
+                    "hash": pdf_hash,
+                    "summary": summary,
+                    "llm_choice_id": llm_choice_id,
+                    "user_id": user_id
+                })
+            else:
+                update_query = text("""
+                    UPDATE summary_cache
+                    SET summary = :summary, created_at = NOW()
+                    WHERE pdf_hash = :hash 
+                      AND llm_choice_id = :llm_choice_id
+                      AND user_id IS NULL
+                """)
+                db.execute(update_query, {
+                    "hash": pdf_hash,
+                    "summary": summary,
+                    "llm_choice_id": llm_choice_id
+                })
+        else:
+            # Yeni kayıt ekle
+            insert_query = text("""
+                INSERT INTO summary_cache (pdf_hash, summary, llm_choice_id, user_id, created_at)
+                VALUES (:hash, :summary, :llm_choice_id, :user_id, NOW())
+            """)
+            db.execute(insert_query, {
+                "hash": pdf_hash,
+                "summary": summary,
+                "llm_choice_id": llm_choice_id,
+                "user_id": user_id
+            })
+        
         db.commit()
         print(f"✅ Cache kaydedildi: Hash {pdf_hash}, LLM Choice ID {llm_choice_id}, User {user_id}")
     except Exception as e:
@@ -697,18 +754,75 @@ def save_summarize_cache_background(
     from ..db import SessionLocal
     db = SessionLocal()
     try:
-        query = text("""
-            INSERT INTO summary_cache (pdf_hash, summary, llm_choice_id, user_id, created_at)
-            VALUES (:hash, :summary, :llm_choice_id, :user_id, NOW())
-            ON CONFLICT (pdf_hash, llm_choice_id, user_id) 
-            DO UPDATE SET summary = EXCLUDED.summary, created_at = NOW()
-        """)
-        db.execute(query, {
-            "hash": pdf_hash,
-            "summary": summary,
-            "llm_choice_id": llm_choice_id,
-            "user_id": user_id
-        })
+        # Önce mevcut kaydı kontrol et
+        if user_id:
+            check_query = text("""
+                SELECT id FROM summary_cache
+                WHERE pdf_hash = :hash 
+                  AND llm_choice_id = :llm_choice_id
+                  AND user_id = :user_id
+                LIMIT 1
+            """)
+            existing = db.execute(check_query, {
+                "hash": pdf_hash,
+                "llm_choice_id": llm_choice_id,
+                "user_id": user_id
+            }).first()
+        else:
+            check_query = text("""
+                SELECT id FROM summary_cache
+                WHERE pdf_hash = :hash 
+                  AND llm_choice_id = :llm_choice_id
+                  AND user_id IS NULL
+                LIMIT 1
+            """)
+            existing = db.execute(check_query, {
+                "hash": pdf_hash,
+                "llm_choice_id": llm_choice_id
+            }).first()
+        
+        if existing:
+            # Güncelle
+            if user_id:
+                update_query = text("""
+                    UPDATE summary_cache
+                    SET summary = :summary, created_at = NOW()
+                    WHERE pdf_hash = :hash 
+                      AND llm_choice_id = :llm_choice_id
+                      AND user_id = :user_id
+                """)
+                db.execute(update_query, {
+                    "hash": pdf_hash,
+                    "summary": summary,
+                    "llm_choice_id": llm_choice_id,
+                    "user_id": user_id
+                })
+            else:
+                update_query = text("""
+                    UPDATE summary_cache
+                    SET summary = :summary, created_at = NOW()
+                    WHERE pdf_hash = :hash 
+                      AND llm_choice_id = :llm_choice_id
+                      AND user_id IS NULL
+                """)
+                db.execute(update_query, {
+                    "hash": pdf_hash,
+                    "summary": summary,
+                    "llm_choice_id": llm_choice_id
+                })
+        else:
+            # Yeni kayıt ekle
+            insert_query = text("""
+                INSERT INTO summary_cache (pdf_hash, summary, llm_choice_id, user_id, created_at)
+                VALUES (:hash, :summary, :llm_choice_id, :user_id, NOW())
+            """)
+            db.execute(insert_query, {
+                "hash": pdf_hash,
+                "summary": summary,
+                "llm_choice_id": llm_choice_id,
+                "user_id": user_id
+            })
+        
         db.commit()
         print(f"✅ Cache kaydedildi (background): Hash {pdf_hash}, LLM Choice ID {llm_choice_id}, User {user_id}")
     except Exception as e:
@@ -976,7 +1090,8 @@ def _check_pro_user(user_id: str, supabase: Client) -> bool:
 async def start_general_chat(
     body: dict = Body(...),
     current_user: dict = Depends(get_current_user),
-    supabase: Client = Depends(get_supabase)
+    supabase: Client = Depends(get_supabase),
+    db: Session = Depends(get_db)
 ):
     """
     Pro kullanıcılar için genel AI chat oturumu başlatır (PDF gerektirmez).
@@ -1694,9 +1809,13 @@ async def reorder_pdf(
                 
         out = io.BytesIO()
         writer.write(out)
-        out.seek(0)
         
-        if out.tell() == 0:
+        # Dosya boyutunu kontrol et (seek(0, 2) ile dosyanın sonuna git)
+        out.seek(0, 2)  # End of file
+        pdf_size = out.tell()
+        out.seek(0)  # Başa dön
+        
+        if pdf_size == 0:
             raise HTTPException(status_code=500, detail="PDF oluşturulamadı.")
         
         # İSTATİSTİK

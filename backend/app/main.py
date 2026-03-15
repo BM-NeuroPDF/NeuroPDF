@@ -71,14 +71,21 @@ app.add_middleware(
 # Security Headers Middleware
 @app.middleware("http")
 async def add_security_headers(request, call_next):
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
         response = await call_next(request)
     except Exception as e:
+        # Log the exception for debugging
+        logger.error(f"Unhandled exception in {request.url.path}: {e}", exc_info=True)
         # Hata durumunda bile CORS header'larını ekle
         from fastapi.responses import JSONResponse
+        # Always show error details in development
+        is_dev = os.getenv("ENVIRONMENT", "").lower() in ["development", "dev"] or os.getenv("DEBUG", "").lower() == "true"
         response = JSONResponse(
             status_code=500,
-            content={"detail": str(e) if "development" in os.getenv("ENVIRONMENT", "").lower() else "Internal server error"}
+            content={"detail": str(e) if is_dev else "Internal server error"}
         )
     
     # CORS header'ları her zaman ekle (hata durumunda bile)
@@ -119,10 +126,14 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Detailed health check"""
-    from app.db import supabase
+    from app.db import get_supabase
     try:
-        supabase.table('users').select("id").limit(1).execute()
-        db_status = "connected"
+        supabase_client = get_supabase()
+        if supabase_client is None:
+            db_status = "error: Supabase client not initialized"
+        else:
+            supabase_client.table('users').select("id").limit(1).execute()
+            db_status = "connected"
     except Exception as e:
         db_status = f"error: {str(e)}"
     

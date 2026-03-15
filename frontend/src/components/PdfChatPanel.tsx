@@ -45,6 +45,17 @@ export default function PdfChatPanel({ file, isOpen, onClose }: Props) {
     scrollToBottom();
   }, [chatMessages, loading]);
 
+  // Dosya gerçekten değiştiğinde (ilk yükleme değil) önceki oturumu temizle
+  const prevFileNameRef = useRef<string | null>(null);
+  useEffect(() => {
+    const name = file?.name ?? null;
+    if (prevFileNameRef.current !== null && prevFileNameRef.current !== name) {
+      setSessionId(null);
+      setChatMessages([]);
+    }
+    prevFileNameRef.current = name;
+  }, [file?.name]);
+
   // Oturum başlatma
   useEffect(() => {
     if (isOpen && file && !sessionId && !initializing) {
@@ -171,7 +182,7 @@ export default function PdfChatPanel({ file, isOpen, onClose }: Props) {
                   <p className="text-xs opacity-60 truncate max-w-[180px]">{file.name}</p>
                 </div>
               </div>
-              <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+              <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" data-testid="chat-panel-close" aria-label="Close">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
               </button>
             </div>
@@ -231,7 +242,7 @@ export default function PdfChatPanel({ file, isOpen, onClose }: Props) {
                   disabled={loading || initializing}
                   className="chat-input-field flex-1"
                 />
-                <motion.button whileTap={{ scale: 0.9 }} type="submit" disabled={!input.trim() || loading || initializing} className="btn-primary p-3 rounded-xl">
+                <motion.button whileTap={{ scale: 0.9 }} type="submit" disabled={!input.trim() || loading || initializing} className="btn-primary p-3 rounded-xl" data-testid="chat-send-button" aria-label="Send">
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
                 </motion.button>
               </form>

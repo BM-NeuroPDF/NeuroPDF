@@ -24,9 +24,21 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
+.coverage
 
 # === Logs ===
 *.log
+test-results-*.txt
+
+# Pip artifacts (e.g. =0.4.22)
+=*
+
+# === Test & coverage outputs (see docs/reports-and-outputs.md) ===
+backend/htmlcov/
+aiService/htmlcov/
+frontend/coverage/
+frontend/playwright-report/
 
 # === IDE / Config Folders ===
 .vscode/

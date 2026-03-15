@@ -62,7 +62,11 @@ class TestAuthEndpoints:
         assert data["user_id"] == "123"
         assert data["email"] == "test@example.com"
         
-    def test_login_invalid_credentials_user_not_found(self, override_get_supabase):
+    @patch("app.routers.auth.check_rate_limit")
+    def test_login_invalid_credentials_user_not_found(self, mock_rate_limit, override_get_supabase):
+        # Mock rate limit to always return True (allow request)
+        mock_rate_limit.return_value = True
+        
         # Return empty list from user_auth table to simulate not found
         mock_auth_execute = override_get_supabase.table().select().eq().eq().execute
         mock_auth_execute.return_value.data = []
@@ -75,8 +79,12 @@ class TestAuthEndpoints:
         assert response.status_code == 401
         assert response.json()["detail"] == "Invalid credentials"
         
+    @patch("app.routers.auth.check_rate_limit")
     @patch("app.routers.auth.security.verify_password")
-    def test_login_invalid_credentials_wrong_password(self, mock_verify_password, override_get_supabase):
+    def test_login_invalid_credentials_wrong_password(self, mock_verify_password, mock_rate_limit, override_get_supabase):
+        # Mock rate limit to always return True (allow request)
+        mock_rate_limit.return_value = True
+        
         mock_auth_record = {
             "id": 1,
             "user_id": "123",
@@ -142,17 +150,52 @@ class TestAuthEndpoints:
             "name": "Existing User"
         }
         
+        # Create separate mock instances for each table() call
+        mock_supabase = override_get_supabase
+        
         # 1. user_auth select returns user_id
-        mock_auth_select = override_get_supabase.table().select().eq().eq().execute
-        mock_auth_select.return_value.data = [{"user_id": "existing-uuid"}]
+        mock_auth_table = MagicMock()
+        mock_auth_select = MagicMock()
+        mock_auth_eq1 = MagicMock()
+        mock_auth_eq2 = MagicMock()
+        mock_auth_execute = MagicMock()
+        mock_auth_execute.return_value.data = [{"user_id": "existing-uuid"}]
+        mock_auth_eq2.execute = mock_auth_execute
+        mock_auth_eq1.eq.return_value = mock_auth_eq2
+        mock_auth_select.eq.return_value = mock_auth_eq1
+        mock_auth_table.select.return_value = mock_auth_select
         
         # 2. users select returns user
-        mock_user_select = override_get_supabase.table().select().eq().execute
-        mock_user_select.return_value.data = [{"id": "existing-uuid", "username": "Existing User"}]
+        mock_user_table = MagicMock()
+        mock_user_select = MagicMock()
+        mock_user_eq = MagicMock()
+        mock_user_execute = MagicMock()
+        mock_user_execute.return_value.data = [{"id": "existing-uuid", "username": "Existing User", "created_at": None}]
+        mock_user_eq.execute = mock_user_execute
+        mock_user_select.eq.return_value = mock_user_eq
+        mock_user_table.select.return_value = mock_user_select
         
         # 3. user_settings select returns settings
-        mock_settings_select = override_get_supabase.table().select().eq().execute
-        mock_settings_select.return_value.data = [{"eula_accepted": True}]
+        mock_settings_table = MagicMock()
+        mock_settings_select = MagicMock()
+        mock_settings_eq = MagicMock()
+        mock_settings_execute = MagicMock()
+        mock_settings_execute.return_value.data = [{"eula_accepted": True}]
+        mock_settings_eq.execute = mock_settings_execute
+        mock_settings_select.eq.return_value = mock_settings_eq
+        mock_settings_table.select.return_value = mock_settings_select
+        
+        # Make table() return different mocks based on table name
+        def table_side_effect(table_name):
+            if table_name == "user_auth":
+                return mock_auth_table
+            elif table_name == "users":
+                return mock_user_table
+            elif table_name == "user_settings":
+                return mock_settings_table
+            return MagicMock()
+        
+        mock_supabase.table.side_effect = table_side_effect
 
         mock_create_jwt.return_value = "existing_jwt_token"
         

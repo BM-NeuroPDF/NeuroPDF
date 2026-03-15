@@ -7,6 +7,7 @@ import base64
 import json
 import os
 import requests  # HTTP isteği için gerekli
+import asyncio
 from datetime import datetime
 from typing import Optional
 
@@ -32,18 +33,80 @@ BUCKET_NAME = "avatars"
 TEMP_AVATAR_TTL = 3600
 
 # ==========================================
+# YARDIMCI FONKSİYONLAR
+# ==========================================
+
+def validate_image_response(content: bytes) -> tuple[bool, Optional[str]]:
+    """
+    Validates that response content is a valid image.
+    Returns (is_valid, error_message)
+    """
+    if not content or len(content) < 100:
+        return False, "Response too small or empty"
+    
+    # Magic bytes check
+    if content.startswith(b'\x89PNG\r\n\x1a\n'):
+        # PNG format - validate with PIL
+        try:
+            img = Image.open(io.BytesIO(content))
+            img.verify()
+            return True, None
+        except Exception as e:
+            return False, f"PIL validation failed for PNG: {str(e)}"
+    elif content.startswith(b'\xff\xd8\xff'):
+        # JPEG format - validate with PIL
+        try:
+            img = Image.open(io.BytesIO(content))
+            img.verify()
+            return True, None
+        except Exception as e:
+            return False, f"PIL validation failed for JPEG: {str(e)}"
+    else:
+        return False, f"Invalid image format (magic bytes: {content[:10].hex()})"
+
+def parse_hf_error_response(response: requests.Response) -> dict:
+    """Parse Hugging Face error response"""
+    error_info = {
+        "status_code": response.status_code,
+        "headers": dict(response.headers),
+        "body": None,
+        "error_type": "unknown",
+        "error_message": None
+    }
+    
+    try:
+        content_type = response.headers.get("content-type", "")
+        if content_type.startswith("application/json"):
+            error_info["body"] = response.json()
+            # Try to extract error information
+            if isinstance(error_info["body"], dict):
+                error_info["error_type"] = error_info["body"].get("error", {}).get("type", "unknown") if isinstance(error_info["body"].get("error"), dict) else str(error_info["body"].get("error", "unknown"))
+                error_info["error_message"] = error_info["body"].get("error", {}).get("message", None) if isinstance(error_info["body"].get("error"), dict) else str(error_info["body"].get("error", None))
+        else:
+            error_info["body"] = response.text[:500]
+            error_info["error_message"] = response.text[:200]
+    except Exception as e:
+        error_info["body"] = response.text[:500] if hasattr(response, 'text') else str(response.content[:500])
+        error_info["error_message"] = f"Failed to parse error response: {str(e)}"
+    
+    return error_info
+
+# ==========================================
 # 1. HUGGING FACE STABLE DIFFUSION (ÜCRETSİZ, YÜKSEK KALİTE)
 # ==========================================
-async def generate_image_huggingface(prompt: str) -> Optional[bytes]:
+async def generate_image_huggingface(prompt: str, max_retries: int = 3) -> Optional[bytes]:
     """
     Hugging Face Inference API kullanarak Stable Diffusion ile yüksek kaliteli resim üretir.
     Ücretsiz ve kaliteli sonuçlar verir.
+    
+    Improved with retry mechanism, exponential backoff, better error handling,
+    response validation, and portrait-optimized models and prompts.
     """
-    # Hugging Face model seçenekleri (en iyi kalite için SDXL)
+    # Hugging Face model seçenekleri (profil fotoğrafı için optimize edilmiş)
     models = [
         "stabilityai/stable-diffusion-xl-base-1.0",  # En yüksek kalite
-        "runwayml/stable-diffusion-v1-5",  # Fallback
-        "CompVis/stable-diffusion-v1-4",  # Fallback 2
+        "runwayml/stable-diffusion-v1-5",  # İyi kalite, hızlı
+        "CompVis/stable-diffusion-v1-4",  # Fallback
     ]
     
     # API key opsiyonel ama rate limit için önerilir
@@ -53,41 +116,128 @@ async def generate_image_huggingface(prompt: str) -> Optional[bytes]:
     if hf_token:
         headers["Authorization"] = f"Bearer {hf_token}"
     
-    # Prompt'u iyileştir (avatar için optimize edilmiş)
-    avatar_prompt = f"professional portrait avatar, {prompt}, high quality, detailed, 512x512, square format"
+    # Prompt'u iyileştir (profil fotoğrafı için optimize edilmiş)
+    # Base prompt components for portrait/avatar
+    base_prompt_parts = [
+        "professional portrait",
+        "headshot",
+        "face focus",
+        "centered composition",
+        prompt,  # User's prompt
+        "high quality",
+        "detailed",
+        "512x512",
+        "square format"
+    ]
+    avatar_prompt = ", ".join(base_prompt_parts)
     
     for model in models:
-        try:
-            url = f"https://api-inference.huggingface.co/models/{model}"
-            
-            payload = {
-                "inputs": avatar_prompt,
-                "parameters": {
-                    "num_inference_steps": 30,
-                    "guidance_scale": 7.5,
-                    "width": 512,
-                    "height": 512,
-                }
-            }
-            
-            logger.info(f"Hugging Face ({model}) ile resim üretiliyor: {prompt[:50]}...")
-            response = requests.post(url, headers=headers, json=payload, timeout=60)
-            
-            if response.status_code == 200:
-                # Image bytes döner
-                return response.content
-            elif response.status_code == 503:
-                # Model yükleniyor, bir sonraki modeli dene
-                logger.warning(f"Model {model} yükleniyor, bir sonraki model deneniyor...")
-                continue
-            else:
-                logger.warning(f"Hugging Face Error ({response.status_code}): {response.text[:200]}")
-                continue
+        for attempt in range(max_retries):
+            try:
+                # Hugging Face yeni router endpoint'ini kullanıyor
+                url = f"https://router.huggingface.co/models/{model}"
                 
-        except Exception as e:
-            logger.warning(f"Hugging Face API Hatası ({model}): {e}")
-            continue
+                # Negative prompt to avoid unwanted elements in portrait
+                negative_prompt = "full body, multiple people, text, watermark, signature, low quality, blurry, distorted, deformed"
+                
+                payload = {
+                    "inputs": avatar_prompt,
+                    "parameters": {
+                        "num_inference_steps": 30,
+                        "guidance_scale": 7.5,
+                        "width": 512,
+                        "height": 512,
+                        "negative_prompt": negative_prompt,  # Negative prompt for better portrait quality
+                    }
+                }
+                
+                logger.info(f"Hugging Face ({model}) ile resim üretiliyor (attempt {attempt + 1}/{max_retries}): {prompt[:50]}...")
+                # Increased timeout for model loading scenarios
+                response = requests.post(url, headers=headers, json=payload, timeout=90)
+                
+                # Check content-type header
+                content_type = response.headers.get("content-type", "")
+                
+                if response.status_code == 200:
+                    # Validate response is actually an image
+                    is_valid, validation_error = validate_image_response(response.content)
+                    if not is_valid:
+                        logger.warning(f"❌ Hugging Face ({model}) geçersiz resim döndürdü: {validation_error}")
+                        if attempt < max_retries - 1:
+                            wait_time = (attempt + 1) * 5
+                            await asyncio.sleep(wait_time)
+                            continue
+                        else:
+                            break  # Try next model
+                    
+                    # Check content-type
+                    if not content_type.startswith("image/"):
+                        logger.warning(f"⚠️ Hugging Face ({model}) beklenmeyen content-type döndürdü: {content_type}")
+                    
+                    logger.info(f"✅ Hugging Face ({model}) başarıyla resim üretti (size: {len(response.content)} bytes, type: {content_type}).")
+                    return response.content
+                elif response.status_code == 503:
+                    # Model loading - wait and retry with exponential backoff
+                    wait_time = min(60, (attempt + 1) * 10)  # 10s, 20s, 30s (max 60s)
+                    error_info = parse_hf_error_response(response)
+                    logger.info(f"⏳ Model {model} yükleniyor, {wait_time}s bekleniyor (attempt {attempt + 1}/{max_retries}). Error: {error_info.get('error_message', 'N/A')}")
+                    await asyncio.sleep(wait_time)
+                    continue  # Retry same model
+                elif response.status_code == 429:
+                    # Rate limit - check Retry-After header
+                    retry_after = response.headers.get("Retry-After")
+                    if retry_after:
+                        try:
+                            wait_time = int(retry_after)
+                            wait_time = min(300, wait_time)  # Max 5 minutes
+                        except (ValueError, TypeError):
+                            wait_time = min(120, (2 ** attempt) * 5)  # Fallback to exponential backoff
+                    else:
+                        wait_time = min(120, (2 ** attempt) * 5)  # Exponential backoff
+                    
+                    error_info = parse_hf_error_response(response)
+                    logger.warning(f"⚠️ Rate limit hatası, {wait_time}s bekleniyor (Retry-After: {retry_after}, attempt {attempt + 1}/{max_retries}). Error: {error_info.get('error_message', 'N/A')}")
+                    await asyncio.sleep(wait_time)
+                    continue  # Retry same model
+                elif response.status_code == 500:
+                    # Server error - try next model
+                    error_info = parse_hf_error_response(response)
+                    logger.warning(f"❌ Hugging Face Server Error ({response.status_code}) for {model}. Error type: {error_info.get('error_type')}, Message: {error_info.get('error_message', response.text[:200])}")
+                    break  # Try next model
+                else:
+                    # Other errors - log detailed error info and try next model
+                    error_info = parse_hf_error_response(response)
+                    logger.warning(f"❌ Hugging Face Error ({response.status_code}) for {model}. Error type: {error_info.get('error_type')}, Message: {error_info.get('error_message', response.text[:200])}")
+                    # Log full error context for debugging
+                    logger.debug(f"Full error context: {json.dumps(error_info, indent=2, default=str)}")
+                    break  # Try next model
+                    
+            except requests.exceptions.Timeout:
+                logger.warning(f"⏱️ Hugging Face timeout ({model}, attempt {attempt + 1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 5
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    logger.warning(f"❌ Hugging Face timeout after {max_retries} attempts for {model}, trying next model")
+                    break  # Try next model
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"❌ Hugging Face Request Error ({model}, attempt {attempt + 1}/{max_retries}): {type(e).__name__}: {str(e)}")
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 5
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    logger.warning(f"❌ Hugging Face Request Error after {max_retries} attempts for {model}, trying next model")
+                    break  # Try next model
+            except Exception as e:
+                logger.error(f"❌ Hugging Face API Hatası ({model}, attempt {attempt + 1}/{max_retries}): {type(e).__name__}: {str(e)}", exc_info=True)
+                # Log full exception context
+                import traceback
+                logger.debug(f"Full traceback: {traceback.format_exc()}")
+                break  # Try next model
     
+    logger.warning("❌ Tüm Hugging Face modelleri başarısız oldu. Avatar oluşturulamadı.")
     return None
 
 # ==========================================
@@ -270,45 +420,76 @@ async def improve_text_prompt(user_prompt: str) -> str:
 # ANA SERVİS FONKSİYONLARI
 # ==========================================
 
-async def generate_avatar_with_prompt(username: str, prompt: str) -> bytes:
+async def generate_avatar_with_prompt(username: str, prompt: str, use_pollinations_fallback: bool = True) -> bytes:
+    """
+    Avatar oluşturma ana fonksiyonu.
+    Hugging Face birincil yöntemdir, Pollinations fallback olarak kullanılır.
+    
+    Args:
+        username: Kullanıcı adı (fallback için)
+        prompt: Avatar oluşturma prompt'u
+        use_pollinations_fallback: Pollinations fallback kullanılsın mı? (default: True - Hugging Face endpoint sorunları nedeniyle geçici olarak açık)
+    """
     # 1. Prompt'u iyileştir (xAI varsa)
     improved_prompt = await improve_text_prompt(prompt)
     
-    # 2. Önce Hugging Face Stable Diffusion ile üret (en yüksek kalite)
-    image_bytes = await generate_image_huggingface(improved_prompt)
+    # 2. Hugging Face Stable Diffusion ile üret (birincil yöntem, retry mekanizması ile)
+    logger.info("🎨 Hugging Face ile avatar üretiliyor (birincil yöntem)...")
+    image_bytes = await generate_image_huggingface(improved_prompt, max_retries=3)
     
     if image_bytes:
-        logger.info("Hugging Face ile resim başarıyla üretildi.")
+        logger.info("✅ Hugging Face ile resim başarıyla üretildi.")
         return image_bytes
     
-    # 3. Hugging Face başarısız olursa Pollinations.ai'yi dene (fallback)
-    logger.info("Hugging Face başarısız, Pollinations.ai deneniyor...")
-    image_bytes = await generate_image_pollinations(improved_prompt)
+    # 3. Hugging Face başarısız olursa, sadece açıkça izin verilirse Pollinations.ai'yi dene
+    if use_pollinations_fallback:
+        logger.info("⚠️ Hugging Face başarısız, Pollinations.ai deneniyor (fallback)...")
+        image_bytes = await generate_image_pollinations(improved_prompt)
+        
+        if image_bytes:
+            logger.info("✅ Pollinations.ai ile resim başarıyla üretildi.")
+            return image_bytes
+    else:
+        logger.info("⚠️ Hugging Face başarısız, Pollinations fallback devre dışı.")
     
-    if image_bytes:
-        logger.info("Pollinations.ai ile resim başarıyla üretildi.")
-        return image_bytes
-    
-    # 4. Her ikisi de başarısız olursa Fallback (Harf Avatarı)
-    logger.warning("Tüm AI servisleri başarısız, harf avatarı kullanılıyor.")
+    # 4. Tüm AI servisleri başarısız olursa Fallback (Harf Avatarı)
+    logger.warning("❌ Tüm AI servisleri başarısız, harf avatarı kullanılıyor.")
     return generate_avatar_from_name(username, bg_color=(50, 50, 50))
 
-async def edit_avatar_with_prompt(image_bytes: bytes, prompt: str) -> bytes:
+async def edit_avatar_with_prompt(image_bytes: bytes, prompt: str, use_pollinations_fallback: bool = False) -> bytes:
+    """
+    Mevcut avatarı prompt ile düzenler.
+    Hugging Face birincil yöntemdir, Pollinations sadece açıkça izin verilirse kullanılır.
+    
+    Args:
+        image_bytes: Mevcut avatar resmi
+        prompt: Düzenleme prompt'u
+        use_pollinations_fallback: Pollinations fallback kullanılsın mı? (default: False)
+    """
     # 1. Yeni Prompt Oluştur
     new_prompt = await analyze_and_rewrite_prompt(image_bytes, prompt)
     
-    # 2. Önce Hugging Face ile üret
-    edited_bytes = await generate_image_huggingface(new_prompt)
+    # 2. Hugging Face ile üret (birincil yöntem, retry mekanizması ile)
+    logger.info("🎨 Hugging Face ile avatar düzenleniyor (birincil yöntem)...")
+    edited_bytes = await generate_image_huggingface(new_prompt, max_retries=3)
     
     if edited_bytes:
+        logger.info("✅ Hugging Face ile avatar başarıyla düzenlendi.")
         return edited_bytes
     
-    # 3. Hugging Face başarısız olursa Pollinations'ı dene
-    edited_bytes = await generate_image_pollinations(new_prompt)
-    
-    if edited_bytes:
-        return edited_bytes
+    # 3. Hugging Face başarısız olursa, sadece açıkça izin verilirse Pollinations'ı dene
+    if use_pollinations_fallback:
+        logger.info("⚠️ Hugging Face başarısız, Pollinations.ai deneniyor (fallback)...")
+        edited_bytes = await generate_image_pollinations(new_prompt)
         
+        if edited_bytes:
+            logger.info("✅ Pollinations.ai ile avatar başarıyla düzenlendi.")
+            return edited_bytes
+    else:
+        logger.info("⚠️ Hugging Face başarısız, Pollinations fallback devre dışı.")
+        
+    # 4. Tüm AI servisleri başarısız olursa orijinal resmi döndür
+    logger.warning("❌ Tüm AI servisleri başarısız, orijinal avatar döndürülüyor.")
     return image_bytes
 
 # ==========================================

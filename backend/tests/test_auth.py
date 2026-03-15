@@ -2,7 +2,7 @@
 Unit tests for authentication functionality
 """
 import pytest
-from app.routers.auth import validate_password_strength, hash_password, verify_password
+from app.core.security import validate_password_strength, hash_password, verify_password
 from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

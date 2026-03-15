@@ -1,0 +1,44 @@
+"""
+API integration tests using TestClient with test_db (rollback-only session).
+These tests run when the test DB is available; they verify Auth, Profile, and File endpoints.
+"""
+import pytest
+from io import BytesIO
+
+
+@pytest.mark.api
+class TestHealthEndpoints:
+    """Health and root endpoints (no DB required once app is loaded)."""
+
+    def test_root_ok(self, test_client):
+        """GET / returns status ok."""
+        response = test_client.get("/")
+        assert response.status_code == 200
+        data = response.json()
+        assert data.get("status") == "ok"
+
+
+@pytest.mark.api
+class TestFileUploadWithTestDb:
+    """POST /files/upload with real test_db (session rolled back after test)."""
+
+    def test_upload_pdf_authenticated(self, test_client, auth_headers, sample_pdf_content):
+        """Authenticated user can upload a PDF; file is stored in DB for the request (then rolled back)."""
+        files = {"file": ("test.pdf", BytesIO(sample_pdf_content), "application/pdf")}
+        response = test_client.post("/files/upload", files=files, headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert "file_id" in data
+        assert data.get("filename") == "test.pdf"
+
+
+@pytest.mark.api
+class TestProfileWithTestDb:
+    """Profile/avatar and my-files with real test_db."""
+
+    def test_my_files_empty(self, test_client, auth_headers):
+        """GET /files/my-files returns list (empty for new test user)."""
+        response = test_client.get("/files/my-files", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)

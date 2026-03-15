@@ -34,18 +34,29 @@ class StorageService:
         for char in dangerous_chars:
             filename = filename.replace(char, "")
         
+        # Tehlikeli kelimeleri temizle (path traversal saldırıları için)
+        dangerous_words = ['etc', 'passwd', 'windows', 'system32', 'sys', 'bin', 'usr', 'var', 'tmp']
+        for word in dangerous_words:
+            # Case-insensitive temizleme
+            filename = re.sub(re.escape(word), '', filename, flags=re.IGNORECASE)
+        
+        # Başta ve sonda boşluk/nokta karakterlerini temizle (önce strip yap)
+        filename = filename.strip('. ')
+        
+        # Boşsa veya sadece whitespace karakterlerinden oluşuyorsa default isim ver (strip sonrası kontrol)
+        if not filename:
+            filename = "document"
+            return filename
+        
         # Çoklu boşlukları tek boşluğa çevir
         filename = re.sub(r'\s+', '_', filename)
-        
-        # Başta ve sonda boşluk/nokta karakterlerini temizle
-        filename = filename.strip('. ')
         
         # Dosya adı çok uzunsa kısalt
         if len(filename) > 200:
             name, ext = os.path.splitext(filename)
             filename = name[:200-len(ext)] + ext
         
-        # Boşsa default isim ver
+        # Tekrar boş kontrolü (temizleme sonrası)
         if not filename:
             filename = "document"
         
