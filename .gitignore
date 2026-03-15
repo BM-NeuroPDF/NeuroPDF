@@ -41,6 +41,7 @@ frontend/coverage/
 frontend/playwright-report/
 
 # === IDE / Config Folders ===
+.cursor/
 .vscode/
 .idea/
 
