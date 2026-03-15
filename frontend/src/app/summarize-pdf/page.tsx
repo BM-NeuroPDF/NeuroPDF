@@ -3,6 +3,7 @@
 import { useCallback, useState, useRef, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { guestService } from "@/services/guestService";
 import { useGuestLimit } from "@/hooks/useGuestLimit";
@@ -11,7 +12,6 @@ import { usePdf } from "@/context/PdfContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { sendRequest } from "@/utils/api";
 import { getMaxUploadBytes } from "@/app/config/fileLimits";
-import PdfChatPanel from "@/components/PdfChatPanel";
 import Popup from "@/components/ui/Popup";
 import { usePopup } from "@/hooks/usePopup";
 
@@ -30,10 +30,11 @@ const formatTime = (seconds: number) => {
 
 export default function SummarizePdfPage() {
   const { data: session, status } = useSession();
-  const { pdfFile, setSessionId, setIsChatActive, setChatMessages } = usePdf();
+  const router = useRouter();
+  const { setSessionId, setIsChatActive, setChatMessages, setProChatOpen } = usePdf();
   
-  // ✅ 1. Dil desteği için t() ve language alındı
   const { t, language } = useLanguage();
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   const { popup, showError, showSuccess, showInfo, close } = usePopup();
 
@@ -44,9 +45,6 @@ export default function SummarizePdfPage() {
   // ✅ 2. Hata state'i (Metin yerine Kod)
   const [errorType, setErrorType] = useState<ErrorType>("NONE");
   const [customErrorMsg, setCustomErrorMsg] = useState<string | null>(null);
-
-  // Chat State
-  const [showChat, setShowChat] = useState(false);
 
   // Audio State
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -62,6 +60,15 @@ export default function SummarizePdfPage() {
   const maxBytes = getMaxUploadBytes(isGuest);
 
   const { usageInfo, showLimitModal, checkLimit, closeLimitModal, redirectToLogin } = useGuestLimit();
+
+  const isProUser = userRole?.toLowerCase() === "pro" || userRole?.toLowerCase() === "pro user";
+
+  useEffect(() => {
+    if (status !== "authenticated" || !session) return;
+    sendRequest("/files/user/stats", "GET")
+      .then((data) => setUserRole(data?.role ?? null))
+      .catch(() => setUserRole(null));
+  }, [status, session]);
 
   const clearError = () => {
     setErrorType("NONE");
@@ -81,7 +88,6 @@ export default function SummarizePdfPage() {
       setSummary("");
       clearError();
       resetAudio();
-      setShowChat(false);
   };
 
   // --- DROPZONE AYARLARI ---
@@ -199,30 +205,31 @@ export default function SummarizePdfPage() {
         setSummary(data.summary);
         setSummarizing(false); // ✅ Özet başarılı olduğunda hemen durumu güncelle
         
-        // ✅ PDF text'i varsa ve kullanıcı giriş yapmışsa, PDF chat session'ını arka planda başlat
-        // await kaldırıldı - artık blocking değil, kullanıcı özeti hemen görebilir
+        // PDF chat session yalnızca Pro kullanıcılar için arka planda başlatılır
         if (data.pdf_text && session && file) {
-          // Promise olarak arka planda çalıştır, kullanıcıyı bekletme
-          sendRequest("/files/chat/start-from-text", "POST", {
-            pdf_text: data.pdf_text,
-            filename: file.name,
-          })
-          .then((chatRes) => {
-            if (chatRes.session_id) {
-              setSessionId(chatRes.session_id);
-              setIsChatActive(true);
-              setChatMessages([{ 
-                role: "assistant", 
-                content: `👋 Merhaba! **"${file.name}"** dosyasını analiz ettim. Bana bu belgeyle ilgili her şeyi sorabilirsin.` 
-              }]);
-            }
-          })
-          .catch((e) => {
-            console.warn("PDF chat session başlatılamadı:", e);
-            // Hata durumunda sessizce devam et, kullanıcı manuel olarak başlatabilir
-            // Özetleme başarılı olduğu için burada hata göstermiyoruz
-          });
-          // await yok, hemen devam ediyor - özet gösteriliyor
+          sendRequest("/files/user/stats", "GET")
+            .then((stats) => {
+              const role = (stats?.role ?? "").toLowerCase();
+              if (role !== "pro" && role !== "pro user") return;
+              return sendRequest("/files/chat/start-from-text", "POST", {
+                pdf_text: data.pdf_text,
+                filename: file.name,
+              });
+            })
+            .then((chatRes) => {
+              if (chatRes?.session_id) {
+                setSessionId(chatRes.session_id);
+                setIsChatActive(true);
+                setChatMessages([{ 
+                  role: "assistant", 
+                  content: `👋 Merhaba! **"${file.name}"** dosyasını analiz ettim. Bana bu belgeyle ilgili her şeyi sorabilirsin.` 
+                }]);
+              }
+            })
+            .catch((e) => {
+              if (e?.message?.includes("403") || e?.message?.includes("Pro")) return;
+              console.warn("PDF chat session başlatılamadı:", e);
+            });
         }
 
         if (!session) {
@@ -488,16 +495,19 @@ export default function SummarizePdfPage() {
                     </div>
                 )}
 
-                {/* SOHBET ET BUTONU */}
+                {/* SOHBET ET — yalnızca Pro kullanıcılar; standart kullanıcılar /pricing'e yönlendirilir */}
                 {session && (
                   <button
-                    onClick={() => setShowChat(!showChat)}
+                    onClick={() => {
+                      if (isProUser) setProChatOpen(true);
+                      else router.push("/pricing");
+                    }}
                     className="flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all shadow-md hover:scale-105 bg-indigo-600 hover:bg-indigo-700 text-white"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.159 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
                     </svg>
-                    Sohbet Et
+                    {isProUser ? (t("chatButton") || "Sohbet Et") : (t("upgradeToChat") || "Sohbet için Pro'ya geç")}
                   </button>
                 )}
                 
@@ -550,10 +560,6 @@ export default function SummarizePdfPage() {
       <UsageLimitModal isOpen={showLimitModal} onClose={closeLimitModal} onLogin={redirectToLogin} usageCount={usageInfo?.usage_count} maxUsage={3} />
 
       <Popup type={popup.type} message={popup.message} open={popup.open} onClose={close} />
-
-      {file && (
-        <PdfChatPanel file={file} isOpen={showChat} onClose={() => setShowChat(false)} />
-      )}
     </main>
   );
 }

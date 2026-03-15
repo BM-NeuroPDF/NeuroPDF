@@ -39,6 +39,9 @@ Bu doküman, NeuroPDF projesindeki tüm Markdown dosyalarının konumunu, amacı
 | **README.md** | Dokümantasyon indeksi: frontend, mimari, test, yasal, raporlar. | Tüm dokümanların nerede olduğunu görmek için. |
 | **reports-and-outputs.md** | Test/coverage çıktılarının ve log dosyalarının konumları. | Coverage, Playwright raporu, test logları nerede diye bakarken. |
 | **TEST_SCRIPTS.md** | Test scriptleri rehberi: Docker ve yerel komutlar, kullanım. | Hangi scripti nasıl çalıştıracağını görmek için. |
+| **docker-auth-and-logging.md** | Docker'da BACKEND_API_URL, frontend logları, giriş hata logları (NextAuth). | Docker'da giriş 401/ECONNREFUSED sorun giderme için. |
+| **TEST_STRATEGY.md** | Test stratejisi; final sayılar (27 E2E, 128 unit, 41 integration); Fedora/Playwright/Vitest/Pytest konfigürasyonu. | Test sayılarını ve ortam ayarlarını görmek için. |
+| **API_REFERENCE.md** | Chat API referansı: POST /files/chat/start, /files/chat/general/start, message endpoint'leri. | Chat endpoint parametreleri ve yanıtları için. |
 | **MARKDOWN_FILES.md** | Bu dosya — projedeki tüm .md dosyalarının listesi ve açıklaması. | Hangi .md’nin ne işe yaradığını bulmak için. |
 
 ### Frontend (tek konum)

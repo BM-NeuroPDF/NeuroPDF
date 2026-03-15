@@ -6,7 +6,7 @@ process.env.NEXT_PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://loc
 // Node.js 18+ ortamında fetch global olarak mevcut, polyfill'e gerek yok.
 // MSW setup'ı her test dosyasının kendi içinde yapılacak.
 
-// jsdom'da scrollIntoView yok; PdfChatPanel gibi bileşenler için mock
+// jsdom'da scrollIntoView yok; ProChatPanel gibi bileşenler için mock
 const noop = () => {}
 if (typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.scrollIntoView !== 'function') {
   HTMLElement.prototype.scrollIntoView = noop

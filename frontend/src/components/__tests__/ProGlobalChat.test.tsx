@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import ProGlobalChat from '../ProGlobalChat'
 import { useLanguage } from '@/context/LanguageContext'
 import { usePdf } from '@/context/PdfContext'
@@ -8,6 +9,7 @@ import { sendRequest } from '@/utils/api'
 
 // Mock dependencies
 vi.mock('next-auth/react')
+vi.mock('next/navigation')
 vi.mock('@/context/LanguageContext')
 vi.mock('@/context/PdfContext')
 vi.mock('@/utils/api')
@@ -26,15 +28,28 @@ describe('ProGlobalChat', () => {
     language: 'tr'
   }
 
+  const mockPush = vi.fn()
   const mockUsePdf = {
+    pdfFile: null,
     sessionId: null,
     chatMessages: [],
     setChatMessages: vi.fn(),
-    isChatActive: false
+    setIsChatActive: vi.fn(),
+    setSessionId: vi.fn(),
+    isChatActive: false,
+    proChatOpen: false,
+    setProChatOpen: vi.fn(),
+    proChatPanelOpen: false,
+    setProChatPanelOpen: vi.fn(),
+    generalChatMessages: [],
+    setGeneralChatMessages: vi.fn(),
+    generalSessionId: null,
+    setGeneralSessionId: vi.fn(),
   }
 
   beforeEach(() => {
     vi.clearAllMocks()
+    ;(useRouter as any).mockReturnValue({ push: mockPush })
     ;(useSession as any).mockReturnValue({
       data: mockSession,
       status: 'authenticated'
@@ -44,64 +59,92 @@ describe('ProGlobalChat', () => {
     ;(sendRequest as any).mockResolvedValue({ role: 'pro' })
   })
 
-  it('renders minimized icon when user is Pro', async () => {
+  it('renders FAB when user is Pro', async () => {
     ;(sendRequest as any).mockResolvedValue({ role: 'pro' })
-    
+
     render(<ProGlobalChat />)
-    
+
     await waitFor(() => {
-      const button = screen.queryByRole('button', { name: /ai chat/i })
+      const button = screen.getByRole('button', { name: /ai asistanı/i })
       expect(button).toBeInTheDocument()
     })
   })
 
-  it('does not render when user is not Pro', async () => {
+  it('shows FAB for non-Pro user and opens Pro required modal on click', async () => {
     ;(sendRequest as any).mockResolvedValue({ role: 'standard' })
-    
-    const { container } = render(<ProGlobalChat />)
-    
+
+    render(<ProGlobalChat />)
+
     await waitFor(() => {
-      expect(container.firstChild).toBeNull()
+      const button = screen.queryByRole('button', { name: /ai chat|ai asistanı/i })
+      expect(button).toBeInTheDocument()
+    })
+
+    const button = screen.getByRole('button')
+    fireEvent.click(button)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Pro Üyelik Gerekli/i)).toBeInTheDocument()
+      expect(screen.getByText(/Fiyatlandırmaya Git/i)).toBeInTheDocument()
     })
   })
 
-  it('does not render when not authenticated', () => {
+  it('shows FAB for unauthenticated user and redirects to pricing on click', async () => {
     ;(useSession as any).mockReturnValue({
       data: null,
       status: 'unauthenticated'
     })
-    
-    const { container } = render(<ProGlobalChat />)
-    expect(container.firstChild).toBeNull()
+
+    render(<ProGlobalChat />)
+
+    await waitFor(() => {
+      const button = screen.queryByRole('button')
+      expect(button).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button'))
+    expect(mockPush).toHaveBeenCalledWith('/pricing')
   })
 
-  it('expands chat panel when icon is clicked', async () => {
+  it('expands chat panel when icon is clicked (Pro user)', async () => {
     ;(sendRequest as any).mockResolvedValue({ role: 'pro' })
-    
-    render(<ProGlobalChat />)
-    
+
+    const { rerender } = render(<ProGlobalChat />)
+
     await waitFor(() => {
       const button = screen.getByRole('button')
       fireEvent.click(button)
     })
-    
+
+    // Simulate context updating panel open state (real PdfProvider would do this)
+    ;(usePdf as any).mockReturnValue({ ...mockUsePdf, proChatPanelOpen: true })
+    rerender(<ProGlobalChat />)
+
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/pdf hakkında/i)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/chatPlaceholder|sorunuzu|pdf hakkında/i)).toBeInTheDocument()
     })
   })
 
-  it('initializes chat session when expanded', async () => {
+  it('initializes chat session when expanded (Pro user)', async () => {
     ;(sendRequest as any)
       .mockResolvedValueOnce({ role: 'pro' })
       .mockResolvedValueOnce({ session_id: 'test-session-123' })
-    
-    render(<ProGlobalChat />)
-    
+
+    const { rerender } = render(<ProGlobalChat />)
+
+    // Wait for role fetch to be called and then for promise to resolve + React to re-render
     await waitFor(() => {
-      const button = screen.getByRole('button')
-      fireEvent.click(button)
+      expect(sendRequest).toHaveBeenCalledWith('/files/user/stats', 'GET')
     })
-    
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const button = screen.getByRole('button', { name: /ai asistanı/i })
+    fireEvent.click(button)
+
+    ;(usePdf as any).mockReturnValue({ ...mockUsePdf, proChatPanelOpen: true })
+    rerender(<ProGlobalChat />)
+
     await waitFor(() => {
       expect(sendRequest).toHaveBeenCalledWith(
         '/files/chat/general/start',
@@ -119,30 +162,32 @@ describe('ProGlobalChat', () => {
       .mockResolvedValueOnce({ role: 'pro' })
       .mockResolvedValueOnce({ session_id: 'test-session-123' })
       .mockResolvedValueOnce({ answer: 'Test response' })
-    
-    render(<ProGlobalChat />)
-    
-    // Expand chat
+
+    const { rerender } = render(<ProGlobalChat />)
+
     await waitFor(() => {
-      const button = screen.getByRole('button')
-      fireEvent.click(button)
+      fireEvent.click(screen.getByRole('button'))
     })
-    
-    // Wait for session to initialize
+    ;(usePdf as any).mockReturnValue({
+      ...mockUsePdf,
+      proChatPanelOpen: true,
+      generalSessionId: 'test-session-123',
+      generalChatMessages: [{ role: 'assistant', content: 'Hello' }]
+    })
+    rerender(<ProGlobalChat />)
+
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/pdf hakkında/i)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/chatPlaceholder|sorunuzu|pdf hakkında/i)).toBeInTheDocument()
     })
-    
-    // Type message
-    const input = screen.getByPlaceholderText(/pdf hakkında/i)
+
+    const input = screen.getByPlaceholderText(/chatPlaceholder|sorunuzu|pdf hakkında/i)
     fireEvent.change(input, { target: { value: 'Test message' } })
-    
-    // Submit form
+
     const form = input.closest('form')
     if (form) {
       fireEvent.submit(form)
     }
-    
+
     await waitFor(() => {
       expect(sendRequest).toHaveBeenCalledWith(
         '/files/chat/general/message',
@@ -159,14 +204,21 @@ describe('ProGlobalChat', () => {
     ;(sendRequest as any)
       .mockResolvedValueOnce({ role: 'pro' })
       .mockRejectedValueOnce(new Error('API Error'))
-    
-    render(<ProGlobalChat />)
-    
+
+    const { rerender } = render(<ProGlobalChat />)
+
     await waitFor(() => {
-      const button = screen.getByRole('button')
-      fireEvent.click(button)
+      fireEvent.click(screen.getByRole('button'))
     })
-    
+    ;(usePdf as any).mockReturnValue({
+      ...mockUsePdf,
+      proChatPanelOpen: true,
+      generalChatMessages: [
+        { role: 'assistant', content: '🚫 Sohbet başlatılamadı. Lütfen tekrar deneyin.' }
+      ]
+    })
+    rerender(<ProGlobalChat />)
+
     await waitFor(() => {
       expect(screen.getByText(/sohbet başlatılamadı/i)).toBeInTheDocument()
     })
@@ -174,20 +226,17 @@ describe('ProGlobalChat', () => {
 
   it('uses PDF chat session when available', async () => {
     ;(usePdf as any).mockReturnValue({
+      ...mockUsePdf,
       sessionId: 'pdf-session-123',
       chatMessages: [{ role: 'assistant', content: 'PDF chat ready' }],
       setChatMessages: vi.fn(),
-      isChatActive: true
+      isChatActive: true,
+      proChatPanelOpen: true
     })
     ;(sendRequest as any).mockResolvedValue({ role: 'pro' })
-    
+
     render(<ProGlobalChat />)
-    
-    await waitFor(() => {
-      const button = screen.getByRole('button')
-      fireEvent.click(button)
-    })
-    
+
     await waitFor(() => {
       expect(screen.getByText('PDF chat ready')).toBeInTheDocument()
     })

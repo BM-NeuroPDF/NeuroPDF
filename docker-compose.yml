@@ -104,6 +104,9 @@ services:
       - /app/.next
     env_file:
       - ./frontend/.env.local
+    environment:
+      # Konteyner içinden backend'e erişim (localhost konteyner kendisi olur)
+      BACKEND_API_URL: "http://backend:8000"
     ports:
       - "3000:3000"
     depends_on:

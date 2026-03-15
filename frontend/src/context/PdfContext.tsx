@@ -4,8 +4,7 @@ import { createContext, useContext, useState, useEffect, ReactNode, useCallback 
 
 const STORAGE_KEY = "activePdfBase64";
 
-// Mesaj tipini tanımlayalım
-type Message = {
+export type Message = {
     role: "user" | "assistant";
     content: string;
 };
@@ -16,13 +15,20 @@ interface PdfContextType {
     clearPdf: () => void;
     refreshKey: number;
     triggerRefresh: () => void;
-    // ✅ YENİ: Sohbet Global State'leri
     chatMessages: Message[];
     setChatMessages: React.Dispatch<React.SetStateAction<Message[]>>;
     isChatActive: boolean;
     setIsChatActive: (val: boolean) => void;
     sessionId: string | null;
     setSessionId: (id: string | null) => void;
+    proChatOpen: boolean;
+    setProChatOpen: (v: boolean) => void;
+    proChatPanelOpen: boolean;
+    setProChatPanelOpen: (v: boolean) => void;
+    generalChatMessages: Message[];
+    setGeneralChatMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+    generalSessionId: string | null;
+    setGeneralSessionId: (id: string | null) => void;
 }
 
 const PdfContext = createContext<PdfContextType | undefined>(undefined);
@@ -31,10 +37,15 @@ export function PdfProvider({ children }: { children: ReactNode }) {
     const [pdfFile, setPdfFile] = useState<File | null>(null);
     const [refreshKey, setRefreshKey] = useState(0);
 
-    // ✅ YENİ: Sohbet Durumları
+    // PDF sohbet durumları
     const [chatMessages, setChatMessages] = useState<Message[]>([]);
     const [isChatActive, setIsChatActive] = useState(false);
     const [sessionId, setSessionId] = useState<string | null>(null);
+    const [proChatOpen, setProChatOpen] = useState(false);
+    // Genel ProChat panel + genel sohbet (navigasyonda korunur; clearPdf bunları temizlemez)
+    const [proChatPanelOpen, setProChatPanelOpen] = useState(false);
+    const [generalChatMessages, setGeneralChatMessages] = useState<Message[]>([]);
+    const [generalSessionId, setGeneralSessionId] = useState<string | null>(null);
 
     useEffect(() => {
         try {
@@ -96,12 +107,17 @@ export function PdfProvider({ children }: { children: ReactNode }) {
         setSessionId(null);
         sessionStorage.removeItem(STORAGE_KEY);
         setRefreshKey((prev) => prev + 1);
+        // generalChatMessages, generalSessionId, proChatPanelOpen bilinçli olarak korunur
     };
 
     return (
         <PdfContext.Provider value={{
             pdfFile, savePdf, clearPdf, refreshKey, triggerRefresh: () => setRefreshKey(k => k + 1),
-            chatMessages, setChatMessages, isChatActive, setIsChatActive, sessionId, setSessionId
+            chatMessages, setChatMessages, isChatActive, setIsChatActive, sessionId, setSessionId,
+            proChatOpen, setProChatOpen,
+            proChatPanelOpen, setProChatPanelOpen,
+            generalChatMessages, setGeneralChatMessages,
+            generalSessionId, setGeneralSessionId
         }}>
             {children}
         </PdfContext.Provider>

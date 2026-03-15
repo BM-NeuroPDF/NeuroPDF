@@ -5,11 +5,12 @@
 1. [System Overview](#system-overview)
 2. [Architecture Components](#architecture-components)
 3. [Data Flow](#data-flow)
-4. [Database Schema](#database-schema)
-5. [AI Processing Pipeline](#ai-processing-pipeline)
-6. [Authentication & Authorization](#authentication--authorization)
-7. [Security Measures](#security-measures)
-8. [Deployment Architecture](#deployment-architecture)
+4. [Global State and ProChat (Option A)](#global-state-and-prochat-option-a)
+5. [Database Schema](#database-schema)
+6. [AI Processing Pipeline](#ai-processing-pipeline)
+7. [Authentication & Authorization](#authentication--authorization)
+8. [Security Measures](#security-measures)
+9. [Deployment Architecture](#deployment-architecture)
 
 ---
 
@@ -22,6 +23,7 @@ NeuroPDF is a comprehensive PDF processing platform that combines document manag
 - **PDF Upload & Storage**: Secure document storage with metadata management
 - **AI Summarization**: Automated document summarization using LLM (Local or Cloud)
 - **RAG-based Chat**: Context-aware conversations about PDF content using Retrieval-Augmented Generation
+- **Global ProChat**: Single FAB on all pages; Pro users get a persistent chat panel (general + PDF) with history preserved across navigation; non-Pro users are directed to pricing or an info modal
 - **User Management**: Multi-provider authentication (Local, Google OAuth)
 - **Guest Mode**: Limited functionality for unauthenticated users
 
@@ -126,6 +128,13 @@ sequenceDiagram
 
 ### PDF Chat Flow (RAG)
 
+RAG chat has two entry points:
+
+1. **POST /files/chat/start** — Direct file upload (multipart). Used for dynamic PDF integration: when the user has a PDF in context and no PDF session yet, the frontend sends the file to start a session. The file is not stored in the backend DB; it is forwarded to the AI Service, which extracts text, chunks it, and stores embeddings in ChromaDB.
+2. **POST /files/chat/start-from-text** — Starts a session from pre-extracted text (e.g. after summarization on the summarize page). Used when the user already has summary text and wants to chat about it.
+
+After a session exists, messages are sent via **POST /files/chat/message**. The async data cycle is: Frontend → Backend → AI Service → ChromaDB (similarity search) + LLM → response back to the user.
+
 ```mermaid
 sequenceDiagram
     participant User
@@ -136,14 +145,14 @@ sequenceDiagram
     participant LLM as LLM Provider
     
     User->>Frontend: Ask question about PDF
-    Frontend->>Backend: POST /files/chat/start-from-text
-    Backend->>AIService: POST /api/v1/ai/chat/start-from-text
-    AIService->>AIService: Create chat session
+    Frontend->>Backend: POST /files/chat/start or start-from-text
+    Backend->>AIService: Create chat session (file or text)
+    AIService->>AIService: Chunk text, embed, store in ChromaDB
     AIService-->>Backend: session_id
     Backend-->>Frontend: session_id
     
     User->>Frontend: Send message
-    Frontend->>Backend: POST /files/chat
+    Frontend->>Backend: POST /files/chat/message
     Backend->>AIService: POST /api/v1/ai/chat
     AIService->>ChromaDB: Query similar chunks
     ChromaDB-->>AIService: Relevant chunks
@@ -154,6 +163,8 @@ sequenceDiagram
     Backend-->>Frontend: Response
     Frontend-->>User: Display answer
 ```
+
+**General chat** (no PDF): **POST /files/chat/general/start** starts a session; **POST /files/chat/general/message** sends messages. Same Frontend → Backend → AI Service → LLM cycle, without ChromaDB retrieval.
 
 ### Authentication Flow
 
@@ -177,6 +188,39 @@ sequenceDiagram
     Frontend-->>User: Authenticated
     
     Note over Frontend,Backend: Subsequent requests include<br/>Authorization: Bearer {token}
+```
+
+### Global State and ProChat (Option A)
+
+Chat UI and conversation state are managed in **PdfContext** (Option A: single context for both PDF and global chat). This keeps the panel open/closed and general chat history intact across page navigation.
+
+**State in PdfContext:**
+
+| State group | Fields | Cleared by `clearPdf`? |
+|-------------|--------|------------------------|
+| PDF | `pdfFile`, `sessionId`, `chatMessages`, `isChatActive` | Yes |
+| ProChat panel + general chat | `proChatPanelOpen`, `generalChatMessages`, `generalSessionId` | No |
+
+- **ProGlobalChat** is the only chat component in the layout. On FAB click: if the user is Pro, the panel opens and a general session is started lazily via `POST /files/chat/general/start` when there is no active session; if not Pro, the user is sent to pricing or shown an info modal.
+- **Dynamic PDF integration**: When `pdfFile` is set and there is no PDF session yet, ProGlobalChat calls `POST /files/chat/start` (FormData with the file), then updates context with the returned `session_id` and welcome message. The panel then shows PDF-backed chat until the user clears the PDF or starts a new one.
+
+```mermaid
+flowchart LR
+    subgraph pdfState [PDF state]
+        pdfFile[pdfFile]
+        sessionId[sessionId]
+        chatMessages[chatMessages]
+    end
+    subgraph generalState [General chat state]
+        proChatPanelOpen[proChatPanelOpen]
+        generalChatMessages[generalChatMessages]
+        generalSessionId[generalSessionId]
+    end
+    ProGlobalChat[ProGlobalChat]
+    pdfState --> ProGlobalChat
+    generalState --> ProGlobalChat
+    ProGlobalChat -->|"pdfFile set, no session"| chatStart["POST /files/chat/start"]
+    ProGlobalChat -->|"panel open, no session"| generalStart["POST /files/chat/general/start"]
 ```
 
 ---
@@ -375,6 +419,10 @@ Users can choose between:
 
 The choice is stored in `users.llm_choice_id` and respected throughout the pipeline.
 
+### LLM Mocking in Tests
+
+In the AI Service test suite, LLM output is mocked to avoid external API calls and to assert prompt safety and response format. Tests use markers such as `llm_mock` and cover prompt injection protection and structured output (e.g. JSON/Markdown). ChromaDB/RAG tests (`chromadb` marker) exercise the vector store and retrieval path with deterministic hash-based embeddings.
+
 ---
 
 ## Authentication & Authorization
@@ -435,8 +483,8 @@ graph TB
    - `/api/v1/user/*`
 
 4. **Role-Based Access**: Role check required
+   - **Pro features**: General chat (`POST /files/chat/general/start`, `POST /files/chat/general/message`) and the global ProChat panel are available only to Pro users. The backend enforces this via `_check_pro_user` (Supabase/user_roles). Non-Pro users receive 403 for these endpoints.
    - Admin endpoints (future)
-   - Pro features (future)
 
 ### Session Management
 

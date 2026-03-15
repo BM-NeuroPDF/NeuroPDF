@@ -1,65 +1,109 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { sendRequest } from "@/utils/api";
 import { useLanguage } from "@/context/LanguageContext";
 import { usePdf } from "@/context/PdfContext";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import Image from "next/image";
 import NeuroLogoIcon from "@/assets/icons/NeuroPDF-Chat.svg";
-
-type Message = {
-  role: "user" | "assistant";
-  content: string;
-};
+import ProChatPanel from "./ProChatPanel";
 
 export default function ProGlobalChat() {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const { t } = useLanguage();
-  
-  // ✅ PDF Context'ten PDF chat session'ını al
-  const { sessionId: pdfSessionId, chatMessages: pdfChatMessages, setChatMessages: setPdfChatMessages, isChatActive } = usePdf();
-  
-  const [isMinimized, setIsMinimized] = useState(true);
+
+  const {
+    pdfFile,
+    sessionId: pdfSessionId,
+    chatMessages: pdfChatMessages,
+    setChatMessages: setPdfChatMessages,
+    setIsChatActive,
+    setSessionId: setPdfSessionId,
+    proChatOpen,
+    setProChatOpen,
+    proChatPanelOpen,
+    setProChatPanelOpen,
+    generalChatMessages,
+    setGeneralChatMessages,
+    generalSessionId,
+    setGeneralSessionId,
+  } = usePdf();
+
   const [userRole, setUserRole] = useState<string | null>(null);
-  const [chatMessages, setChatMessages] = useState<Message[]>([]);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(false);
   const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  
-  // ✅ PDF chat session'ı varsa onu kullan, yoksa genel chat başlat
-  const activeSessionId = pdfSessionId || sessionId;
-  const activeChatMessages = pdfSessionId ? pdfChatMessages : chatMessages;
+  const [showProRequiredModal, setShowProRequiredModal] = useState(false);
+
+  const activeSessionId = pdfSessionId || generalSessionId;
+  const activeChatMessages = pdfSessionId ? pdfChatMessages : generalChatMessages;
   const isPdfChat = !!pdfSessionId;
+  const isProUser =
+    userRole?.toLowerCase() === "pro" || userRole?.toLowerCase() === "pro user";
+  const canAccessChat = status === "authenticated" && isProUser;
 
-  // Mesajlar değiştikçe en alta kaydır
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
+  // Başka sayfadan "Sohbet Et" ile açıldığında paneli aç
   useEffect(() => {
-    scrollToBottom();
-  }, [activeChatMessages, loading]);
+    if (proChatOpen) {
+      setProChatPanelOpen(true);
+      setProChatOpen(false);
+    }
+  }, [proChatOpen, setProChatOpen, setProChatPanelOpen]);
 
-  // Kullanıcı rolünü kontrol et
+  // Dinamik PDF izleyici: pdfFile değiştiğinde Pro ise ve PDF oturumu yoksa arka planda /files/chat/start
+  useEffect(() => {
+    if (!pdfFile || !isProUser || pdfSessionId) return;
+    let cancelled = false;
+    (async () => {
+      setInitializing(true);
+      try {
+        const formData = new FormData();
+        formData.append("file", pdfFile);
+        const chatRes = await sendRequest("/files/chat/start", "POST", formData, true);
+        if (cancelled) return;
+        if (chatRes?.session_id) {
+          setPdfSessionId(chatRes.session_id);
+          setIsChatActive(true);
+          setPdfChatMessages([
+            {
+              role: "assistant",
+              content: `👋 Merhaba! **"${pdfFile.name}"** dosyasını analiz ettim. Bana bu belgeyle ilgili her şeyi sorabilirsin.`,
+            },
+          ]);
+        }
+      } catch (e) {
+        if (!cancelled) console.error("PDF chat otomatik başlatma hatası:", e);
+      } finally {
+        if (!cancelled) setInitializing(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pdfFile, isProUser, pdfSessionId, setPdfSessionId, setIsChatActive, setPdfChatMessages]);
+
   useEffect(() => {
     const fetchUserRole = async () => {
       if (status === "authenticated" && session) {
         try {
           const data = await sendRequest("/files/user/stats", "GET");
-          setUserRole(data?.role || null);
-        } catch (error: any) {
-          // Token expired durumunda sendRequest zaten yönlendirme yapacak
-          // Burada sadece component'i gizle
-          if (error?.message?.includes("Oturum süreniz dolmuş") || error?.message?.includes("expired") || error?.message?.includes("401")) {
+          setUserRole(data?.role ?? null);
+        } catch (error: unknown) {
+          const msg =
+            error && typeof error === "object" && "message" in error
+              ? String((error as { message?: string }).message)
+              : "";
+          if (
+            msg.includes("Oturum süreniz dolmuş") ||
+            msg.includes("expired") ||
+            msg.includes("401")
+          ) {
             setUserRole(null);
-            // sendRequest zaten yönlendirme yaptı, burada ek işlem yapmaya gerek yok
           } else {
             console.error("Rol kontrolü hatası:", error);
           }
@@ -69,64 +113,78 @@ export default function ProGlobalChat() {
     fetchUserRole();
   }, [session, status]);
 
-  // ✅ PDF chat session'ı varsa onu kullan
-  useEffect(() => {
-    if (pdfSessionId && isChatActive && pdfChatMessages.length > 0) {
-      // PDF chat session'ı aktif, mesajlar zaten yüklenmiş
-      // Sadece chat'i açık tut
-    }
-  }, [pdfSessionId, isChatActive, pdfChatMessages]);
+  const userId = (session?.user as { id?: string })?.id ?? null;
 
-  // Avatar çekme
   useEffect(() => {
-    const fetchAvatar = async () => {
-      if (session?.user && !isMinimized) {
-        try {
-          const userId = (session.user as any).id || "me";
-          // sendRequest kullanarak avatar'ı çek (blob döndürür)
-          const blob = await sendRequest(`/api/v1/user/${userId}/avatar`, "GET") as Blob;
-          if (blob && blob.size > 0) {
-            setAvatarSrc(URL.createObjectURL(blob));
-          } else if (session.user.image) {
-            setAvatarSrc(session.user.image);
-          }
-        } catch (e) {
-          // Avatar çekilemezse fallback olarak session'daki image'i kullan
-          if (session.user.image) {
-            setAvatarSrc(session.user.image);
-          }
+    if (!session?.user || !proChatPanelOpen) return;
+    const uid = userId || "me";
+    let cancelled = false;
+    (async () => {
+      try {
+        const blob = (await sendRequest(
+          `/api/v1/user/${uid}/avatar`,
+          "GET"
+        )) as Blob;
+        if (cancelled) return;
+        if (blob && blob.size > 0) {
+          setAvatarSrc((prev) => {
+            if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
+            return URL.createObjectURL(blob);
+          });
+          return;
         }
+      } catch {
+        /* fallback */
       }
+      if (session?.user?.image) setAvatarSrc(session.user.image);
+    })();
+    return () => {
+      cancelled = true;
     };
-    fetchAvatar();
-  }, [session, isMinimized]);
-
-  // Pro kullanıcı değilse gösterilme
-  const isProUser = userRole?.toLowerCase() === "pro" || userRole?.toLowerCase() === "pro user";
-  if (status !== "authenticated" || !isProUser) return null;
+  }, [userId, proChatPanelOpen, session?.user]);
 
   const initChatSession = async () => {
-    if (activeSessionId) return; // Zaten başlatılmış (PDF veya genel chat)
-    
+    if (activeSessionId) return;
     setInitializing(true);
     try {
       const res = await sendRequest("/files/chat/general/start", "POST", {
         llm_provider: "cloud",
-        mode: "flash"
+        mode: "flash",
       });
-      
       if (!res.session_id) throw new Error("Oturum açılamadı.");
-      
-      setSessionId(res.session_id);
-      setChatMessages([{ 
-        role: "assistant", 
-        content: "👋 Merhaba! Ben NeuroPDF AI asistanıyım. Size nasıl yardımcı olabilirim? PDF işlemleri, dosya yönetimi veya genel sorularınız için buradayım." 
-      }]);
+      setGeneralSessionId(res.session_id);
+      setGeneralChatMessages([
+        {
+          role: "assistant",
+          content:
+            "👋 Merhaba! Ben NeuroPDF AI asistanıyım. Size nasıl yardımcı olabilirim? PDF işlemleri, dosya yönetimi veya genel sorularınız için buradayım.",
+        },
+      ]);
     } catch (e) {
       console.error("Chat başlatma hatası:", e);
-      setChatMessages([{ role: "assistant", content: "🚫 Sohbet başlatılamadı. Lütfen tekrar deneyin." }]);
+      setGeneralChatMessages([
+        {
+          role: "assistant",
+          content: "🚫 Sohbet başlatılamadı. Lütfen tekrar deneyin.",
+        },
+      ]);
     } finally {
       setInitializing(false);
+    }
+  };
+
+  const handleFabClick = () => {
+    if (status !== "authenticated") {
+      router.push("/pricing");
+      return;
+    }
+    if (!isProUser) {
+      setShowProRequiredModal(true);
+      return;
+    }
+    setProChatPanelOpen(true);
+    if (!activeSessionId && !isPdfChat) {
+      initChatSession();
     }
   };
 
@@ -134,34 +192,46 @@ export default function ProGlobalChat() {
     if (!input.trim() || !activeSessionId) return;
     const userMsg = input.trim();
     setInput("");
-    
-    // Mesajı doğru state'e ekle
+
     if (isPdfChat) {
-      setPdfChatMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+      setPdfChatMessages((prev) => [
+        ...prev,
+        { role: "user", content: userMsg },
+      ]);
     } else {
-      setChatMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+      setGeneralChatMessages((prev) => [
+        ...prev,
+        { role: "user", content: userMsg },
+      ]);
     }
     setLoading(true);
-    
+
     try {
-      // PDF chat ise PDF chat endpoint'ini kullan, değilse genel chat
-      const endpoint = isPdfChat ? "/files/chat/message" : "/files/chat/general/message";
+      const endpoint = isPdfChat
+        ? "/files/chat/message"
+        : "/files/chat/general/message";
       const res = await sendRequest(endpoint, "POST", {
         session_id: activeSessionId,
         message: userMsg,
       });
-      
-      // Cevabı doğru state'e ekle
       if (isPdfChat) {
-        setPdfChatMessages((prev) => [...prev, { role: "assistant", content: res.answer }]);
+        setPdfChatMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: res.answer },
+        ]);
       } else {
-        setChatMessages((prev) => [...prev, { role: "assistant", content: res.answer }]);
+        setGeneralChatMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: res.answer },
+        ]);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Chat mesaj hatası:", e);
-      
-      // 429 Quota Error - Show helpful message guiding to Local LLM
-      const errorMessage = e?.message || String(e);
+      const errorMessage =
+        e && typeof e === "object" && "message" in e
+          ? String((e as { message?: string }).message)
+          : String(e);
+
       if (
         errorMessage.includes("429") ||
         errorMessage.includes("kotası aşıldı") ||
@@ -169,55 +239,81 @@ export default function ProGlobalChat() {
         errorMessage.includes("Quota exceeded") ||
         errorMessage.includes("Gemini API")
       ) {
-        const errorMsg = "⚠️ Gemini API kotası aşıldı. Local LLM kullanmak için profil sayfasından ayarları değiştirin.";
+        const errorMsg =
+          "⚠️ Gemini API kotası aşıldı. Local LLM kullanmak için profil sayfasından ayarları değiştirin.";
         if (isPdfChat) {
-          setPdfChatMessages((prev) => [...prev, { role: "assistant", content: errorMsg }]);
+          setPdfChatMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: errorMsg },
+          ]);
         } else {
-          setChatMessages((prev) => [...prev, { role: "assistant", content: errorMsg }]);
+          setGeneralChatMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: errorMsg },
+          ]);
         }
-        return; // Don't continue to other error handlers
+        setLoading(false);
+        return;
       }
-      
-      // Session kaybolduysa (404) otomatik olarak yeni session başlat
-      if (e?.message?.includes("Sohbet oturumu bulunamadı") || e?.message?.includes("404") || e?.message?.includes("session")) {
-        console.log("Session kayboldu, yeni session başlatılıyor...");
-        
-        // PDF chat ise, PDF chat'i yeniden başlatamayız (PDF yok)
+
+      if (
+        errorMessage.includes("Sohbet oturumu bulunamadı") ||
+        errorMessage.includes("404") ||
+        errorMessage.includes("session")
+      ) {
         if (isPdfChat) {
-          const errorMsg = "⚠️ PDF chat oturumu sona erdi. Lütfen PDF'i tekrar yükleyin.";
-          setPdfChatMessages((prev) => [...prev, { role: "assistant", content: errorMsg }]);
+          const errorMsg =
+            "⚠️ PDF chat oturumu sona erdi. Lütfen PDF'i tekrar yükleyin.";
+          setPdfChatMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: errorMsg },
+          ]);
         } else {
-          // Genel chat için yeni session başlat
           try {
             const res = await sendRequest("/files/chat/general/start", "POST", {
               llm_provider: "cloud",
-              mode: "flash"
+              mode: "flash",
             });
-            
             if (res.session_id) {
-              setSessionId(res.session_id);
-              // Mesajı yeni session ile tekrar gönder
-              const retryRes = await sendRequest("/files/chat/general/message", "POST", {
-                session_id: res.session_id,
-                message: userMsg,
-              });
-              setChatMessages((prev) => [...prev, { role: "assistant", content: retryRes.answer }]);
+              setGeneralSessionId(res.session_id);
+              const retryRes = await sendRequest(
+                "/files/chat/general/message",
+                "POST",
+                {
+                  session_id: res.session_id,
+                  message: userMsg,
+                }
+              );
+              setGeneralChatMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: retryRes.answer },
+              ]);
             } else {
               throw new Error("Yeni session başlatılamadı");
             }
           } catch (retryError) {
             console.error("Session yenileme hatası:", retryError);
-            const errorMsg = "⚠️ Oturum yenilenemedi. Lütfen sayfayı yenileyin.";
-            setChatMessages((prev) => [...prev, { role: "assistant", content: errorMsg }]);
+            setGeneralChatMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: "⚠️ Oturum yenilenemedi. Lütfen sayfayı yenileyin.",
+              },
+            ]);
           }
         }
       } else {
-        // Diğer hatalar için genel hata mesajı
         const errorMsg = "⚠️ Bağlantı hatası. Lütfen tekrar deneyin.";
         if (isPdfChat) {
-          setPdfChatMessages((prev) => [...prev, { role: "assistant", content: errorMsg }]);
+          setPdfChatMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: errorMsg },
+          ]);
         } else {
-          setChatMessages((prev) => [...prev, { role: "assistant", content: errorMsg }]);
+          setGeneralChatMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: errorMsg },
+          ]);
         }
       }
     } finally {
@@ -225,39 +321,25 @@ export default function ProGlobalChat() {
     }
   };
 
-  const getInitials = (name: string) => {
-    if (!name) return "U";
-    return name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase();
-  };
-
   return (
     <>
-      {/* Minimize Edilmiş İkon (Sağ Alt Köşe) */}
+      {/* FAB: Her zaman görünür; tıklanınca erişim kontrolü */}
       <AnimatePresence>
-        {isMinimized && (
+        {!proChatPanelOpen && (
           <motion.button
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
-            onClick={() => {
-              setIsMinimized(false);
-              // PDF chat session'ı varsa onu kullan, yoksa genel chat başlat
-              if (!activeSessionId && !isPdfChat) {
-                initChatSession();
-              }
-            }}
+            onClick={handleFabClick}
             className="fixed bottom-6 right-6 z-[999] bg-indigo-600 text-white p-4 rounded-full shadow-[0_10px_40px_rgba(79,70,229,0.4)] border-2 border-white/20 group"
+            aria-label="AI Asistanı"
           >
             <Image src={NeuroLogoIcon} alt="AI Chat" width={24} height={24} />
-            
-            {/* Badge: Pro */}
             <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
               PRO
             </span>
-            
-            {/* Tooltip */}
             <span className="absolute right-16 top-1/2 -translate-y-1/2 bg-gray-900 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-bold shadow-xl">
               AI Asistanı
             </span>
@@ -265,149 +347,91 @@ export default function ProGlobalChat() {
         )}
       </AnimatePresence>
 
-      {/* Chat Panel */}
+      {/* Pro gerekli bilgilendirme modalı */}
       <AnimatePresence>
-        {!isMinimized && (
-          <>
-            {/* Backdrop (Mobil) */}
+        {showProRequiredModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+            onClick={() => setShowProRequiredModal(false)}
+          >
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsMinimized(true)}
-              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[110] sm:hidden"
-            />
-
-            <motion.div
-              initial={{ x: "100%", opacity: 0.5 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: "100%", opacity: 0.5 }}
-              transition={{ type: "spring", stiffness: 260, damping: 25 }}
-              className="fixed top-[64px] right-2 bottom-2 w-full sm:w-[480px] z-[120] flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.1)] overflow-hidden rounded-l-[2rem] rounded-r-lg"
-              style={{ 
-                backgroundColor: "var(--background)", 
-                border: "1px solid var(--container-border)" 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="rounded-2xl p-6 max-w-sm w-full shadow-xl border"
+              style={{
+                backgroundColor: "var(--background)",
+                borderColor: "var(--container-border)",
               }}
             >
-              {/* Header */}
-              <div 
-                className="flex items-center justify-between px-8 py-5 border-b relative z-10"
-                style={{ backgroundColor: "var(--navbar-bg)", borderColor: "var(--navbar-border)" }}
+              <h3
+                className="font-bold text-lg mb-2"
+                style={{ color: "var(--foreground)" }}
               >
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-white border border-gray-100 shadow-sm overflow-hidden">
-                      <Image src={NeuroLogoIcon} alt="AI Logo" width={28} height={28} />
-                    </div>
-                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 rounded-full" style={{ borderColor: "var(--navbar-bg)" }}></span>
-                  </div>
-                  <div>
-                    <h3 className="font-bold leading-tight flex items-center gap-2" style={{ color: "var(--foreground)" }}>
-                      Neuro AI
-                      <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">PRO</span>
-                    </h3>
-                    <p className="text-xs opacity-60">{isPdfChat ? "PDF AI Asistanı" : "Genel AI Asistanı"}</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setIsMinimized(true)} 
-                  className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                Pro Üyelik Gerekli
+              </h3>
+              <p className="text-sm opacity-80 mb-6">
+                AI sohbet özelliği Pro üyeliği gerektirir. Devam etmek için
+                fiyatlandırma sayfasına gidebilirsiniz.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowProRequiredModal(false)}
+                  className="flex-1 py-2.5 px-4 rounded-xl border font-medium transition-colors hover:opacity-90"
+                  style={{
+                    borderColor: "var(--container-border)",
+                    color: "var(--foreground)",
+                  }}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
-                  </svg>
+                  Kapat
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProRequiredModal(false);
+                    router.push("/pricing");
+                  }}
+                  className="flex-1 py-2.5 px-4 rounded-xl font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                >
+                  Fiyatlandırmaya Git
                 </button>
               </div>
-
-              {/* Messages Area */}
-              <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-                <div className="space-y-6">
-                  {initializing && (
-                    <div className="flex flex-col items-center justify-center py-20 opacity-50">
-                      <motion.div 
-                        animate={{ rotate: 360 }} 
-                        transition={{ repeat: Infinity, duration: 1, ease: "linear" }} 
-                        className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full" 
-                      />
-                      <p className="text-sm mt-4 font-bold">Başlatılıyor...</p>
-                    </div>
-                  )}
-
-                  <AnimatePresence mode="popLayout">
-                    {activeChatMessages.map((msg, idx) => (
-                      <motion.div 
-                        key={idx} 
-                        initial={{ opacity: 0, y: 10 }} 
-                        animate={{ opacity: 1, y: 0 }} 
-                        className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                      >
-                        <div className={`flex max-w-[90%] gap-3 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
-                          {/* Avatar */}
-                          <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-white border border-gray-100 shadow-sm overflow-hidden text-[10px] font-bold text-black">
-                            {msg.role === "user" ? (
-                              avatarSrc ? (
-                                <img src={avatarSrc} className="w-full h-full object-cover" alt="U" />
-                              ) : (
-                                <span className="text-gray-600">{getInitials(session?.user?.name || "U")}</span>
-                              )
-                            ) : (
-                              <Image src={NeuroLogoIcon} alt="AI" width={18} height={18} />
-                            )}
-                          </div>
-
-                          {/* Message Bubble */}
-                          <div className={`rounded-2xl px-4 py-3 ${
-                            msg.role === "user" 
-                              ? "bg-indigo-600 text-white" 
-                              : "bg-gray-100 dark:bg-gray-800"
-                          }`}>
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                  
-                  {loading && (
-                    <div className="text-xs opacity-50 animate-pulse font-bold">
-                      {t('aiTyping') || "Neuro yanıt yazıyor..."}
-                    </div>
-                  )}
-                </div>
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Input Area */}
-              <div className="p-4 relative z-10" style={{ backgroundColor: "var(--navbar-bg)", borderTop: "1px solid var(--navbar-border)" }}>
-                <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder={t('chatPlaceholder') || "Sorunuzu yazın..."}
-                    disabled={loading || initializing}
-                    className="flex-1 px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <motion.button 
-                    whileTap={{ scale: 0.9 }} 
-                    type="submit" 
-                    disabled={!input.trim() || loading || initializing} 
-                    className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>
-                    </svg>
-                  </motion.button>
-                </form>
-                
-                <p className="text-[10px] text-center mt-3 opacity-40 leading-tight">
-                  {t('chatDisclaimer') || "NeuroPDF yapay zekası bazen hata yapabilir. Lütfen bilgileri kontrol edin."}
-                </p>
-              </div>
             </motion.div>
-          </>
+          </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Chat Panel: Sadece Pro ve giriş yapmış kullanıcıya açık; state context'te, sayfa geçişinde korunur */}
+      {canAccessChat && (
+        <ProChatPanel
+          isOpen={proChatPanelOpen}
+          onClose={() => setProChatPanelOpen(false)}
+          messages={activeChatMessages}
+          onSend={handleSend}
+          loading={loading}
+          initializing={initializing}
+          input={input}
+          setInput={setInput}
+          headerTitle="Neuro AI"
+          headerSubtitle={
+            isPdfChat ? "PDF AI Asistanı" : "Genel AI Asistanı"
+          }
+          avatarSrc={avatarSrc}
+          userName={session?.user?.name ?? "U"}
+          placeholder={t("chatPlaceholder") || "Sorunuzu yazın..."}
+          disclaimer={
+            t("chatDisclaimer") ||
+            "NeuroPDF yapay zekası bazen hata yapabilir. Lütfen bilgileri kontrol edin."
+          }
+          initializingLabel="Başlatılıyor..."
+          typingLabel={t("aiTyping") || "Neuro yanıt yazıyor..."}
+        />
+      )}
     </>
   );
 }

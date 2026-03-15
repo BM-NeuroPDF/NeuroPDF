@@ -2,7 +2,7 @@
 
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 import { sendRequest } from "@/utils/api";
 import { usePdf } from "@/context/PdfContext";
@@ -65,66 +65,54 @@ export default function ProfilePage() {
     }
   }, [status, router]);
 
-  // ✅ 1. ADIM: Sayfa yüklenince verileri ve AVATARI çek
+  // ✅ Backend'den avatar çek; yalnızca yoksa veya hata varsa session görselini kullan (tek setState = yanıp sönme yok)
+  const fetchUserAvatar = useCallback(async () => {
+    if (!user) return;
+    const uid = user.id || "me";
+    const token = (session as any)?.accessToken;
+    const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    try {
+      const res = await fetch(`${base}/api/v1/user/${uid}/avatar`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        setAvatarSrc((prev) => {
+          if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
+          return URL.createObjectURL(blob);
+        });
+        return;
+      }
+    } catch (e) {
+      console.warn("Avatar getirme hatası:", e);
+    }
+    setAvatarSrc(user.image ?? null);
+  }, [user, session]);
+
+  const userId = user?.id ?? null;
+
   useEffect(() => {
+    if (status !== "authenticated") return;
     const fetchAllData = async () => {
-      if (status === "authenticated") {
+      try {
+        const statsData = await sendRequest("/files/user/stats");
+        setStats(statsData);
         try {
-          // İstatistikleri ve Rolü çek
-          const statsData = await sendRequest("/files/user/stats");
-          setStats(statsData);
-          
-          // Avatarı çek
-          await fetchUserAvatar();
-          
-          // LLM tercihini çek
-          try {
-            const llmData = await sendRequest("/files/user/llm-choice");
-            if (llmData && llmData.provider) {
-              setLlmChoice(llmData.provider as 'local' | 'cloud');
-            }
-          } catch (e) {
-            console.error("LLM tercihi çekilemedi:", e);
-            // Hata durumunda default değeri kullan
-          }
-        } catch (e) {
-          console.error("Veri çekilemedi:", e);
+          const llmData = await sendRequest("/files/user/llm-choice");
+          if (llmData?.provider) setLlmChoice(llmData.provider as "local" | "cloud");
+        } catch {
+          /* default kalır */
         }
+      } catch (e) {
+        console.error("Veri çekilemedi:", e);
       }
     };
     fetchAllData();
   }, [status]);
 
-  // ✅ 2. ADIM: Backend'den Güncel Avatarı Çeken Fonksiyon
-  const fetchUserAvatar = async () => {
-    if (!user) return;
-    try {
-        // Session'daki resim varsayılan olsun (ilk başta boş kalmasın)
-        if (!avatarSrc && user.image) {
-            setAvatarSrc(user.image);
-        }
-
-        const userId = user.id || "me";
-        const token = (session as any)?.accessToken; 
-
-        // Blob olarak resmi çekiyoruz
-        const res = await fetch(`http://localhost:8000/api/v1/user/${userId}/avatar`, {
-            headers: {
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-            }
-        });
-
-        if (res.ok) {
-            const blob = await res.blob();
-            const objectUrl = URL.createObjectURL(blob);
-            setAvatarSrc(objectUrl);
-        } else {
-            console.warn("Avatar bulunamadı veya yetki yok.");
-        }
-    } catch (e) {
-        console.error("Avatar getirme hatası:", e);
-    }
-  };
+  useEffect(() => {
+    if (status === "authenticated" && userId) fetchUserAvatar();
+  }, [status, userId, fetchUserAvatar]);
 
   // --- FONKSİYONLAR ---
 
