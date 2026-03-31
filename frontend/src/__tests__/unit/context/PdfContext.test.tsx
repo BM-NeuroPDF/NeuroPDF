@@ -1,6 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
+import { SessionProvider } from 'next-auth/react'
 import { PdfProvider, usePdf } from '@/context/PdfContext'
+
+function TestProviders({ children }: { children: React.ReactNode }) {
+  return (
+    <SessionProvider
+      refetchInterval={0}
+      refetchOnWindowFocus={false}
+      session={null}
+    >
+      <PdfProvider>{children}</PdfProvider>
+    </SessionProvider>
+  )
+}
 
 // Mock sessionStorage
 const sessionStorageMock = (() => {
@@ -48,10 +61,11 @@ describe('PdfContext', () => {
   describe('Initial State', () => {
     it('should initialize with null pdfFile', () => {
       const { result } = renderHook(() => usePdf(), {
-        wrapper: PdfProvider,
+        wrapper: TestProviders,
       })
 
       expect(result.current.pdfFile).toBeNull()
+      expect(result.current.pdfList).toEqual([])
       expect(result.current.refreshKey).toBe(0)
       expect(result.current.chatMessages).toEqual([])
       expect(result.current.isChatActive).toBe(false)
@@ -64,7 +78,7 @@ describe('PdfContext', () => {
       sessionStorageMock.setItem('activePdfBase64', base64)
 
       const { result } = renderHook(() => usePdf(), {
-        wrapper: PdfProvider,
+        wrapper: TestProviders,
       })
 
       await waitFor(() => {
@@ -72,13 +86,14 @@ describe('PdfContext', () => {
       })
 
       expect(result.current.pdfFile?.name).toBe('restored_document.pdf')
+      expect(result.current.pdfList).toHaveLength(1)
     })
   })
 
   describe('savePdf', () => {
     it('should save a PDF file and update state', async () => {
       const { result } = renderHook(() => usePdf(), {
-        wrapper: PdfProvider,
+        wrapper: TestProviders,
       })
 
       const mockFile = createMockPdfFile('document.pdf')
@@ -92,13 +107,17 @@ describe('PdfContext', () => {
       })
 
       expect(result.current.pdfFile?.name).toBe('document.pdf')
-      expect(result.current.refreshKey).toBeGreaterThan(0)
+      expect(result.current.pdfList).toHaveLength(1)
+      expect(result.current.pdfList[0]?.name).toBe('document.pdf')
+      await waitFor(() => {
+        expect(result.current.refreshKey).toBeGreaterThan(0)
+      })
       expect(sessionStorageMock.getItem('activePdfBase64')).toBeTruthy()
     })
 
     it('should clear PDF when null is passed', async () => {
       const { result } = renderHook(() => usePdf(), {
-        wrapper: PdfProvider,
+        wrapper: TestProviders,
       })
 
       const mockFile = createMockPdfFile('document.pdf')
@@ -118,6 +137,7 @@ describe('PdfContext', () => {
       })
 
       expect(result.current.pdfFile).toBeNull()
+      expect(result.current.pdfList).toEqual([])
       expect(result.current.isChatActive).toBe(false)
       expect(result.current.chatMessages).toEqual([])
       expect(result.current.sessionId).toBeNull()
@@ -126,7 +146,7 @@ describe('PdfContext', () => {
 
     it('should increment refreshKey when saving a new file', async () => {
       const { result } = renderHook(() => usePdf(), {
-        wrapper: PdfProvider,
+        wrapper: TestProviders,
       })
 
       const initialRefreshKey = result.current.refreshKey
@@ -143,7 +163,7 @@ describe('PdfContext', () => {
 
     it('should handle files without slice method gracefully', async () => {
       const { result } = renderHook(() => usePdf(), {
-        wrapper: PdfProvider,
+        wrapper: TestProviders,
       })
 
       const invalidFile = {
@@ -158,13 +178,78 @@ describe('PdfContext', () => {
 
       // Should not throw and should resolve
       expect(result.current.pdfFile).toBeNull()
+      expect(result.current.pdfList).toEqual([])
+    })
+  })
+
+  describe('addPdfs / removePdf / setActivePdf', () => {
+    it('addPdfs appends unique PDFs and sets first as active when list was empty', () => {
+      const { result } = renderHook(() => usePdf(), { wrapper: TestProviders })
+      const a = createMockPdfFile('a.pdf')
+      const b = createMockPdfFile('b.pdf')
+
+      act(() => {
+        result.current.addPdfs([a, b])
+      })
+
+      expect(result.current.pdfList).toHaveLength(2)
+      expect(result.current.pdfFile?.name).toBe('a.pdf')
+    })
+
+    it('addPdfs skips duplicate file names', () => {
+      const { result } = renderHook(() => usePdf(), { wrapper: TestProviders })
+      const a1 = createMockPdfFile('same.pdf')
+      const a2 = createMockPdfFile('same.pdf')
+
+      act(() => {
+        result.current.addPdfs([a1])
+      })
+      act(() => {
+        result.current.addPdfs([a2])
+      })
+
+      expect(result.current.pdfList).toHaveLength(1)
+    })
+
+    it('setActivePdf switches active file', () => {
+      const { result } = renderHook(() => usePdf(), { wrapper: TestProviders })
+      const a = createMockPdfFile('a.pdf')
+      const b = createMockPdfFile('b.pdf')
+
+      act(() => {
+        result.current.addPdfs([a, b])
+      })
+      act(() => {
+        result.current.setActivePdf('b.pdf')
+      })
+
+      expect(result.current.pdfFile?.name).toBe('b.pdf')
+    })
+
+    it('removePdf removes file and picks new active when removing active', () => {
+      const { result } = renderHook(() => usePdf(), { wrapper: TestProviders })
+      const a = createMockPdfFile('a.pdf')
+      const b = createMockPdfFile('b.pdf')
+
+      act(() => {
+        result.current.addPdfs([a, b])
+      })
+      act(() => {
+        result.current.setActivePdf('a.pdf')
+      })
+      act(() => {
+        result.current.removePdf('a.pdf')
+      })
+
+      expect(result.current.pdfList).toHaveLength(1)
+      expect(result.current.pdfFile?.name).toBe('b.pdf')
     })
   })
 
   describe('clearPdf', () => {
     it('should clear PDF file and reset chat state', async () => {
       const { result } = renderHook(() => usePdf(), {
-        wrapper: PdfProvider,
+        wrapper: TestProviders,
       })
 
       const mockFile = createMockPdfFile('document.pdf')
@@ -191,6 +276,7 @@ describe('PdfContext', () => {
       })
 
       expect(result.current.pdfFile).toBeNull()
+      expect(result.current.pdfList).toEqual([])
       expect(result.current.isChatActive).toBe(false)
       expect(result.current.chatMessages).toEqual([])
       expect(result.current.sessionId).toBeNull()
@@ -199,7 +285,7 @@ describe('PdfContext', () => {
 
     it('should increment refreshKey when clearing PDF', async () => {
       const { result } = renderHook(() => usePdf(), {
-        wrapper: PdfProvider,
+        wrapper: TestProviders,
       })
 
       const mockFile = createMockPdfFile('document.pdf')
@@ -225,7 +311,7 @@ describe('PdfContext', () => {
   describe('triggerRefresh', () => {
     it('should increment refreshKey', () => {
       const { result } = renderHook(() => usePdf(), {
-        wrapper: PdfProvider,
+        wrapper: TestProviders,
       })
 
       const initialRefreshKey = result.current.refreshKey
@@ -239,7 +325,7 @@ describe('PdfContext', () => {
 
     it('should increment refreshKey multiple times', () => {
       const { result } = renderHook(() => usePdf(), {
-        wrapper: PdfProvider,
+        wrapper: TestProviders,
       })
 
       act(() => {
@@ -255,7 +341,7 @@ describe('PdfContext', () => {
   describe('Chat State Management', () => {
     it('should manage chatMessages state', () => {
       const { result } = renderHook(() => usePdf(), {
-        wrapper: PdfProvider,
+        wrapper: TestProviders,
       })
 
       const newMessages = [
@@ -272,7 +358,7 @@ describe('PdfContext', () => {
 
     it('should manage isChatActive state', () => {
       const { result } = renderHook(() => usePdf(), {
-        wrapper: PdfProvider,
+        wrapper: TestProviders,
       })
 
       expect(result.current.isChatActive).toBe(false)
@@ -292,7 +378,7 @@ describe('PdfContext', () => {
 
     it('should manage sessionId state', () => {
       const { result } = renderHook(() => usePdf(), {
-        wrapper: PdfProvider,
+        wrapper: TestProviders,
       })
 
       expect(result.current.sessionId).toBeNull()
@@ -312,7 +398,7 @@ describe('PdfContext', () => {
 
     it('should reset chat state when PDF is cleared', async () => {
       const { result } = renderHook(() => usePdf(), {
-        wrapper: PdfProvider,
+        wrapper: TestProviders,
       })
 
       // Chat state'lerini ayarla
@@ -344,7 +430,7 @@ describe('PdfContext', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       renderHook(() => usePdf(), {
-        wrapper: PdfProvider,
+        wrapper: TestProviders,
       })
 
       // useEffect'in çalışması için bekle
@@ -358,7 +444,7 @@ describe('PdfContext', () => {
 
     it('should handle large PDF files that cannot be stored', async () => {
       const { result } = renderHook(() => usePdf(), {
-        wrapper: PdfProvider,
+        wrapper: TestProviders,
       })
 
       // sessionStorage.setItem'ı mock'la ve hata fırlat

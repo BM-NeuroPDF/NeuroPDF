@@ -6,6 +6,8 @@ aiService/.env
 client_secret_*.json
 #*.json
 
+# === Root Node (Husky / lint-staged) ===
+node_modules/
 
 # === Python Virtual Environments ===
 backend/.venv/
@@ -34,7 +36,7 @@ test-results-*.txt
 # Pip artifacts (e.g. =0.4.22)
 =*
 
-# === Test & coverage outputs (see docs/reports-and-outputs.md) ===
+# === Test & coverage outputs (see docs/reference/reports-and-outputs.md) ===
 backend/htmlcov/
 aiService/htmlcov/
 frontend/coverage/

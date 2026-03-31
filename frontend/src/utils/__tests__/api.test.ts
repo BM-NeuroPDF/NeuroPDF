@@ -149,7 +149,7 @@ describe('sendRequest', () => {
     expect(signOut).toHaveBeenCalledWith({ callbackUrl: '/login', redirect: true })
     
     // Restore
-    window.location = originalLocation
+    ;(window as unknown as { location: Location }).location = originalLocation
   })
 
   it('handles 401 error and redirects to login', async () => {
@@ -174,7 +174,7 @@ describe('sendRequest', () => {
     expect(signOut).toHaveBeenCalledWith({ callbackUrl: '/login', redirect: true })
     
     // Restore
-    window.location = originalLocation
+    ;(window as unknown as { location: Location }).location = originalLocation
   })
 
   it('handles error response with detail string', async () => {

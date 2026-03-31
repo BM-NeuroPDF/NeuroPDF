@@ -118,4 +118,4 @@ docker compose restart frontend
 
 - `docker-compose.yml` — frontend servisi `environment.BACKEND_API_URL`
 - `frontend/src/app/api/auth/[...nextauth]/route.ts` — authorize ve JWT callback + hata logları
-- [README.md](../README.md) — Genel kurulum ve Docker bölümü
+- [README.md](../../README.md) — Genel kurulum ve Docker bölümü

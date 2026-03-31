@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, DateTime, ForeignKey, Boolean, func, LargeBinary
+from sqlalchemy import String, Integer, DateTime, ForeignKey, Boolean, func, LargeBinary, Text, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base
@@ -67,6 +67,9 @@ class User(Base):
     avatars = relationship("UserAvatar", back_populates="user", cascade="all, delete-orphan")
     stats = relationship("UserStats", back_populates="user", uselist=False, cascade="all, delete-orphan", passive_deletes=True)
     pdfs = relationship("PDF", back_populates="user", cascade="all, delete-orphan")
+    pdf_chat_sessions = relationship(
+        "PdfChatSession", back_populates="user", cascade="all, delete-orphan"
+    )
 
 # ==========================================
 # 3A. USER AUTH TABLOSU
@@ -216,6 +219,61 @@ class PDF(Base):
     
     # Relationships
     user = relationship("User", back_populates="pdfs")
+    chat_sessions = relationship("PdfChatSession", back_populates="pdf")
+
+
+# ==========================================
+# 8B. PDF CHAT SESSION (kalıcı sohbet geçmişi)
+# ==========================================
+class PdfChatSession(Base):
+    __tablename__ = "pdf_chat_sessions"
+    __table_args__ = (Index("ix_pdf_chat_sessions_user_updated", "user_id", "updated_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    ai_session_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    pdf_id: Mapped[str | None] = mapped_column(
+        ForeignKey("pdfs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    filename: Mapped[str] = mapped_column(String(512), nullable=False, default="document.pdf")
+    llm_provider: Mapped[str] = mapped_column(String(32), nullable=False, default="local")
+    mode: Mapped[str] = mapped_column(String(32), nullable=False, default="flash")
+    # pdf_id yokken start-from-text metninin snapshot'ı (restore için)
+    context_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    user = relationship("User", back_populates="pdf_chat_sessions")
+    pdf = relationship("PDF", back_populates="chat_sessions")
+    messages = relationship(
+        "PdfChatMessage", back_populates="session", cascade="all, delete-orphan", order_by="PdfChatMessage.created_at"
+    )
+
+
+class PdfChatMessage(Base):
+    __tablename__ = "pdf_chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("pdf_chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    session = relationship("PdfChatSession", back_populates="messages")
+
 
 # ==========================================
 # 9. SUMMARY CACHE TABLOSU

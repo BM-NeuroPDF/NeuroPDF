@@ -3,7 +3,7 @@
 import asyncio
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Depends
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..tasks import pdf_tasks
 from ..services import ai_service, pdf_service
@@ -121,6 +121,8 @@ class StartChatFromTextRequest(BaseModel):
     filename: str = "document.pdf"
     llm_provider: LLMProvider = "cloud"
     mode: CloudMode = "flash"
+    pdf_id: str | None = None
+    user_id: str | None = None
 
 
 @router.post("/chat/start-from-text", response_model=StartChatResponse)
@@ -134,8 +136,45 @@ async def start_chat_from_text(
         filename=req.filename,
         llm_provider=req.llm_provider,
         mode=req.mode,
+        pdf_id=req.pdf_id,
+        user_id=req.user_id,
     )
     return {"session_id": session_id}
+
+
+class RestorePdfChatRequest(BaseModel):
+    session_id: str
+    pdf_text: str
+    filename: str = "document.pdf"
+    history: list = Field(default_factory=list)
+    llm_provider: str = "cloud"
+    mode: str = "flash"
+    pdf_id: str | None = None
+    user_id: str | None = None
+
+
+@router.post("/chat/restore-session", response_model=StartChatResponse)
+async def restore_pdf_chat_session_endpoint(
+    req: RestorePdfChatRequest,
+    _: bool = Depends(verify_api_key),
+):
+    """Backend'in kalıcı sohbeti AI bellek oturumuna yüklemesi için."""
+    try:
+        ai_service.restore_pdf_chat_session(
+            session_id=req.session_id,
+            pdf_text=req.pdf_text or " ",
+            filename=req.filename,
+            history=list(req.history or []),
+            llm_provider=req.llm_provider,
+            mode=req.mode,
+            pdf_id=req.pdf_id,
+            user_id=req.user_id,
+        )
+        return {"session_id": req.session_id}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Oturum geri yüklenemedi: {str(e)}"
+        )
 
 
 class ChatRequest(BaseModel):
@@ -171,9 +210,19 @@ async def chat_about_pdf(
         llm_provider = req.llm_provider or session.get("llm_provider", "cloud")
         mode = req.mode or session.get("mode", "pro")
 
+        tool_ctx: dict = {
+            "full_text": pdf_text,
+            "llm_provider": llm_provider,
+            "mode": mode,
+            "filename": filename,
+        }
+        pid, uid = session.get("pdf_id"), session.get("user_id")
+        if pid and uid:
+            tool_ctx["pdf_id"] = pid
+            tool_ctx["user_id"] = uid
+
         # Blocking LLM çağrısını thread pool'da çalıştır (event loop'u bloklamaz)
-        # History array'i geçir (local LLM için), history_text string'i de geçir (cloud için)
-        answer = await asyncio.to_thread(
+        answer, client_actions = await asyncio.to_thread(
             chat_over_pdf,
             session_text=pdf_context,
             filename=filename,
@@ -182,6 +231,7 @@ async def chat_about_pdf(
             llm_provider=llm_provider,
             mode=mode,
             history=history[-10:] if history else None,  # Son 10 mesajı geçir (context window için)
+            tool_context=tool_ctx,
         )
 
         history.append({"role": "user", "content": req.message})
@@ -191,6 +241,7 @@ async def chat_about_pdf(
             "answer": answer,
             "llm_provider": llm_provider,
             "mode": mode if llm_provider == "cloud" else None,
+            "client_actions": client_actions,
         }
 
     except HTTPException:
@@ -273,13 +324,14 @@ async def general_chat(
 
         # Blocking LLM çağrısını thread pool'da çalıştır (event loop'u bloklamaz)
         # History array'i geçir (local LLM için), history_text string'i de geçir (cloud için)
-        answer = await asyncio.to_thread(
+        answer, client_actions = await asyncio.to_thread(
             llm_general_chat,
             history_text=history_text,
             user_message=req.message,
             llm_provider=llm_provider,
             mode=mode,
             history=history[-10:] if history else None,  # Son 10 mesajı geçir (context window için)
+            tool_context=None,
         )
 
         history.append({"role": "user", "content": req.message})
@@ -289,6 +341,7 @@ async def general_chat(
             "answer": answer,
             "llm_provider": llm_provider,
             "mode": mode if llm_provider == "cloud" else None,
+            "client_actions": client_actions,
         }
 
     except HTTPException:

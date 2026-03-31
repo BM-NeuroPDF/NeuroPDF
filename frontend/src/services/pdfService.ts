@@ -269,30 +269,35 @@ class PDFService {
   }
 
   /**
-   * Convert markdown string to PDF and trigger download
-   * @param markdown - The markdown content
-   * @param filename - Optional default filename
+   * Markdown içeriğini sunucuda PDF'e çevirip indirir (/files/markdown-to-pdf).
    */
-  async createPdfFromMarkdown(markdown: string, filename: string = 'summary.pdf', apiToken?: string | null): Promise<void> {
+  async createPdfFromMarkdown(
+    markdown: string,
+    filename: string = 'summary.pdf',
+    apiToken?: string | null
+  ): Promise<void> {
+    const isLoggedIn = !!apiToken;
     const authHeaders = this.getAuthHeaders(apiToken);
-    
-    // Using sendRequest logic here or fetch directly
+    const guestHeaders = await this.getGuestHeaders(isLoggedIn);
+
     const response = await fetch(`${API_BASE_URL}/files/markdown-to-pdf`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...authHeaders
+        ...authHeaders,
+        ...guestHeaders,
       },
-      body: JSON.stringify({ markdown })
+      body: JSON.stringify({ markdown }),
     });
 
     if (!response.ok) {
       const error = await response.json().catch(() => null);
-      throw new Error(error?.detail || `Failed to create PDF from markdown: ${response.status}`);
+      throw new Error(error?.detail || `Markdown PDF failed: ${response.status}`);
     }
 
     const blob = await response.blob();
-    this.downloadFile(blob, filename);
+    const safeName = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
+    this.downloadFile(blob, safeName);
   }
 }
 

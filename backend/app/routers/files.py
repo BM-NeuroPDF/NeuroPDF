@@ -19,6 +19,15 @@ from sqlalchemy import text
 from ..config import settings
 from ..db import get_supabase, Client, get_db
 from ..storage import save_pdf_to_db, get_pdf_from_db, delete_pdf_from_db, list_user_pdfs
+from ..chat_session_storage import (
+    create_pdf_chat_session_record,
+    append_chat_turn,
+    truncate_context_text,
+    list_user_chat_sessions,
+    get_session_messages_ordered,
+    history_for_ai_restore,
+    get_chat_session_by_db_id,
+)
 # ✅ DÜZELTİLDİ: auth.py'den import edildi ve eski fonksiyon kaldırıldı
 from ..deps import get_current_user, get_current_user_optional 
 from ..models import UserStatsResponse, User
@@ -899,6 +908,15 @@ async def start_chat_from_text(
         if llm_provider == "local":
             mode = "flash"  # Local LLM için mode parametresi kullanılmaz ama tutarlılık için
         
+        # Opsiyonel: istemciden gelen pdf_id (kullanıcıya ait olmalı) — extract tool için
+        pdf_id_meta: str | None = None
+        raw_pid = body.get("pdf_id")
+        if raw_pid and user_id and db:
+            owned = get_pdf_from_db(db, str(raw_pid), user_id)
+            if not owned:
+                raise HTTPException(status_code=404, detail="PDF bulunamadı veya erişim yok.")
+            pdf_id_meta = owned.id
+
         # AI Service'e PDF text'ini gönder
         async with httpx.AsyncClient() as client:
             target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/start-from-text"
@@ -906,8 +924,11 @@ async def start_chat_from_text(
                 "pdf_text": pdf_text,
                 "filename": filename,
                 "llm_provider": llm_provider,  # DB'den gelen değeri kullan (body override yok)
-                "mode": mode
+                "mode": mode,
             }
+            if pdf_id_meta and user_id:
+                payload["pdf_id"] = pdf_id_meta
+                payload["user_id"] = user_id
             headers = get_ai_service_headers()
             response = await client.post(target_url, json=payload, headers=headers, timeout=60.0)
             
@@ -917,8 +938,24 @@ async def start_chat_from_text(
             
             data = response.json()
             print(f"✅ Chat Oturumu Başladı (Text'ten): {data['session_id']}")
-            
-            return {"session_id": data["session_id"], "filename": filename}
+
+            out: dict = {"session_id": data["session_id"], "filename": filename}
+            if pdf_id_meta:
+                out["pdf_id"] = pdf_id_meta
+            if user_id and db:
+                ctx = None if pdf_id_meta else truncate_context_text(pdf_text)
+                db_row = create_pdf_chat_session_record(
+                    db,
+                    user_id=user_id,
+                    ai_session_id=data["session_id"],
+                    filename=filename,
+                    llm_provider=llm_provider,
+                    mode=mode,
+                    pdf_id=pdf_id_meta,
+                    context_text=ctx,
+                )
+                out["db_session_id"] = db_row.id
+            return out
     
     except HTTPException:
         raise
@@ -938,8 +975,8 @@ async def start_chat_session(
     db: Session = Depends(get_db)
 ):
     """
-    Veritabanına kaydetmeden, dosyayı direkt AI Service'e gönderir.
-    PDF içeriği AI Service hafızasında tutulur.
+    PDF'i veritabanına kaydeder, metnini çıkarır ve AI Service sohbet oturumunu
+    pdf_id / user_id ile başlatır (sayfa ayıklama aracı için).
     """
     print(f"\n--- CHAT START (Dosya: {file.filename}) ---")
     
@@ -953,29 +990,60 @@ async def start_chat_session(
         
         # 3. Kullanıcının LLM tercihini DB'den al
         user_id = current_user.get("sub")
-        llm_provider = get_user_llm_provider(db, user_id) if user_id else "local"
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Oturum gerekli.")
+        llm_provider = get_user_llm_provider(db, user_id)
+        mode = "pro" if llm_provider == "cloud" else "flash"
         print(f"📊 Kullanıcı LLM Tercihi: {llm_provider}")
 
-        # 4. AI Service'e Gönder (/chat/start)
+        pdf_row = save_pdf_to_db(db, user_id, file_content, file.filename)
+        try:
+            reader = PdfReader(io.BytesIO(file_content))
+            pdf_text = "\n".join(
+                (p.extract_text() or "") for p in reader.pages
+            )
+        except Exception as e:
+            logger.warning(f"Chat start PDF text extract failed: {e}", exc_info=True)
+            pdf_text = ""
+
         async with httpx.AsyncClient() as client:
-            # AI Service'e dosyayı multipart/form-data olarak iletiyoruz
-            files = {"file": (file.filename, file_content, "application/pdf")}
-            target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/start"
-            
-            print(f"📡 AI Service'e gönderiliyor: {target_url} (llm_provider: {llm_provider})")
+            target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/start-from-text"
+            payload = {
+                "pdf_text": pdf_text or " ",
+                "filename": file.filename,
+                "llm_provider": llm_provider,
+                "mode": mode,
+                "pdf_id": pdf_row.id,
+                "user_id": user_id,
+            }
             headers = get_ai_service_headers()
-            params = {"llm_provider": llm_provider}
-            response = await client.post(target_url, files=files, params=params, headers=headers, timeout=60.0)
-            
+            print(f"📡 AI Service (start-from-text): {target_url} (llm_provider: {llm_provider})")
+            response = await client.post(target_url, json=payload, headers=headers, timeout=60.0)
+
             if response.status_code != 200:
                 print(f"❌ AI Service Hatası: {response.text}")
                 raise HTTPException(status_code=502, detail="Yapay zeka servisi başlatılamadı.")
-            
-            # 4. Session ID'yi Frontend'e dön
+
             data = response.json()
-            print(f"✅ Chat Oturumu Başladı (RAM): {data['session_id']}")
-            
-            return {"session_id": data["session_id"], "filename": file.filename}
+            print(f"✅ Chat Oturumu Başladı: {data['session_id']} (pdf_id={pdf_row.id})")
+
+            db_row = create_pdf_chat_session_record(
+                db,
+                user_id=user_id,
+                ai_session_id=data["session_id"],
+                filename=file.filename or "document.pdf",
+                llm_provider=llm_provider,
+                mode=mode,
+                pdf_id=pdf_row.id,
+                context_text=None,
+            )
+
+            return {
+                "session_id": data["session_id"],
+                "filename": file.filename,
+                "pdf_id": pdf_row.id,
+                "db_session_id": db_row.id,
+            }
 
     except HTTPException:
         raise
@@ -989,7 +1057,8 @@ async def start_chat_session(
 @router.post("/chat/message")
 async def send_chat_message(
     body: dict = Body(...),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Kullanıcının mesajını AI Service'e iletir.
@@ -1035,8 +1104,23 @@ async def send_chat_message(
                                 detail="Gemini API çok yoğun. Lütfen birkaç dakika sonra tekrar deneyin veya Local LLM kullanmayı deneyin."
                             )
                 raise HTTPException(status_code=response.status_code, detail=error_detail)
-            
-            return response.json() # {"answer": "..."}
+
+            result = response.json()
+            user_id = current_user.get("sub")
+            if user_id and isinstance(result, dict) and result.get("answer"):
+                try:
+                    append_chat_turn(
+                        db,
+                        ai_session_id=session_id,
+                        user_id=user_id,
+                        user_message=message,
+                        assistant_message=str(result["answer"]),
+                    )
+                except Exception as persist_err:
+                    logger.warning(
+                        "Chat mesajı kalıcı kayıt atlandı: %s", persist_err, exc_info=True
+                    )
+            return result
 
     except httpx.ReadTimeout:
         raise HTTPException(
@@ -1053,6 +1137,157 @@ async def send_chat_message(
         print(f"Traceback: {error_trace}")
         logger.error(f"Chat Message Error: {error_msg}", exc_info=True)
         raise HTTPException(status_code=500, detail=error_msg if error_msg else "Chat mesajı gönderilemedi")
+
+
+# ==========================================
+# PDF CHAT GEÇMİŞİ (sessions / messages / resume)
+# ==========================================
+
+def _extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
+    try:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        return "\n".join((p.extract_text() or "") for p in reader.pages)
+    except Exception as e:
+        logger.warning("PDF text extract failed in resume: %s", e, exc_info=True)
+        return ""
+
+
+@router.get("/chat/sessions")
+async def list_pdf_chat_sessions(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Oturum gerekli.")
+    rows = list_user_chat_sessions(db, user_id)
+    return {
+        "sessions": [
+            {
+                "id": r.id,
+                "session_id": r.ai_session_id,
+                "pdf_name": r.filename,
+                "title": r.filename,
+                "pdf_id": r.pdf_id,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.get("/chat/sessions/{session_db_id}/messages")
+async def get_pdf_chat_session_messages(
+    session_db_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Oturum gerekli.")
+    session = get_chat_session_by_db_id(db, session_db_id, user_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Oturum bulunamadı.")
+    msgs = get_session_messages_ordered(db, session_db_id, user_id)
+    return {
+        "messages": [
+            {
+                "role": m.role,
+                "content": m.content,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in msgs
+        ],
+    }
+
+
+@router.post("/chat/sessions/{session_db_id}/resume")
+async def resume_pdf_chat_session(
+    session_db_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Oturum gerekli.")
+    session = get_chat_session_by_db_id(db, session_db_id, user_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Oturum bulunamadı.")
+
+    pdf_text = ""
+    if session.pdf_id:
+        pdf_row = get_pdf_from_db(db, session.pdf_id, user_id)
+        if pdf_row:
+            pdf_text = _extract_text_from_pdf_bytes(pdf_row.pdf_data)
+    if not pdf_text.strip() and session.context_text:
+        pdf_text = session.context_text or ""
+    if not pdf_text.strip():
+        raise HTTPException(
+            status_code=410,
+            detail="Bu oturum için PDF metni artık kullanılamıyor. Belge silinmiş veya metin saklanmamış olabilir.",
+        )
+
+    msgs = get_session_messages_ordered(db, session_db_id, user_id)
+    history = history_for_ai_restore(msgs)
+
+    payload = {
+        "session_id": session.ai_session_id,
+        "pdf_text": pdf_text,
+        "filename": session.filename,
+        "history": history,
+        "llm_provider": session.llm_provider,
+        "mode": session.mode,
+        "pdf_id": session.pdf_id,
+        "user_id": user_id,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/restore-session"
+            headers = get_ai_service_headers()
+            response = await client.post(target_url, json=payload, headers=headers)
+            if response.status_code != 200:
+                detail = response.text
+                try:
+                    detail = response.json().get("detail", detail)
+                except Exception:
+                    pass
+                raise HTTPException(
+                    status_code=502, detail=f"AI oturum yükleme hatası: {detail}"
+                )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("resume chat session: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {
+        "session_id": session.ai_session_id,
+        "pdf_id": session.pdf_id,
+        "db_session_id": session.id,
+        "filename": session.filename,
+    }
+
+
+@router.get("/stored/{pdf_id}")
+async def download_stored_pdf(
+    pdf_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Oturum gerekli.")
+    pdf = get_pdf_from_db(db, pdf_id, user_id)
+    if not pdf:
+        raise HTTPException(status_code=404, detail="PDF bulunamadı.")
+    fn = pdf.filename or "document.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf.pdf_data),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{fn}"'},
+    )
 
 
 # ==========================================

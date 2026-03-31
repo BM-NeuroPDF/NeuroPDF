@@ -11,7 +11,7 @@ This document captures the test strategy, final achieved counts, and environment
 | E2E (cross-browser) | Playwright | **27 / 27** | All scenarios passing |
 | Frontend unit | Vitest | **128 / 128** | All unit tests passing |
 | Frontend integration | Vitest | **41 / 41** | All integration tests passing |
-| Backend | Pytest | See [backend-tests.md](testing/backend-tests.md) | Unit, integration, API markers |
+| Backend | Pytest | See [backend-tests.md](backend-tests.md) | Unit, integration, API markers |
 
 E2E runs against Chromium, Firefox, and WebKit (on Fedora, WebKit project uses Chromium for compatibility). Unit and integration tests run in jsdom with Vitest.
 
@@ -30,7 +30,7 @@ E2E runs against Chromium, Firefox, and WebKit (on Fedora, WebKit project uses C
 
 ## Playwright Configuration
 
-**File:** [frontend/playwright.config.ts](../frontend/playwright.config.ts)
+**File:** [frontend/playwright.config.ts](../../frontend/playwright.config.ts)
 
 | Option | Value | Reason |
 |--------|--------|--------|
@@ -40,13 +40,13 @@ E2E runs against Chromium, Firefox, and WebKit (on Fedora, WebKit project uses C
 | `testDir` | `./e2e/tests` | All E2E specs live under this directory |
 | `testMatch` | `.*\.spec\.(ts|tsx|js|jsx)$` | Only spec files are run |
 
-**WebKit on Fedora:** The WebKit project is configured with `browserName: 'chromium'` (see `projects` in config) due to library compatibility issues on Fedora. Cross-browser coverage is still achieved via Chromium and Firefox; for native WebKit, see [testing/frontend/WEBKIT_FIX.md](testing/frontend/WEBKIT_FIX.md).
+**WebKit on Fedora:** The WebKit project is configured with `browserName: 'chromium'` (see `projects` in config) due to library compatibility issues on Fedora. Cross-browser coverage is still achieved via Chromium and Firefox; for native WebKit, see [frontend/WEBKIT_FIX.md](frontend/WEBKIT_FIX.md).
 
 ---
 
 ## Vitest Configuration
 
-**File:** [frontend/vitest.config.ts](../frontend/vitest.config.ts) (and project root `vitest.config.ts` if present)
+**File:** [frontend/vitest.config.ts](../../frontend/vitest.config.ts) (and project root `vitest.config.ts` if present)
 
 - **Environment:** `jsdom`
 - **Setup:** `vitest.setup.ts`
@@ -65,7 +65,7 @@ Commands:
 
 ## Backend Pytest Configuration
 
-**File:** [backend/tests/conftest.py](../backend/tests/conftest.py)
+**File:** [backend/tests/conftest.py](../../backend/tests/conftest.py)
 
 | Feature | Description |
 |---------|-------------|
@@ -86,14 +86,14 @@ Run:
 ## Fedora-Specific Notes
 
 - **Playwright:** Use `workers: 1` on CI/Fedora to reduce CPU contention (config already uses `process.env.CI ? 1 : 2`). Timeout 90s helps with LLM-backed E2E tests.
-- **WebKit:** On Fedora, native WebKit may fail due to system library issues; the config runs the WebKit project with `browserName: 'chromium'` so the same specs pass. For real WebKit, see [WEBKIT_FIX.md](testing/frontend/WEBKIT_FIX.md).
+- **WebKit:** On Fedora, native WebKit may fail due to system library issues; the config runs the WebKit project with `browserName: 'chromium'` so the same specs pass. For real WebKit, see [WEBKIT_FIX.md](frontend/WEBKIT_FIX.md).
 - **Environment:** Setting `CI=1` (e.g. in CI pipelines or when simulating CI locally) forces single-worker Playwright and forbids `test.only`.
 
 ---
 
 ## Related Documentation
 
-- [testing/](testing/) — Test reports and frontend/backend test guides
+- [testing/README.md](README.md) — Test reports and frontend/backend test guides
 - [TEST_SCRIPTS.md](TEST_SCRIPTS.md) — Scripts for running tests (Docker and local)
-- [testing/frontend/WEBKIT_FIX.md](testing/frontend/WEBKIT_FIX.md) — WebKit (Safari) E2E setup and Fedora workaround
-- [testing/backend-tests.md](testing/backend-tests.md) — Backend test layout and markers
+- [frontend/WEBKIT_FIX.md](frontend/WEBKIT_FIX.md) — WebKit (Safari) E2E setup and Fedora workaround
+- [backend-tests.md](backend-tests.md) — Backend test layout and markers

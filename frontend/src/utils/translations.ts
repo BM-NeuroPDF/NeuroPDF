@@ -105,6 +105,7 @@ export const translations = {
     usePanelFile: "Sağ Paneldeki PDF'i Kullan",
     panelPdfError: "Sağ panelde bir PDF bulunamadı.",
     currentFile: "Şu anki dosya:",
+    pdfFilesSelectedCount: "Seçilen PDF sayısı:",
     selectedFile: "Seçilen:",
 
     // --- CONVERT TEXT PAGE (Metin Dönüştürme Sayfası) ---
@@ -184,12 +185,20 @@ export const translations = {
     waitAudioGen: "Yapay zeka metni sese çevirirken lütfen bekleyin.",
     waitPdfAnalysis: "PDF analizi yapılıyor, bu işlem biraz sürebilir.",
     downloadAudio: "Sesi İndir MP3",
+    chatButton: "Sohbet Et",
+    upgradeToChat: "Sohbet için Pro'ya geç",
 
     // --- PDF VIEWER & PANEL ---
     activePdfTitle: "📄 Aktif PDF",
+    pdfDocumentsTitle: "📄 PDF belgeleri",
+    activePdfBadge: "Aktif",
+    removeFromList: "Listeden kaldır",
+    clearAllPdfs: "Tümünü temizle",
     dragHint: "İşlem yapmak için dosyayı sürükleyin",
     removeFile: "Dosyayı Kaldır",
     dragToUse: "Kullanmak için sürükle",
+    chatHistoryTitle: "Geçmiş sohbetler",
+    chatHistoryEmpty: "Henüz geçmiş bir sohbetiniz bulunmuyor.",
     pdfLoading: "PDF Yükleniyor...",
     pdfError: "PDF görüntülenemedi.",
     page: "Sayfa",
@@ -376,6 +385,7 @@ export const translations = {
     usePanelFile: "Use PDF from Right Panel",
     panelPdfError: "No PDF found in the right panel.",
     currentFile: "Current file:",
+    pdfFilesSelectedCount: "PDFs selected:",
     selectedFile: "Selected:",
 
     // --- CONVERT TEXT PAGE ---
@@ -454,12 +464,20 @@ export const translations = {
     waitAudioGen: "Please wait while AI converts text to speech.",
     waitPdfAnalysis: "Analyzing PDF, this may take a moment.",
     downloadAudio: "Download Audio MP3",
+    chatButton: "Chat",
+    upgradeToChat: "Upgrade to Pro to chat",
 
     // --- PDF VIEWER & PANEL ---
     activePdfTitle: "📄 Active PDF",
+    pdfDocumentsTitle: "📄 PDF documents",
+    activePdfBadge: "Active",
+    removeFromList: "Remove from list",
+    clearAllPdfs: "Clear all",
     dragHint: "Drag file to process",
     removeFile: "Remove File",
     dragToUse: "Drag to use",
+    chatHistoryTitle: "Recent chats",
+    chatHistoryEmpty: "You don't have any chat history yet.",
     pdfLoading: "Loading PDF...",
     pdfError: "PDF could not be displayed.",
     page: "Page",

@@ -93,7 +93,7 @@ class TestChatOverPdf:
         """Test PDF chat with cloud LLM"""
         mock_gemini.return_value = "Cloud chat response"
         
-        result = chat_over_pdf(
+        answer, actions = chat_over_pdf(
             session_text="PDF content",
             filename="test.pdf",
             history_text="Previous conversation",
@@ -102,7 +102,8 @@ class TestChatOverPdf:
             mode="pro"
         )
         
-        assert result == "Cloud chat response"
+        assert answer == "Cloud chat response"
+        assert actions == []
         mock_gemini.assert_called_once()
         # Check that prompt was built correctly
         call_args = mock_gemini.call_args
@@ -114,7 +115,7 @@ class TestChatOverPdf:
         """Test PDF chat with local LLM"""
         mock_local_llm.return_value = {"answer": "Local chat response"}
         
-        result = chat_over_pdf(
+        answer, actions = chat_over_pdf(
             session_text="PDF content",
             filename="test.pdf",
             history_text="Previous conversation",
@@ -122,7 +123,8 @@ class TestChatOverPdf:
             llm_provider="local"
         )
         
-        assert result == "Local chat response"
+        assert answer == "Local chat response"
+        assert actions == []
         mock_local_llm.assert_called_once()
     
     @patch("app.services.llm_manager.analyze_text_with_local_llm")
@@ -130,7 +132,7 @@ class TestChatOverPdf:
         """Test local LLM when no answer is returned"""
         mock_local_llm.return_value = {}
         
-        result = chat_over_pdf(
+        answer, _ = chat_over_pdf(
             session_text="PDF content",
             filename="test.pdf",
             history_text="",
@@ -138,7 +140,7 @@ class TestChatOverPdf:
             llm_provider="local"
         )
         
-        assert result == "Local LLM yanıt üretmedi."
+        assert answer == "Local LLM yanıt üretmedi."
     
     def test_chat_over_pdf_invalid_provider(self):
         """Test PDF chat with invalid provider"""
@@ -166,14 +168,15 @@ class TestGeneralChat:
         """Test general chat with cloud LLM"""
         mock_gemini.return_value = "General cloud response"
         
-        result = general_chat(
+        answer, actions = general_chat(
             history_text="Previous messages",
             user_message="Hello",
             llm_provider="cloud",
             mode="flash"
         )
         
-        assert result == "General cloud response"
+        assert answer == "General cloud response"
+        assert actions == []
         mock_gemini.assert_called_once()
     
     @patch("app.services.llm_manager.analyze_text_with_local_llm")
@@ -181,13 +184,14 @@ class TestGeneralChat:
         """Test general chat with local LLM"""
         mock_local_llm.return_value = {"answer": "General local response"}
         
-        result = general_chat(
+        answer, actions = general_chat(
             history_text="Previous messages",
             user_message="Hello",
             llm_provider="local"
         )
         
-        assert result == "General local response"
+        assert answer == "General local response"
+        assert actions == []
         mock_local_llm.assert_called_once()
     
     @patch("app.services.llm_manager.analyze_text_with_local_llm")
@@ -195,13 +199,13 @@ class TestGeneralChat:
         """Test local LLM when no answer is returned"""
         mock_local_llm.return_value = {}
         
-        result = general_chat(
+        answer, _ = general_chat(
             history_text="",
             user_message="Test",
             llm_provider="local"
         )
         
-        assert result == "Local LLM yanıt üretmedi."
+        assert answer == "Local LLM yanıt üretmedi."
 
 
 # ==========================================

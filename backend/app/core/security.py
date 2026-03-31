@@ -36,3 +36,14 @@ def create_jwt(user: dict) -> str:
         "iss": "fastapi",
     }
     return jwt.encode(claims, settings.JWT_SECRET, algorithm="HS256")
+
+
+def verify_jwt(token: str) -> dict:
+    """
+    Backward-compatible JWT verifier used by older tests/helpers.
+    Returns decoded payload, raises ValueError on invalid token.
+    """
+    try:
+        return jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
+    except Exception as exc:
+        raise ValueError("Invalid JWT token") from exc

@@ -41,14 +41,14 @@ def mock_create_session():
 @pytest.fixture
 def mock_chat_over_pdf():
     with patch("app.routers.analysis.chat_over_pdf") as m:
-        m.return_value = "Mock chat cevabı."
+        m.return_value = ("Mock chat cevabı.", [])
         yield m
 
 
 @pytest.fixture
 def mock_general_chat():
     with patch("app.routers.analysis.llm_general_chat") as m:
-        m.return_value = "Mock genel cevap."
+        m.return_value = ("Mock genel cevap.", [])
         yield m
 
 

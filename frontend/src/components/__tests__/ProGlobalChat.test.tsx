@@ -13,6 +13,15 @@ vi.mock('next/navigation')
 vi.mock('@/context/LanguageContext')
 vi.mock('@/context/PdfContext')
 vi.mock('@/utils/api')
+vi.mock('sonner', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() }
+}))
+vi.mock('pdf-lib', () => ({
+  PDFDocument: {
+    load: vi.fn(),
+    create: vi.fn()
+  }
+}))
 vi.mock('next/image', () => ({
   default: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} />
 }))
@@ -31,6 +40,12 @@ describe('ProGlobalChat', () => {
   const mockPush = vi.fn()
   const mockUsePdf = {
     pdfFile: null,
+    pdfList: [],
+    savePdf: vi.fn().mockResolvedValue(undefined),
+    addPdfs: vi.fn(),
+    removePdf: vi.fn(),
+    setActivePdf: vi.fn(),
+    clearPdf: vi.fn(),
     sessionId: null,
     chatMessages: [],
     setChatMessages: vi.fn(),

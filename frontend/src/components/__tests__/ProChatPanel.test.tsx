@@ -116,4 +116,25 @@ describe('ProChatPanel (presentational)', () => {
     rerender(<ProChatPanel {...defaultProps} loading={false} initializing={true} />)
     expect(screen.getByPlaceholderText(/sorunuzu/i)).toBeDisabled()
   })
+
+  it('renders prompt suggestion chips and sends text on click', () => {
+    const onSend = vi.fn()
+    const suggestions = [
+      { text: 'Bu belgenin sayfalarını ayır', icon: '✂️' },
+      { text: 'Ekranı temizle', icon: '🧹' },
+    ]
+    render(
+      <ProChatPanel
+        {...defaultProps}
+        onSend={onSend}
+        promptSuggestions={suggestions}
+        promptSuggestionsDisabled={false}
+      />
+    )
+    expect(screen.getByRole('button', { name: /Bu belgenin sayfalarını ayır/i })).toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', { name: /Bu belgenin sayfalarını ayır/i })
+    )
+    expect(onSend).toHaveBeenCalledWith('Bu belgenin sayfalarını ayır')
+  })
 })

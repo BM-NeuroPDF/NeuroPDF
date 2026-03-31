@@ -1,7 +1,9 @@
-# backend/app/services/llm_manager.py
+# aiService/app/services/llm_manager.py
 
 from fastapi import HTTPException
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
+
+from app.core.tools.agent_loop import run_with_tools
 
 from . import ai_service  # gemini tarafı
 from .local_llm_service import analyze_text_with_local_llm  # yerel LLM tarafı
@@ -28,6 +30,24 @@ def summarize_text(
     raise HTTPException(status_code=400, detail="Geçersiz llm_provider. 'cloud' veya 'local' olmalı.")
 
 
+def _cloud_generate(text_content: str, prompt_instruction: str, mode: CloudMode) -> str:
+    return ai_service.gemini_generate(
+        text_content=text_content,
+        prompt_instruction=prompt_instruction,
+        mode=mode,
+    )
+
+
+def _local_chat_generate(user_message: str, instruction: str, history: Optional[list]) -> str:
+    result = analyze_text_with_local_llm(
+        user_message,
+        task="chat",
+        instruction=instruction,
+        history=history,
+    )
+    return result.get("answer") or result.get("summary") or "Local LLM yanıt üretmedi."
+
+
 def chat_over_pdf(
     session_text: str,
     filename: str,
@@ -36,25 +56,11 @@ def chat_over_pdf(
     llm_provider: LLMProvider = "cloud",
     mode: CloudMode = "pro",
     history: Optional[list] = None,
-) -> str:
-    # 1. Prompt'u Hazırla (cloud için)
+    tool_context: Optional[dict[str, Any]] = None,
+) -> tuple[str, list[dict[str, Any]]]:
     full_prompt = _build_chat_prompt(session_text, filename, history_text, user_message)
 
-    if llm_provider == "cloud":
-        return ai_service.gemini_generate(
-            text_content=full_prompt, 
-            prompt_instruction=(
-                "Aşağıdaki PDF bağlamına ve sohbet geçmişine göre yanıtla. "
-                "Cevabını tıpkı modern bir yapay zeka asistanı gibi profesyonel, samimi, "
-                "anlaşılır ve emojilerle (📄✨ vb.) zenginleştirilmiş Markdown formatında ver. "
-                "Metin yığını yerine kısa paragraflar, kalın yazılar ve listeler kullan:"
-            ), 
-            mode=mode
-        )
-
-    if llm_provider == "local":
-        # Local LLM için history array kullan ve PDF context'i instruction'a ekle
-        pdf_context_instruction = f"""PDF asistanı gibi yanıt ver. Türkçe, net ve pratik ol.
+    pdf_context_instruction = f"""PDF asistanı gibi yanıt ver. Türkçe, net ve pratik ol.
 
 DOSYA: {filename}
 
@@ -64,14 +70,38 @@ PDF İÇERİĞİ:
 ---
 
 PDF içeriğine dayanarak cevap ver. Eğer PDF'te açıkça yoksa, bunu belirt."""
-        
-        result = analyze_text_with_local_llm(
-            user_message,  # Sadece kullanıcı mesajı
-            task="chat",
-            instruction=pdf_context_instruction,
-            history=history  # Tam history array'i geçir
+
+    ctx = dict(tool_context or {})
+    ctx.setdefault("filename", filename)
+    ctx.setdefault("full_text", session_text)
+    ctx.setdefault("llm_provider", llm_provider)
+    ctx.setdefault("mode", mode)
+
+    if llm_provider == "cloud":
+        return run_with_tools(
+            llm_provider="cloud",
+            mode=mode,
+            cloud_prompt=full_prompt,
+            local_instruction=pdf_context_instruction,
+            local_user_message=user_message,
+            local_history=history,
+            tool_context=ctx,
+            cloud_generate=_cloud_generate,
+            local_generate=_local_chat_generate,
         )
-        return result.get("answer") or result.get("summary") or "Local LLM yanıt üretmedi."
+
+    if llm_provider == "local":
+        return run_with_tools(
+            llm_provider="local",
+            mode=mode,
+            cloud_prompt=full_prompt,
+            local_instruction=pdf_context_instruction,
+            local_user_message=user_message,
+            local_history=history,
+            tool_context=ctx,
+            cloud_generate=_cloud_generate,
+            local_generate=_local_chat_generate,
+        )
 
     raise HTTPException(status_code=400, detail="Geçersiz llm_provider.")
 
@@ -109,7 +139,8 @@ def general_chat(
     llm_provider: LLMProvider = "cloud",
     mode: CloudMode = "pro",
     history: Optional[list] = None,
-) -> str:
+    tool_context: Optional[dict[str, Any]] = None,
+) -> tuple[str, list[dict[str, Any]]]:
     """Genel AI chat (PDF gerektirmez)."""
     system_instruction = (
         "Sen NeuroPDF'in AI asistanısın. Kullanıcılara yardımcı olmak için buradasın.\n"
@@ -130,25 +161,29 @@ KULLANICI SORUSU:
 """.strip()
 
     if llm_provider == "cloud":
-        return ai_service.gemini_generate(
-            text_content=full_prompt,
-            prompt_instruction=(
-                "Yukarıdaki sohbet geçmişine göre kullanıcının sorusuna yanıt ver. "
-                "Cevabını tıpkı modern bir yapay zeka asistanı gibi profesyonel, samimi, "
-                "anlaşılır ve emojilerle (🤖💡 vb.) zenginleştirilmiş Markdown formatında ver. "
-                "Metin yığını yerine kısa paragraflar, kalın yazılar ve listeler kullan:"
-            ),
-            mode=mode
+        return run_with_tools(
+            llm_provider="cloud",
+            mode=mode,
+            cloud_prompt=full_prompt,
+            local_instruction=system_instruction,
+            local_user_message=user_message,
+            local_history=history,
+            tool_context=tool_context,
+            cloud_generate=_cloud_generate,
+            local_generate=_local_chat_generate,
         )
 
     if llm_provider == "local":
-        # Local LLM için history array kullan
-        result = analyze_text_with_local_llm(
-            user_message,  # Sadece kullanıcı mesajı
-            task="chat",
-            instruction=system_instruction,
-            history=history  # Tam history array'i geçir
+        return run_with_tools(
+            llm_provider="local",
+            mode=mode,
+            cloud_prompt=full_prompt,
+            local_instruction=system_instruction,
+            local_user_message=user_message,
+            local_history=history,
+            tool_context=tool_context,
+            cloud_generate=_cloud_generate,
+            local_generate=_local_chat_generate,
         )
-        return result.get("answer") or result.get("summary") or "Local LLM yanıt üretmedi."
 
     raise HTTPException(status_code=400, detail="Geçersiz llm_provider.")

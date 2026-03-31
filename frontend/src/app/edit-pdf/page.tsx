@@ -26,6 +26,7 @@ import { CSS } from '@dnd-kit/utilities';
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import { useSession } from "next-auth/react";
+import { usePathname } from "next/navigation";
 import { usePdf } from "@/context/PdfContext";
 import { useGuestLimit } from "@/hooks/useGuestLimit";
 import UsageLimitModal from "@/components/UsageLimitModal";
@@ -82,7 +83,8 @@ type ErrorType = "NONE" | "INVALID_TYPE" | "SIZE_EXCEEDED" | "CUSTOM" | "EMPTY_P
 
 export default function EditPdfPage() {
   const { data: session, status } = useSession();
-  const { pdfFile, savePdf } = usePdf();
+  const pathname = usePathname();
+  const { pdfFile, savePdf, refreshKey } = usePdf();
   
   // ✅ 1. Dil Desteği
   const { t, language } = useLanguage();
@@ -138,6 +140,15 @@ export default function EditPdfPage() {
     setIsProcessingDone(false);
     setProcessedBlob(null);
   };
+
+  // Sohbet / yan panel `savePdf` ile PDF güncellediğinde önizleme sırasını yenile
+  useEffect(() => {
+    if (pathname !== "/edit-pdf") return;
+    if (!pdfFile || !file) return;
+    if (pdfFile.name !== file.name) return;
+    if (pdfFile.size === file.size && pdfFile.lastModified === file.lastModified) return;
+    resetState(pdfFile);
+  }, [pathname, pdfFile, file, refreshKey]);
 
   // --- DROPZONE ---
   const onDrop = useCallback((acceptedFiles: File[], fileRejections: any[]) => {
@@ -430,14 +441,14 @@ export default function EditPdfPage() {
               key={objectUrl || 'no-url'}
               file={objectUrl}
               onLoadSuccess={handleLoadSuccess}
-              loading={<div className="p-6">{t('loading')}</div>}
-              error={(error) => {
+              onLoadError={(error) => {
                 // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/875b7ef5-8e65-4044-b050-49490fad64c5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'edit-pdf/page.tsx:432',message:'Document error render',data:{error:error?String(error):'null',errorType:typeof error,errorKeys:error?Object.keys(error):[],errorMessage:error?.message,errorStack:error?.stack,errorName:error?.name,fullError:error?JSON.stringify(error):'null'},timestamp:Date.now(),runId:'post-fix2',hypothesisId:'D'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/875b7ef5-8e65-4044-b050-49490fad64c5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'edit-pdf/page.tsx:432',message:'Document load error',data:{error:error?String(error):'null',errorType:typeof error,errorMessage:error&&typeof error==='object'&&'message' in error?String((error as Error).message):undefined},timestamp:Date.now(),runId:'post-fix2',hypothesisId:'D'})}).catch(()=>{});
                 // #endregion
                 console.error("PDF Document Error:", error);
-                return <div className="p-6 text-red-500">{t('pdfError')}</div>;
               }}
+              loading={<div className="p-6">{t('loading')}</div>}
+              error={<div className="p-6 text-red-500">{t('pdfError')}</div>}
               className="flex justify-center"
               options={pdfOptions}
             >

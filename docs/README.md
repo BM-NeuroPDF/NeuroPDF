@@ -1,53 +1,53 @@
-# NeuroPDF — Dokümantasyon Merkezi
+# NeuroPDF — Dokümantasyon merkezi
 
-Tüm proje dokümanları tek bir yapıda toplanmıştır. Ana README ve kurulum için proje kökündeki [README.md](../README.md) dosyasına bakın.
+Tüm proje dokümanları bu ağaç altında toplanır. Kurulum ve ürün özeti için kök [README.md](../README.md) dosyasına bakın.
 
 ---
 
-## İçindekiler
+## Klasör yapısı (özet)
 
-| Kategori | Açıklama | Konum |
-|----------|----------|--------|
-| **Frontend** | Kurulum, çalıştırma, test komutları | [frontend/](frontend/README.md) |
-| **Mimari** | Sistem mimarisi, veri akışı, güvenlik | [architecture/](architecture/) |
-| **Testler** | Test raporları, backend/frontend test rehberleri | [testing/](testing/) |
-| **Yasal** | EULA ve yasal metinlere referans | [legal/](legal/) |
-| **Raporlar & Çıktılar** | Log ve coverage raporlarının konumları | [reports-and-outputs.md](reports-and-outputs.md) |
-| **Test scriptleri** | Tüm test scriptlerinin kullanımı (Docker + yerel) | [TEST_SCRIPTS.md](TEST_SCRIPTS.md) |
-| **Docker Auth & Logging** | Docker'da BACKEND_API_URL, frontend logları, giriş hata logları | [docker-auth-and-logging.md](docker-auth-and-logging.md) |
-| **Test stratejisi** | Final sayılar (27 E2E, 128 unit, 41 integration), Fedora konfigürasyonu | [TEST_STRATEGY.md](TEST_STRATEGY.md) |
-| **API referansı** | Chat endpoint'leri (general/start, chat/start, message) | [API_REFERENCE.md](API_REFERENCE.md) |
-| **.md Dosyaları Rehberi** | Projedeki tüm Markdown dosyalarının listesi ve açıklaması | [MARKDOWN_FILES.md](MARKDOWN_FILES.md) |
+| Klasör / dosya | İçerik |
+|----------------|--------|
+| **[architecture/](architecture/)** | Sistem mimarisi, Mermaid diyagramları, tool routing |
+| **[devops/](devops/)** | CI/CD (GitHub Actions), pre-commit (Husky), Docker auth ve loglama |
+| **[reference/](reference/)** | API referansı, rapor/coverage çıktı konumları |
+| **[testing/](testing/)** | Test stratejisi, script rehberi, `reports/` altında arşiv raporlar, backend/frontend rehberleri |
+| **[frontend/](frontend/)** | Frontend kurulum ve çalıştırma notları |
+| **[legal/](legal/)** | EULA ve yasal metinlere referans |
+| **[assets/](assets/)** | Demo GIF vb. statik varlıklar (ör. `demo.gif`) |
+
+Kök `docs/` altında yalnızca bu indeks ve [MARKDOWN_FILES.md](MARKDOWN_FILES.md) (tüm `.md` envanteri) bulunur; teknik belgeler yukarıdaki alt klasörlerde gruplanmıştır.
+
+---
+
+## Hızlı bağlantılar
+
+| Konu | Belge |
+|------|--------|
+| Mimari | [architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md) |
+| Chat / dosya API | [reference/API_REFERENCE.md](reference/API_REFERENCE.md) |
+| Coverage & log dizinleri | [reference/reports-and-outputs.md](reference/reports-and-outputs.md) |
+| Test stratejisi ve sayılar | [testing/TEST_STRATEGY.md](testing/TEST_STRATEGY.md) |
+| Test script komutları | [testing/TEST_SCRIPTS.md](testing/TEST_SCRIPTS.md) |
+| GitHub Actions | [devops/CI.md](devops/CI.md) |
+| Husky / lint-staged | [devops/PRE_COMMIT.md](devops/PRE_COMMIT.md) |
+| Docker’da auth ve loglar | [devops/docker-auth-and-logging.md](devops/docker-auth-and-logging.md) |
+| Tüm `.md` dosya rehberi | [MARKDOWN_FILES.md](MARKDOWN_FILES.md) |
 
 ---
 
 ### Frontend
 
-- **[frontend/README.md](frontend/README.md)** — Frontend kurulumu, çalıştırma ve test; test dokümanlarına linkler.
-
----
+- [frontend/README.md](frontend/README.md) — Kurulum, çalıştırma, teste giriş.
 
 ### Mimari
 
-- **[ARCHITECTURE.md](architecture/ARCHITECTURE.md)** — Sistem genel bakış, bileşenler, veri akışı, veritabanı şeması, AI pipeline, kimlik doğrulama, güvenlik ve deployment.
+- [architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md) — Bileşenler, veri akışı, ajan ve araç yönlendirmesi.
 
----
+### Test ağacı
 
-### Test dokümantasyonu
-
-- **[testing/](testing/)** — Tüm test raporları ve rehberler:
-  - Kapsamlı test raporu, test implementasyon raporu, birim test raporu, güvenlik iyileştirmeleri
-  - Backend test mimarisi ve çalıştırma
-  - Frontend test yapısı, E2E, Vitest, Playwright, WebKit notları
-
----
+- [testing/README.md](testing/README.md) — Raporlar, rehberler ve `reports/` indeksi.
 
 ### Yasal
 
-- **[legal/README.md](legal/README.md)** — EULA metinlerinin nerede tutulduğu ve nasıl kullanıldığı.
-
----
-
-### Raporlar ve çıktılar
-
-- **[reports-and-outputs.md](reports-and-outputs.md)** — Test ve coverage çıktılarının, log dosyalarının ve rapor dizinlerinin konumları.
+- [legal/README.md](legal/README.md) — EULA dosya konumları.

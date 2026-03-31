@@ -14,11 +14,16 @@ export type ProChatMessage = {
   content: string;
 };
 
+export type ProChatPromptSuggestion = {
+  text: string;
+  icon: string;
+};
+
 export type ProChatPanelProps = {
   isOpen: boolean;
   onClose: () => void;
   messages: ProChatMessage[];
-  onSend: () => void;
+  onSend: (messageOverride?: string) => void | Promise<void>;
   onFileUpload: (file: File) => void;
   loading: boolean;
   initializing: boolean;
@@ -34,6 +39,10 @@ export type ProChatPanelProps = {
   typingLabel?: string;
   isRecording?: boolean;
   onVoiceToggle?: () => void;
+  /** PDF’e göre dinamik hazır komut çipleri (üst bileşenden). */
+  promptSuggestions?: ProChatPromptSuggestion[];
+  /** true iken çipler tıklanamaz (oturum yok / yükleniyor). */
+  promptSuggestionsDisabled?: boolean;
 };
 
 function getInitials(name: string) {
@@ -66,8 +75,12 @@ export default function ProChatPanel({
   typingLabel = "Neuro yanıt yazıyor...",
   isRecording = false,
   onVoiceToggle,
+  promptSuggestions = [],
+  promptSuggestionsDisabled = false,
 }: ProChatPanelProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef(0);
+  const panelJustOpenedRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { showError } = usePopup();
   const { t } = useLanguage();
@@ -75,8 +88,36 @@ export default function ProChatPanel({
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
+    if (isOpen) {
+      panelJustOpenedRef.current = true;
+    } else {
+      prevMessageCountRef.current = 0;
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const count = messages.length;
+    const prev = prevMessageCountRef.current;
+    const added = count - prev;
+
+    let behavior: ScrollBehavior = "smooth";
+    if (panelJustOpenedRef.current) {
+      behavior = "auto";
+      panelJustOpenedRef.current = false;
+    } else if (added > 1) {
+      // Geçmiş sohbet geri yükleme veya çoklu mesaj tek seferde
+      behavior = "auto";
+    }
+
+    prevMessageCountRef.current = count;
+
+    const id = requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [messages, loading, isOpen]);
 
   const validateAndUpload = (file: File) => {
     if (file.type !== "application/pdf") {
@@ -354,22 +395,45 @@ export default function ProChatPanel({
                 borderTop: "1px solid var(--navbar-border)",
               }}
             >
-              <div className="flex items-stretch gap-2">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  accept="application/pdf"
-                  className="hidden"
-                />
+              {promptSuggestions.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3 px-2">
+                  {promptSuggestions.map((s, i) => (
+                    <motion.button
+                      key={`${s.text}-${i}`}
+                      type="button"
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2, delay: i * 0.05 }}
+                      disabled={promptSuggestionsDisabled}
+                      onClick={() => {
+                        void onSend(s.text);
+                      }}
+                      className="bg-blue-50/80 text-blue-700 border border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800 dark:hover:bg-blue-900/50 rounded-full px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-40 disabled:pointer-events-none disabled:cursor-not-allowed"
+                    >
+                      <span className="select-none" aria-hidden>
+                        {s.icon}
+                      </span>
+                      <span>{s.text}</span>
+                    </motion.button>
+                  ))}
+                </div>
+              )}
 
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    onSend();
-                  }}
-                  className="flex-1 flex gap-2"
-                >
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="application/pdf"
+                className="hidden"
+              />
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void onSend();
+                }}
+                className="flex items-center gap-2"
+              >
                   <div className="relative flex-1 group/input">
                     <input
                       type="text"
@@ -463,7 +527,6 @@ export default function ProChatPanel({
                     </svg>
                   </motion.button>
                 </form>
-              </div>
 
               <p className="text-[10px] text-center mt-3 opacity-40 leading-tight">
                 {disclaimer}

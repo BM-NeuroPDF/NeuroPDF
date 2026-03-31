@@ -1,6 +1,7 @@
 "use client";
 
 import { SessionProvider } from "next-auth/react";
+import { Toaster } from "sonner";
 
 // PDF Worker yapılandırması - Global seviyede yap (tüm sayfalar için)
 if (typeof window !== "undefined") {
@@ -29,6 +30,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
       {children}
+      <Toaster position="top-center" richColors closeButton />
     </SessionProvider>
   );
 }

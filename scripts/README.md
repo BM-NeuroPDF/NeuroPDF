@@ -1,6 +1,6 @@
 # Scripts
 
-Test ve rapor scriptleri. **Tam kullanım ve komutlar:** [docs/TEST_SCRIPTS.md](../docs/TEST_SCRIPTS.md).
+Test ve rapor scriptleri. **Tam kullanım ve komutlar:** [docs/testing/TEST_SCRIPTS.md](../docs/testing/TEST_SCRIPTS.md).
 
 | Script | Kısa açıklama |
 |--------|----------------|

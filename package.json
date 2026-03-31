@@ -1,0 +1,16 @@
+{
+  "name": "neuropdf",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NeuroPDF monorepo — root tooling (Husky, lint-staged)",
+  "scripts": {
+    "prepare": "husky",
+    "lint:staged": "lint-staged"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.4.3",
+    "prettier": "^3.5.3",
+    "ruff": "^1.5.4"
+  }
+}

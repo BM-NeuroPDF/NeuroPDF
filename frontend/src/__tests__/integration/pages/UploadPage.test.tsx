@@ -225,22 +225,27 @@ describe('UploadPage Integration', () => {
 
     it('should show error for file too large', async () => {
       const { getMaxUploadBytes } = await import('@/app/config/fileLimits')
-      vi.mocked(getMaxUploadBytes).mockReturnValueOnce(1) // any file > 1 byte is rejected
+      // Avoid consuming the mock on the initial render (maxBytes); keep limit at 1 for the whole test
+      vi.mocked(getMaxUploadBytes).mockReturnValue(1)
 
-      const user = userEvent.setup()
-      renderWithProviders(<UploadPage />)
+      try {
+        const user = userEvent.setup()
+        renderWithProviders(<UploadPage />)
 
-      const selectButton = screen.getByText(/selectFile|Dosya Seç/i)
-      const fileInput = selectButton.closest('label')?.querySelector('input[type="file"]') as HTMLInputElement
-      expect(fileInput).toBeInTheDocument()
+        const selectButton = screen.getByText(/selectFile|Dosya Seç/i)
+        const fileInput = selectButton.closest('label')?.querySelector('input[type="file"]') as HTMLInputElement
+        expect(fileInput).toBeInTheDocument()
 
-      const largeFile = createMockPdfFile('large.pdf', 10 * 1024 * 1024)
-      await user.upload(fileInput, largeFile)
+        const largeFile = createMockPdfFile('large.pdf', 10 * 1024 * 1024)
+        await user.upload(fileInput, largeFile)
 
-      await waitFor(() => {
-        const errorText = screen.getByText(/Dosya boyutu sınırı aşıldı\.|File size limit exceeded/i)
-        expect(errorText).toBeInTheDocument()
-      }, { timeout: 3000 })
+        await waitFor(() => {
+          const errorText = screen.getByText(/Dosya boyutu sınırı aşıldı\.|File size limit exceeded/i)
+          expect(errorText).toBeInTheDocument()
+        }, { timeout: 3000 })
+      } finally {
+        vi.mocked(getMaxUploadBytes).mockReturnValue(50 * 1024 * 1024)
+      }
     })
   })
 

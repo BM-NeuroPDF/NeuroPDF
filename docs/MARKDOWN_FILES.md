@@ -1,6 +1,6 @@
-# Projedeki Markdown (.md) Dosyaları Rehberi
+# Projedeki Markdown (.md) dosyaları rehberi
 
-Bu doküman, NeuroPDF projesindeki tüm Markdown dosyalarının konumunu, amacını ve ne zaman kullanılacağını listeler.
+Bu doküman, NeuroPDF projesindeki Markdown dosyalarının konumunu, amacını ve ne zaman kullanılacağını listeler.
 
 ---
 
@@ -8,7 +8,7 @@ Bu doküman, NeuroPDF projesindeki tüm Markdown dosyalarının konumunu, amacı
 
 | Dosya | Açıklama | Ne zaman kullanılır |
 |-------|----------|---------------------|
-| **README.md** | Projenin ana giriş dokümanı. Kurulum (Frontend, Backend, AI Service), Docker, Test Rehberi ve Özellikler özetlenir. | Yeni geliştiriciler, kurulum, test komutları ve genel bakış için ilk bakılacak dosya. |
+| **README.md** | Ana giriş: kurulum, Docker, test, özellikler, dokümantasyon haritası. | Yeni geliştiriciler ve genel bakış. |
 
 ---
 
@@ -16,7 +16,7 @@ Bu doküman, NeuroPDF projesindeki tüm Markdown dosyalarının konumunu, amacı
 
 | Dosya | Açıklama | Ne zaman kullanılır |
 |-------|----------|---------------------|
-| **README.md** | Yönlendirme: tüm frontend dokümanları `docs/frontend/` ve `docs/testing/frontend/` altında. | Frontend klasörüne girince nereye bakılacağını görmek için. |
+| **README.md** | `docs/frontend/` ve `docs/testing/frontend/` yönlendirmesi. | Frontend kökünden nereye bakılacağını görmek için. |
 
 ---
 
@@ -24,77 +24,70 @@ Bu doküman, NeuroPDF projesindeki tüm Markdown dosyalarının konumunu, amacı
 
 | Dosya | Açıklama | Ne zaman kullanılır |
 |-------|----------|---------------------|
-| **tests/README.md** | Kısa yönlendirme. Asıl rehber: `docs/testing/backend-tests.md`. | Backend test mimarisi, pytest kategorileri ve çalıştırma için. |
-| **app/docs/EULA_TR.md** | Kullanıcı sözleşmesi (Türkçe). Kayıt akışında gösterilir; uygulama tarafından okunur. | **Taşınmamalı.** Yasal metin güncellemesi yapılırken. |
-| **app/docs/EULA_EN.md** | Kullanıcı sözleşmesi (İngilizce). Kayıt akışında gösterilir; uygulama tarafından okunur. | **Taşınmamalı.** Yasal metin güncellemesi yapılırken. |
+| **tests/README.md** | Asıl rehber: `docs/testing/backend-tests.md`. | Pytest yapısı ve çalıştırma. |
+| **app/docs/EULA_TR.md** / **EULA_EN.md** | Kayıt akışında gösterilen yasal metinler. | **Taşınmamalı.** |
 
 ---
 
 ## Dokümantasyon merkezi (`docs/`)
 
-### Genel
+### Kök (`docs/`)
 
-| Dosya | Açıklama | Ne zaman kullanılır |
-|-------|----------|---------------------|
-| **README.md** | Dokümantasyon indeksi: frontend, mimari, test, yasal, raporlar. | Tüm dokümanların nerede olduğunu görmek için. |
-| **reports-and-outputs.md** | Test/coverage çıktılarının ve log dosyalarının konumları. | Coverage, Playwright raporu, test logları nerede diye bakarken. |
-| **TEST_SCRIPTS.md** | Test scriptleri rehberi: Docker ve yerel komutlar, kullanım. | Hangi scripti nasıl çalıştıracağını görmek için. |
-| **docker-auth-and-logging.md** | Docker'da BACKEND_API_URL, frontend logları, giriş hata logları (NextAuth). | Docker'da giriş 401/ECONNREFUSED sorun giderme için. |
-| **TEST_STRATEGY.md** | Test stratejisi; final sayılar (27 E2E, 128 unit, 41 integration); Fedora/Playwright/Vitest/Pytest konfigürasyonu. | Test sayılarını ve ortam ayarlarını görmek için. |
-| **API_REFERENCE.md** | Chat API referansı: POST /files/chat/start, /files/chat/general/start, message endpoint'leri. | Chat endpoint parametreleri ve yanıtları için. |
-| **MARKDOWN_FILES.md** | Bu dosya — projedeki tüm .md dosyalarının listesi ve açıklaması. | Hangi .md’nin ne işe yaradığını bulmak için. |
+| Dosya | Açıklama |
+|-------|----------|
+| **README.md** | İndeks: `architecture/`, `devops/`, `reference/`, `testing/`, `frontend/`, `legal/`, `assets/`. |
+| **MARKDOWN_FILES.md** | Bu dosya — tüm `.md` envanteri. |
 
-### Frontend (tek konum)
+### Mimari — `docs/architecture/`
 
-| Dosya | Açıklama | Ne zaman kullanılır |
-|-------|----------|---------------------|
-| **frontend/README.md** | Frontend kurulumu, çalıştırma, test komutları; test dokümanlarına linkler. | Frontend ile ilgili her şey tek yerden. |
+| Dosya | Açıklama |
+|-------|----------|
+| **ARCHITECTURE.md** | Sistem mimarisi, Mermaid, tool routing, DB/LLM. |
 
-### Mimari
+### DevOps ve operasyon — `docs/devops/`
 
-| Dosya | Açıklama | Ne zaman kullanılır |
-|-------|----------|---------------------|
-| **architecture/ARCHITECTURE.md** | Sistem mimarisi: bileşenler, veri akışı, veritabanı, AI pipeline, güvenlik, deployment. | Mimari karar, onboarding veya deployment planlarken. |
+| Dosya | Açıklama |
+|-------|----------|
+| **CI.md** | GitHub Actions workflow, E2E notları. |
+| **PRE_COMMIT.md** | Husky, lint-staged, Ruff/ESLint/Prettier. |
+| **docker-auth-and-logging.md** | Docker’da auth, loglar, sorun giderme. |
 
-### Yasal
+### Referans — `docs/reference/`
 
-| Dosya | Açıklama | Ne zaman kullanılır |
-|-------|----------|---------------------|
-| **legal/README.md** | EULA dosyalarının konumu (`backend/app/docs/`) ve kullanımı. | EULA’nın nerede ve nasıl kullanıldığını anlamak için. |
+| Dosya | Açıklama |
+|-------|----------|
+| **API_REFERENCE.md** | Chat ve dosya HTTP API’leri. |
+| **reports-and-outputs.md** | Coverage, Playwright raporu, test log dosyalarının konumları. |
 
-### Test dokümantasyonu (`docs/testing/`)
+### Testler — `docs/testing/`
 
-| Dosya | Açıklama | Ne zaman kullanılır |
-|-------|----------|---------------------|
-| **README.md** | Test dokümanları indeksi: raporlar ve frontend/backend rehberleri. | Test ile ilgili hangi dokümana gideceğini seçerken. |
-| **backend-tests.md** | Backend test mimarisi, klasör yapısı, pytest marker’ları, fixtures, çalıştırma. | Backend testi yazarken veya çalıştırırken. |
-| **COMPREHENSIVE_TEST_REPORT.md** | Kapsamlı test raporu: istatistikler, kapsam, kategoriler. | Test durumunun genel özeti için. |
-| **TEST_IMPLEMENTATION_REPORT.md** | Test implementasyon raporu. | Testlerin nasıl uygulandığını incelemek için. |
-| **UNIT_TEST_REPORT.md** | Birim test raporu. | Unit test kapsamı ve sonuçları için. |
-| **SECURITY_IMPROVEMENTS_REPORT.md** | Güvenlik iyileştirmeleri raporu. | Güvenlik testleri ve iyileştirmeler için. |
+| Dosya / klasör | Açıklama |
+|----------------|----------|
+| **README.md** | Test ağacı indeksi. |
+| **TEST_STRATEGY.md** | Sayılar, Vitest/Pytest/Playwright, Fedora. |
+| **TEST_SCRIPTS.md** | `scripts/` test komutları. |
+| **backend-tests.md** | Backend pytest rehberi. |
+| **reports/** | Arşiv raporlar: `COMPREHENSIVE_TEST_REPORT.md`, `TEST_IMPLEMENTATION_REPORT.md`, `UNIT_TEST_REPORT.md`, `SECURITY_IMPROVEMENTS_REPORT.md`. |
+| **frontend/** | Vitest/Playwright notları, `WEBKIT_FIX.md` vb. |
 
-### Frontend test (`docs/testing/frontend/`)
+### Diğer `docs/` alt klasörleri
 
-| Dosya | Açıklama | Ne zaman kullanılır |
-|-------|----------|---------------------|
-| **TEST_README.md** | Frontend test yapısı, klasörler, Vitest/Playwright kullanımı. | Frontend testleri yazıp çalıştırırken. |
-| **TEST_SUMMARY.md** | Frontend test özeti, tamamlanan işlemler, dosya istatistikleri. | Test durumu özeti için. |
-| **ALL_TEST_CODES.md** | Tüm frontend test kodlarının tek dosyada referans listesi. | Test kodlarına hızlı referans için. |
-| **WEBKIT_FIX.md** | WebKit (Safari) E2E test ortamı: libjpeg sembolik link ve alternatif çözüm. | Playwright WebKit testleri çalışmıyorsa. |
+| Konum | Açıklama |
+|-------|----------|
+| **frontend/README.md** | Frontend kurulum ve çalıştırma. |
+| **legal/README.md** | EULA referansları. |
+| **assets/** | Demo GIF vb. (ör. `demo.gif`). |
 
 ---
 
 ## Özet akış
 
 ```
-Projeye ilk giriş        → README.md (kök)
-Kurulum / Docker / Test  → README.md (kök) ilgili bölümler
-Tüm dokümanlar nerede?   → docs/README.md
-Frontend dokümanı        → docs/frontend/README.md
-Hangi .md ne işe yarar?  → docs/MARKDOWN_FILES.md (bu dosya)
-Mimari detay             → docs/architecture/ARCHITECTURE.md
-Test raporları / rehber  → docs/testing/README.md ve altı
-EULA / yasal             → docs/legal/README.md + backend/app/docs/EULA_*.md
-Rapor/log konumları      → docs/reports-and-outputs.md
-Test scriptleri          → docs/TEST_SCRIPTS.md
+İlk giriş / kurulum     → README.md (kök)
+Doküman haritası        → docs/README.md
+Bu envanter             → docs/MARKDOWN_FILES.md
+Mimari                  → docs/architecture/ARCHITECTURE.md
+API & çıktı konumları   → docs/reference/
+CI, hook, Docker log    → docs/devops/
+Test strateji & script  → docs/testing/ (+ testing/reports/)
 ```

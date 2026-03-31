@@ -133,7 +133,10 @@ class TestChatEndpoint:
 
         with patch("app.services.ai_service._PDF_CHAT_SESSIONS", {"valid-session-id": mock_session}), \
              patch("app.services.ai_service._cleanup_sessions"), \
-             patch("app.routers.analysis.chat_over_pdf", return_value="Test AI response"):
+             patch(
+                "app.routers.analysis.chat_over_pdf",
+                return_value=("Test AI response", []),
+            ):
             response = client.post(
                 "/api/v1/ai/chat",
                 json={"session_id": "valid-session-id", "message": "Özetle"},
@@ -144,6 +147,45 @@ class TestChatEndpoint:
         data = response.json()
         assert "answer" in data
         assert data["answer"] == "Test AI response"
+        assert data.get("client_actions") == []
+
+
+class TestRestorePdfChatSession:
+    """POST /api/v1/ai/chat/restore-session"""
+
+    def test_restore_session_requires_api_key(self, client):
+        response = client.post(
+            "/api/v1/ai/chat/restore-session",
+            json={
+                "session_id": "sid-1",
+                "pdf_text": "hello",
+                "filename": "a.pdf",
+                "history": [{"role": "user", "content": "hi"}],
+            },
+        )
+        assert response.status_code == 401
+
+    def test_restore_session_ok(self, client):
+        with patch("app.services.ai_service.restore_pdf_chat_session", return_value="sid-1"):
+            response = client.post(
+                "/api/v1/ai/chat/restore-session",
+                json={
+                    "session_id": "sid-1",
+                    "pdf_text": "doc body",
+                    "filename": "a.pdf",
+                    "history": [
+                        {"role": "user", "content": "Soru?"},
+                        {"role": "assistant", "content": "Cevap."},
+                    ],
+                    "llm_provider": "local",
+                    "mode": "flash",
+                    "pdf_id": "pdf-uuid",
+                    "user_id": "user-1",
+                },
+                headers=HEADERS,
+            )
+        assert response.status_code == 200
+        assert response.json()["session_id"] == "sid-1"
 
 
 class TestTTSEndpoint:

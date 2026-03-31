@@ -192,10 +192,12 @@ def call_gemini_for_task(text_content: str, prompt_instruction: str) -> str:
 # ==========================================
 
 def create_pdf_chat_session(
-    pdf_text: str, 
-    filename: str | None = None, 
-    llm_provider: str = "cloud", 
-    mode: str = "flash"
+    pdf_text: str,
+    filename: str | None = None,
+    llm_provider: str = "cloud",
+    mode: str = "flash",
+    pdf_id: str | None = None,
+    user_id: str | None = None,
 ) -> str:
     """Yeni bir sohbet oturumu başlatır ve ID döner."""
     _cleanup_sessions()
@@ -207,6 +209,47 @@ def create_pdf_chat_session(
         "created_at": time.time(),
         "llm_provider": llm_provider,
         "mode": mode,
+        "pdf_id": pdf_id,
+        "user_id": user_id,
+    }
+    return session_id
+
+
+def restore_pdf_chat_session(
+    session_id: str,
+    pdf_text: str,
+    filename: str | None = None,
+    history: list | None = None,
+    llm_provider: str = "cloud",
+    mode: str = "flash",
+    pdf_id: str | None = None,
+    user_id: str | None = None,
+) -> str:
+    """
+    Süresi dolmuş veya kaybolmuş oturumu bellekte yeniden kurar; TTL created_at ile sıfırlanır.
+    """
+    _cleanup_sessions()
+    clean_history: list[dict] = []
+    if history:
+        for h in history:
+            if not isinstance(h, dict):
+                continue
+            role = h.get("role")
+            if role not in ("user", "assistant"):
+                continue
+            content = h.get("content")
+            if content is None:
+                continue
+            clean_history.append({"role": role, "content": str(content)})
+    _PDF_CHAT_SESSIONS[session_id] = {
+        "text": pdf_text,
+        "filename": filename or "document.pdf",
+        "history": clean_history,
+        "created_at": time.time(),
+        "llm_provider": llm_provider,
+        "mode": mode,
+        "pdf_id": pdf_id,
+        "user_id": user_id,
     }
     return session_id
 

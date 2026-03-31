@@ -16,6 +16,7 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SessionProvider } from "next-auth/react";
 import ProChatPanel from "@/components/ProChatPanel";
 import { PdfProvider } from "@/context/PdfContext";
 import { LanguageProvider } from "@/context/LanguageContext";
@@ -31,7 +32,10 @@ vi.mock("@/assets/icons/NeuroPDF-Chat.svg", () => ({
 }));
 
 const motionCmp = (tag: string) => {
-  const C = ({ children, ...props }: Record<string, unknown>) => {
+  const C = ({
+    children,
+    ...props
+  }: { children?: React.ReactNode } & Record<string, unknown>) => {
     const domProps = { ...props };
     ["whileTap", "initial", "animate", "exit", "transition", "layout"].forEach(
       (p) => delete domProps[p]
@@ -51,11 +55,13 @@ vi.mock("framer-motion", () => ({
 
 function renderWithProviders(ui: React.ReactElement) {
   return render(
-    <LanguageProvider>
-      <PdfProvider>
-        <PopupProvider>{ui}</PopupProvider>
-      </PdfProvider>
-    </LanguageProvider>
+    <SessionProvider session={null} refetchInterval={0} refetchOnWindowFocus={false}>
+      <LanguageProvider>
+        <PdfProvider>
+          <PopupProvider>{ui}</PopupProvider>
+        </PdfProvider>
+      </LanguageProvider>
+    </SessionProvider>
   );
 }
 

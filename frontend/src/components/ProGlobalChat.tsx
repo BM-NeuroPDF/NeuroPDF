@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { PDFDocument } from "pdf-lib";
+import { toast } from "sonner";
 import { sendRequest } from "@/utils/api";
 import { useLanguage } from "@/context/LanguageContext";
 import { usePdf } from "@/context/PdfContext";
@@ -18,6 +20,9 @@ export default function ProGlobalChat() {
 
   const {
     pdfFile,
+    pdfList,
+    savePdf,
+    clearPdf,
     sessionId: pdfSessionId,
     chatMessages: pdfChatMessages,
     setChatMessages: setPdfChatMessages,
@@ -31,8 +36,178 @@ export default function ProGlobalChat() {
     setGeneralChatMessages,
     generalSessionId,
     setGeneralSessionId,
-    savePdf,
+    setActiveSessionDbId,
+    loadChatSessions,
   } = usePdf();
+
+  const handleExtractPagesLocal = useCallback(
+    async (startPage: number | undefined, endPage: number | undefined) => {
+      if (startPage == null || endPage == null) {
+        toast.error("Geçersiz sayfa aralığı.");
+        return;
+      }
+      if (!pdfFile) {
+        toast.error(
+          "Tarayıcıda kesim için açık bir PDF gerekir. Lütfen bir dosya yükleyin."
+        );
+        return;
+      }
+      if (startPage < 1 || endPage < 1 || endPage < startPage) {
+        toast.error("Sayfa numaraları geçersiz.");
+        return;
+      }
+      try {
+        const buffer = await pdfFile.arrayBuffer();
+        const src = await PDFDocument.load(buffer);
+        const pageCount = src.getPageCount();
+        if (startPage > pageCount || endPage > pageCount) {
+          toast.error(`PDF yalnızca ${pageCount} sayfa içeriyor.`);
+          return;
+        }
+        const dest = await PDFDocument.create();
+        const indices: number[] = [];
+        for (let p = startPage - 1; p <= endPage - 1; p++) {
+          indices.push(p);
+        }
+        const copied = await dest.copyPages(src, indices);
+        copied.forEach((page) => dest.addPage(page));
+        const outBytes = await dest.save();
+        const base = pdfFile.name.replace(/\.pdf$/i, "") || "document";
+        const outName = `${base}_extracted.pdf`;
+        const outFile = new File([new Uint8Array(outBytes)], outName, {
+          type: "application/pdf",
+        });
+        await savePdf(outFile);
+        toast.success("Sayfalar başarıyla ayrıldı ve ekrana yüklendi.");
+      } catch (e) {
+        console.error("EXTRACT_PAGES_LOCAL:", e);
+        toast.error("PDF kesilemedi. Lütfen tekrar deneyin.");
+      }
+    },
+    [pdfFile, savePdf]
+  );
+
+  const handleMergePdfsLocal = useCallback(async () => {
+    if (pdfList.length < 2) {
+      toast.error(
+        "Birleştirmek için en az iki PDF gerekir. Lütfen yan panele birden fazla dosya ekleyin."
+      );
+      return;
+    }
+    try {
+      const mergedPdf = await PDFDocument.create();
+      for (const file of pdfList) {
+        const buffer = await file.arrayBuffer();
+        const pdf = await PDFDocument.load(buffer);
+        const indices = pdf.getPageIndices();
+        const copied = await mergedPdf.copyPages(pdf, indices);
+        copied.forEach((page) => mergedPdf.addPage(page));
+      }
+      const outBytes = await mergedPdf.save();
+      const outFile = new File([new Uint8Array(outBytes)], "merged_document.pdf", {
+        type: "application/pdf",
+      });
+      await savePdf(outFile);
+      toast.success("Tüm PDF dosyaları başarıyla birleştirildi");
+    } catch (e) {
+      console.error("MERGE_PDFS_LOCAL:", e);
+      toast.error("PDF birleştirilemedi. Lütfen dosyaları kontrol edip tekrar deneyin.");
+    }
+  }, [pdfList, savePdf]);
+
+  const handleClearAllPdfs = useCallback(() => {
+    clearPdf();
+    toast.info("Ekrandaki tüm dosyalar temizlendi.");
+  }, [clearPdf]);
+
+  const handleSwapPagesLocal = useCallback(
+    async (pageA: number, pageB: number) => {
+      if (!pdfFile) {
+        toast.error(
+          "Tarayıcıda sıralama için açık bir PDF gerekir. Lütfen bir dosya yükleyin."
+        );
+        return;
+      }
+      if (pageA < 1 || pageB < 1 || pageA === pageB) {
+        toast.error("Geçersiz sayfa numaraları.");
+        return;
+      }
+      try {
+        const buffer = await pdfFile.arrayBuffer();
+        const src = await PDFDocument.load(buffer);
+        const pageCount = src.getPageCount();
+        if (pageA > pageCount || pageB > pageCount) {
+          toast.error(`PDF yalnızca ${pageCount} sayfa içeriyor.`);
+          return;
+        }
+        const order = Array.from({ length: pageCount }, (_, i) => i + 1);
+        const ia = pageA - 1;
+        const ib = pageB - 1;
+        const next = [...order];
+        [next[ia], next[ib]] = [next[ib], next[ia]];
+        const dest = await PDFDocument.create();
+        const copied = await dest.copyPages(
+          src,
+          next.map((o) => o - 1)
+        );
+        copied.forEach((page) => dest.addPage(page));
+        const outBytes = await dest.save();
+        const outFile = new File([new Uint8Array(outBytes)], pdfFile.name, {
+          type: "application/pdf",
+        });
+        await savePdf(outFile);
+        toast.success("Sayfalar yer değiştirildi; PDF güncellendi.");
+      } catch (e) {
+        console.error("SWAP_PAGES_LOCAL:", e);
+        toast.error("Sayfa yer değiştirme başarısız.");
+      }
+    },
+    [pdfFile, savePdf]
+  );
+
+  const applyClientActions = useCallback(
+    async (actions: unknown) => {
+      if (!Array.isArray(actions)) return;
+      for (const raw of actions) {
+        if (!raw || typeof raw !== "object") continue;
+        const action = raw as { type?: string; payload?: unknown };
+        if (
+          action.type === "EXTRACT_PAGES_LOCAL" &&
+          action.payload &&
+          typeof action.payload === "object"
+        ) {
+          const pl = action.payload as {
+            start_page?: number;
+            end_page?: number;
+          };
+          await handleExtractPagesLocal(pl.start_page, pl.end_page);
+        }
+        if (action.type === "MERGE_PDFS_LOCAL") {
+          await handleMergePdfsLocal();
+        }
+        if (action.type === "CLEAR_ALL_PDFS") {
+          handleClearAllPdfs();
+        }
+        if (
+          action.type === "SWAP_PAGES_LOCAL" &&
+          action.payload &&
+          typeof action.payload === "object"
+        ) {
+          const pl = action.payload as { page_a?: number; page_b?: number };
+          await handleSwapPagesLocal(
+            Number(pl.page_a),
+            Number(pl.page_b)
+          );
+        }
+      }
+    },
+    [
+      handleExtractPagesLocal,
+      handleMergePdfsLocal,
+      handleClearAllPdfs,
+      handleSwapPagesLocal,
+    ]
+  );
 
   const [userRole, setUserRole] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -95,6 +270,10 @@ export default function ProGlobalChat() {
         if (chatRes?.session_id) {
           setPdfSessionId(chatRes.session_id);
           setIsChatActive(true);
+          if (chatRes?.db_session_id) {
+            setActiveSessionDbId(chatRes.db_session_id);
+          }
+          void loadChatSessions();
           setPdfChatMessages([
             {
               role: "assistant",
@@ -111,7 +290,16 @@ export default function ProGlobalChat() {
     return () => {
       cancelled = true;
     };
-  }, [pdfFile, isProUser, pdfSessionId, setPdfSessionId, setIsChatActive, setPdfChatMessages]);
+  }, [
+    pdfFile,
+    isProUser,
+    pdfSessionId,
+    setPdfSessionId,
+    setIsChatActive,
+    setPdfChatMessages,
+    setActiveSessionDbId,
+    loadChatSessions,
+  ]);
 
   useEffect(() => {
     const fetchUserRole = async () => {
@@ -337,10 +525,27 @@ export default function ProGlobalChat() {
     }
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || !activeSessionId) return;
+  const promptSuggestions = useMemo(() => {
+    const n = pdfList.length;
+    if (n === 0) return [];
+    if (n === 1) {
+      return [
+        { text: "Bu belgenin özetini çıkar", icon: "📝" },
+        { text: "Bu belgeyi İngilizceye çevir", icon: "🌐" },
+        { text: "Bu belgenin sayfalarını ayır", icon: "✂️" },
+        { text: "Ekranı temizle", icon: "🧹" },
+      ];
+    }
+    return [
+      { text: "Bu dosyaları birleştir", icon: "✨" },
+      { text: "Ekranı temizle", icon: "🧹" },
+    ];
+  }, [pdfList.length]);
+
+  const handleSend = async (messageOverride?: string) => {
+    const userMsg = (messageOverride ?? input).trim();
+    if (!userMsg || !activeSessionId) return;
     if (isRecording && recognitionRef.current) recognitionRef.current.stop();
-    const userMsg = input.trim();
     setInput("");
 
     if (isPdfChat) {
@@ -369,11 +574,14 @@ export default function ProGlobalChat() {
           ...prev,
           { role: "assistant", content: res.answer },
         ]);
+        await applyClientActions(res.client_actions);
+        void loadChatSessions();
       } else {
         setGeneralChatMessages((prev) => [
           ...prev,
           { role: "assistant", content: res.answer },
         ]);
+        await applyClientActions(res.client_actions);
       }
       
       // Bildirim sesi çal (Peş peşe 2 defa)
@@ -447,6 +655,7 @@ export default function ProGlobalChat() {
                 ...prev,
                 { role: "assistant", content: retryRes.answer },
               ]);
+              await applyClientActions(retryRes.client_actions);
 
               // Bildirim sesi çal (Retry sonrası da 2 defa)
               const playNotify = () => {
@@ -609,6 +818,10 @@ export default function ProGlobalChat() {
           initializing={initializing}
           input={input}
           setInput={setInput}
+          promptSuggestions={promptSuggestions}
+          promptSuggestionsDisabled={
+            !activeSessionId || loading || initializing
+          }
           headerTitle="Neuro AI"
           headerSubtitle={
             isPdfChat 

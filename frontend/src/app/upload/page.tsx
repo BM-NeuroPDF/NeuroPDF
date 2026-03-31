@@ -16,15 +16,20 @@ import { usePopup } from "@/hooks/usePopup";
 
 const PdfViewer = dynamic(() => import("@/components/PdfViewer"), { ssr: false });
 
-export default function UploadPage() {
+function isPdfFile(f: File): boolean {
+  return (
+    f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf")
+  );
+}
 
+export default function UploadPage() {
   const { data: session, status } = useSession();
-  const { pdfFile, savePdf } = usePdf();
+  const { addPdfs } = usePdf();
   const { t } = useLanguage();
 
   const { popup, showError, showSuccess, showInfo, close } = usePopup();
 
-  const [file, setFile] = useState<File | null>(null);
+  const [stagingFiles, setStagingFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
 
   const isGuest = status !== "authenticated";
@@ -34,10 +39,12 @@ export default function UploadPage() {
     useGuestLimit();
 
   const onDrop = useCallback(
-    (acceptedFiles: File[], fileRejections: any[]) => {
-
+    (acceptedFiles: File[], fileRejections: unknown[]) => {
       if (fileRejections.length > 0) {
-        const err = fileRejections[0].errors[0];
+        const rej = fileRejections[0] as {
+          errors: { code: string; message: string }[];
+        };
+        const err = rej.errors[0];
 
         if (err.code === "file-invalid-type") {
           showError(t("invalidFileType"));
@@ -53,29 +60,28 @@ export default function UploadPage() {
         return;
       }
 
-      if (acceptedFiles?.length) {
+      if (!acceptedFiles?.length) return;
 
-        const f = acceptedFiles[0];
-
-        if (f.type !== "application/pdf") {
-          showError(t("invalidFileType"));
-          return;
-        }
-
-        if (f.size > maxBytes) {
-          showError(t("fileSizeExceeded"));
-          return;
-        }
-
-        setFile(f);
+      const pdfs = acceptedFiles.filter(isPdfFile);
+      if (pdfs.length === 0) {
+        showError(t("invalidFileType"));
+        return;
       }
+
+      const oversized = pdfs.find((f) => f.size > maxBytes);
+      if (oversized) {
+        showError(t("fileSizeExceeded"));
+        return;
+      }
+
+      setStagingFiles(pdfs);
     },
-    [maxBytes, t]
+    [maxBytes, t, showError]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useUnifiedPdfDrop({
     options: {
-      multiple: false,
+      multiple: true,
       accept: { "application/pdf": [".pdf"] },
       maxSize: maxBytes,
     },
@@ -83,27 +89,28 @@ export default function UploadPage() {
   });
 
   const handleSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const list = Array.from(e.target.files || []);
+    e.target.value = "";
 
-    const f = e.target.files?.[0];
+    if (!list.length) return;
 
-    if (!f) return;
-
-    if (f.type !== "application/pdf" && !f.name.toLowerCase().endsWith(".pdf")) {
+    const pdfs = list.filter(isPdfFile);
+    if (pdfs.length === 0) {
       showError(t("invalidFileType"));
       return;
     }
 
-    if (f.size > maxBytes) {
+    const oversized = pdfs.find((f) => f.size > maxBytes);
+    if (oversized) {
       showError(t("fileSizeExceeded"));
       return;
     }
 
-    setFile(f);
+    setStagingFiles(pdfs);
   };
 
   const handleAddToPanel = () => {
-
-    if (!file) {
+    if (!stagingFiles.length) {
       showInfo(t("selectFile"));
       return;
     }
@@ -111,32 +118,26 @@ export default function UploadPage() {
     setUploading(true);
 
     try {
-
-      savePdf(file);
-
+      addPdfs(stagingFiles);
+      setStagingFiles([]);
       showSuccess(t("uploadSuccess") || "PDF added to panel");
-
-    } catch (err) {
-
+    } catch {
       showError(t("uploadError") || "Error adding file");
-
     } finally {
       setUploading(false);
     }
   };
 
+  const previewFile = stagingFiles[0] ?? null;
+
   return (
     <main className="min-h-screen p-6 max-w-4xl mx-auto font-bold text-[var(--foreground)]">
-
       <h1 className="text-3xl mb-6 tracking-tight">{t("uploadPageTitle")}</h1>
 
       {usageInfo && !showLimitModal && !session && (
-        <div className="info-box mb-4">
-          {usageInfo.message}
-        </div>
+        <div className="info-box mb-4">{usageInfo.message}</div>
       )}
 
-      {/* Dropzone */}
       <div
         {...getRootProps()}
         className={`container-card border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-300
@@ -146,69 +147,76 @@ export default function UploadPage() {
             : "border-[var(--navbar-border)] hover:border-[var(--button-bg)]"
         }`}
       >
-        <input {...getInputProps()} accept="application/pdf" />
+        <input {...getInputProps()} accept="application/pdf,.pdf" multiple />
 
         <div className="flex flex-col items-center gap-3">
-
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-               strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 opacity-50">
-
-            <path strokeLinecap="round" strokeLinejoin="round"
-              d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={1.5}
+            stroke="currentColor"
+            className="w-12 h-12 opacity-50"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
+            />
           </svg>
 
-          {isDragActive ? <p>{t("dropActive")}</p> : <p>{t("dropPassive")}</p>}
-
+          {isDragActive ? (
+            <p>{t("dropActive")}</p>
+          ) : (
+            <p>{t("dropPassive")}</p>
+          )}
         </div>
 
-        {file && !isDragActive && (
+        {stagingFiles.length > 0 && !isDragActive && (
           <p className="mt-4 text-sm opacity-60 font-normal">
-            {t("currentFile")} <b>{file.name}</b>
+            {t("pdfFilesSelectedCount")}{" "}
+            <b>{stagingFiles.length}</b>
+            {previewFile && (
+              <>
+                {" "}
+                · {t("currentFile")} <b>{previewFile.name}</b>
+                {stagingFiles.length > 1 ? " …" : ""}
+              </>
+            )}
           </p>
         )}
-
       </div>
 
-      {/* File Select */}
       <div className="mt-6 flex justify-start">
-
         <label className="btn-primary cursor-pointer shadow-md hover:scale-105 flex items-center gap-2">
-
           {t("selectFile")}
-
           <input
             type="file"
             className="hidden"
-            accept=".pdf"
+            accept=".pdf,application/pdf"
+            multiple
             onChange={handleSelect}
           />
-
         </label>
-
       </div>
 
-      {/* Preview */}
-      {file && (
-
+      {previewFile && (
         <div className="mt-6 space-y-6">
-
           <div className="rounded-xl overflow-hidden border border-[var(--container-border)] shadow-lg">
-
-            <PdfViewer file={file} height={550} />
-
+            <PdfViewer file={previewFile} height={550} />
           </div>
 
           <button
+            type="button"
             onClick={handleAddToPanel}
             disabled={uploading}
             className="btn-primary w-full sm:w-auto px-8 py-3 shadow-lg hover:scale-105"
           >
-            {uploading ? t("uploading") || "Uploading..." : t("uploadButton")}
+            {uploading
+              ? t("uploading") || "Uploading..."
+              : t("uploadButton")}
           </button>
-
         </div>
-
       )}
 
       <UsageLimitModal
@@ -219,15 +227,12 @@ export default function UploadPage() {
         maxUsage={3}
       />
 
-      {/* GLOBAL POPUP */}
-
       <Popup
         type={popup.type}
         message={popup.message}
         open={popup.open}
         onClose={close}
       />
-
     </main>
   );
 }

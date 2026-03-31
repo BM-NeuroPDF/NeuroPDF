@@ -47,7 +47,7 @@ class TestLLMMockingNoCost:
     @patch("app.services.llm_manager.ai_service.gemini_generate")
     def test_chat_over_pdf_cloud_mocked(self, mock_gemini):
         mock_gemini.return_value = "PDF'e göre cevap."
-        out = chat_over_pdf(
+        answer, actions = chat_over_pdf(
             session_text="PDF içeriği",
             filename="doc.pdf",
             history_text="",
@@ -55,7 +55,8 @@ class TestLLMMockingNoCost:
             llm_provider="cloud",
             mode="pro",
         )
-        assert out == "PDF'e göre cevap."
+        assert answer == "PDF'e göre cevap."
+        assert actions == []
         call = mock_gemini.call_args
         text = call.kwargs.get("text_content", "")
         assert "PDF içeriği" in text
@@ -65,12 +66,13 @@ class TestLLMMockingNoCost:
     @patch("app.services.llm_manager.analyze_text_with_local_llm")
     def test_general_chat_local_mocked(self, mock_local):
         mock_local.return_value = {"answer": "Genel cevap."}
-        out = general_chat(
+        answer, actions = general_chat(
             history_text="",
             user_message="Merhaba",
             llm_provider="local",
         )
-        assert out == "Genel cevap."
+        assert answer == "Genel cevap."
+        assert actions == []
         assert mock_local.call_args.kwargs["task"] == "chat"
 
 

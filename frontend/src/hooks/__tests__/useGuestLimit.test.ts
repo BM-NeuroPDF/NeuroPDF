@@ -133,6 +133,6 @@ describe('useGuestLimit', () => {
     expect(window.location.href).toBe('/login')
 
     // Restore
-    window.location = originalLocation
+    ;(window as unknown as { location: Location }).location = originalLocation
   })
 })

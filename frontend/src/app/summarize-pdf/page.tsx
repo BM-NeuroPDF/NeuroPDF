@@ -31,7 +31,17 @@ const formatTime = (seconds: number) => {
 export default function SummarizePdfPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const { pdfFile, savePdf, clearPdf, setSessionId, setIsChatActive, setChatMessages, setProChatOpen } = usePdf();
+  const {
+    pdfFile,
+    savePdf,
+    clearPdf,
+    setSessionId,
+    setIsChatActive,
+    setChatMessages,
+    setProChatOpen,
+    setActiveSessionDbId,
+    loadChatSessions,
+  } = usePdf();
   
   const { t, language } = useLanguage();
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -221,6 +231,10 @@ export default function SummarizePdfPage() {
               if (chatRes?.session_id) {
                 setSessionId(chatRes.session_id);
                 setIsChatActive(true);
+                if (chatRes?.db_session_id) {
+                  setActiveSessionDbId(chatRes.db_session_id);
+                }
+                void loadChatSessions();
                 setChatMessages([{ 
                   role: "assistant", 
                   content: `👋 Merhaba! **"${file.name}"** dosyasını analiz ettim. Bana bu belgeyle ilgili her şeyi sorabilirsin.` 
@@ -322,6 +336,7 @@ export default function SummarizePdfPage() {
     setSummary("");
     resetAudio();
     clearError();
+    setProChatOpen(false);
   };
 
   // ✅ Hata Mesajı Renderlayıcı

@@ -89,12 +89,13 @@ export default defineConfig({
     // },
   ],
 
-  /* Run your local dev server before starting the tests */
-  /* Docker container is already running, so we don't need webServer */
-  // webServer: {
-  //   command: 'npm run dev',
-  //   url: 'http://localhost:3000',
-  //   reuseExistingServer: !process.env.CI,
-  //   timeout: 120 * 1000,
-  // },
+  /* GitHub Actions: production server after build. Local: start dev manually or uncomment dev webServer. */
+  webServer: process.env.CI
+    ? {
+        command: 'npm run start',
+        url: 'http://localhost:3000',
+        reuseExistingServer: false,
+        timeout: 120_000,
+      }
+    : undefined,
 });

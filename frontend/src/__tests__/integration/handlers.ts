@@ -15,7 +15,8 @@ const mockSummaryResponse = {
 }
 
 const mockChatSessionResponse = {
-  session_id: 'mock-session-123'
+  session_id: 'mock-session-123',
+  db_session_id: 'mock-db-session-1',
 }
 
 const mockChatMessageResponse = {
@@ -79,6 +80,65 @@ export const handlers = [
   http.post(`${BASE_URL}/files/chat/message`, async ({ request }) => {
     await delay(1000)
     return HttpResponse.json(mockChatMessageResponse, { status: 200 })
+  }),
+
+  http.get(`${BASE_URL}/files/chat/sessions`, async () => {
+    await delay(100)
+    return HttpResponse.json(
+      {
+        sessions: [
+          {
+            id: 'mock-db-session-1',
+            session_id: 'mock-session-123',
+            pdf_name: 'test.pdf',
+            title: 'test.pdf',
+            pdf_id: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+      },
+      { status: 200 }
+    )
+  }),
+
+  http.get(`${BASE_URL}/files/chat/sessions/:id/messages`, async () => {
+    await delay(100)
+    return HttpResponse.json(
+      {
+        messages: [
+          { role: 'user', content: 'Hi', created_at: new Date().toISOString() },
+          {
+            role: 'assistant',
+            content: 'Hello',
+            created_at: new Date().toISOString(),
+          },
+        ],
+      },
+      { status: 200 }
+    )
+  }),
+
+  http.post(`${BASE_URL}/files/chat/sessions/:id/resume`, async () => {
+    await delay(200)
+    return HttpResponse.json(
+      {
+        session_id: 'mock-session-123',
+        pdf_id: null,
+        db_session_id: 'mock-db-session-1',
+        filename: 'test.pdf',
+      },
+      { status: 200 }
+    )
+  }),
+
+  http.get(`${BASE_URL}/files/stored/:pdfId`, async () => {
+    await delay(100)
+    const blob = new Blob(['%PDF-1.4'], { type: 'application/pdf' })
+    return new HttpResponse(blob, {
+      status: 200,
+      headers: { 'Content-Type': 'application/pdf' },
+    })
   }),
 
   http.post(`${BASE_URL}/files/chat/general/start`, async ({ request }) => {

@@ -114,3 +114,43 @@ export const sendRequest = async (
     throw error;
   }
 };
+
+/** Kayıtlı PDF sohbet oturumu (backend `pdf_chat_sessions` satırı) */
+export type ChatSessionListItem = {
+  id: string;
+  session_id: string;
+  pdf_name: string;
+  title?: string;
+  pdf_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export async function fetchChatSessions(): Promise<{
+  sessions: ChatSessionListItem[];
+}> {
+  return sendRequest("/files/chat/sessions", "GET");
+}
+
+export async function fetchSessionMessages(sessionDbId: string): Promise<{
+  messages: Array<{
+    role: string;
+    content: string;
+    created_at?: string | null;
+  }>;
+}> {
+  return sendRequest(`/files/chat/sessions/${sessionDbId}/messages`, "GET");
+}
+
+export async function resumeChatSession(sessionDbId: string): Promise<{
+  session_id: string;
+  pdf_id: string | null;
+  db_session_id: string;
+  filename?: string;
+}> {
+  return sendRequest(`/files/chat/sessions/${sessionDbId}/resume`, "POST");
+}
+
+export async function fetchStoredPdfBlob(pdfId: string): Promise<Blob> {
+  return sendRequest(`/files/stored/${pdfId}`, "GET") as Promise<Blob>;
+}

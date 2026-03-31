@@ -23,7 +23,7 @@ export function useUnifiedPdfDrop({
   options: DropzoneOptions;
   onFiles: (files: File[], rejections: any[]) => void;
 }) {
-  const { pdfFile } = usePdf();
+  const { pdfFile, pdfList } = usePdf();
 
   // Wrap dropzone onDrop to delegate to consumer-provided handler
   const onDrop = useCallback(
@@ -65,9 +65,19 @@ export function useUnifiedPdfDrop({
               e.preventDefault();
               e.stopPropagation();
 
-              if (pdfFile) {
-                // Forward as a normal native-like drop
-                onFiles([pdfFile], []);
+              let toForward: File | null = pdfFile;
+              try {
+                const meta = JSON.parse(raw) as { name?: string };
+                if (meta?.name) {
+                  const fromList = pdfList.find((x) => x.name === meta.name);
+                  if (fromList) toForward = fromList;
+                }
+              } catch {
+                /* keep pdfFile */
+              }
+
+              if (toForward) {
+                onFiles([toForward], []);
                 return;
               }
             }
@@ -78,7 +88,7 @@ export function useUnifiedPdfDrop({
         },
       } as typeof base;
     },
-    [_getRootProps, onFiles, pdfFile]
+    [_getRootProps, onFiles, pdfFile, pdfList]
   );
 
   return { getRootProps, getInputProps, isDragActive };

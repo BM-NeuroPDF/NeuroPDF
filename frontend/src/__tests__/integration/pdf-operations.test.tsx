@@ -237,15 +237,12 @@ describe('PDF Operations Integration', () => {
       })
 
       const uploadButton = screen.getByRole('button', { name: /Yükle|Upload/i })
-      
-      // Butona tıkla
+
+      // Butona tıkla — addPdfs + staging temizlenince önizleme (ve buton) kalkar
       await user.click(uploadButton)
 
-      // Upload sırasında buton disabled olmalı (veya "Uploading..." metni görünmeli)
       await waitFor(() => {
-        const uploadingButton = screen.queryByText(/Uploading|Yükleniyor/i)
-        // Upload çok hızlı olabilir, bu yüzden sadece kontrol ediyoruz
-        expect(uploadButton).toBeInTheDocument()
+        expect(screen.getByText(/Yüklendi|uploadSuccess/i)).toBeInTheDocument()
       })
     })
   })

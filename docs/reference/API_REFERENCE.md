@@ -115,5 +115,5 @@ Sends a message in an **existing general chat session**. **Pro users only.**
 - **PDF chat (dynamic):** When `pdfFile` is set and there is no PDF session, `POST /files/chat/start` with the file → then `POST /files/chat/message` for each user message.
 - **PDF chat (from summary):** `POST /files/chat/start-from-text` (not detailed here) is used when starting from pre-extracted text (e.g. after summarization); messages again via `POST /files/chat/message`.
 
-**Source:** [backend/app/routers/files.py](../backend/app/routers/files.py).  
+**Source:** [backend/app/routers/files.py](../../backend/app/routers/files.py).  
 **Live API:** Run the backend and open `http://localhost:8000/docs` (Swagger UI).

@@ -102,27 +102,27 @@ class TestChatResponseFormat:
     @patch("app.services.llm_manager.ai_service.gemini_generate")
     def test_chat_response_is_string(self, mock_gemini):
         mock_gemini.return_value = "Bu PDF'te X anlatılıyor."
-        result = chat_over_pdf(
+        answer, _actions = chat_over_pdf(
             session_text="X konusu.",
             filename="f.pdf",
             history_text="",
             user_message="Ne anlatıyor?",
             llm_provider="cloud",
         )
-        assert chat_like_response(result)
-        assert isinstance(result, str)
+        assert chat_like_response(answer)
+        assert isinstance(answer, str)
 
     @patch("app.services.llm_manager.ai_service.gemini_generate")
     def test_chat_response_markdown_allowed(self, mock_gemini):
         mock_gemini.return_value = "**Cevap:** Burada bilgi var.\n- Madde 1"
-        result = chat_over_pdf(
+        answer, _ = chat_over_pdf(
             session_text="İçerik",
             filename="f.pdf",
             history_text="",
             user_message="Özetle",
             llm_provider="cloud",
         )
-        assert is_valid_markdown_fragment(result)
+        assert is_valid_markdown_fragment(answer)
 
 
 class TestStructuredJsonResponse:
