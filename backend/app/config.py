@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_GUEST_MB: int = int(os.getenv("MAX_FILE_SIZE_GUEST_MB", "5"))
     MAX_FILE_SIZE_USER_MB: int = int(os.getenv("MAX_FILE_SIZE_USER_MB", "7"))
 
+    # --- Database Configuration ---
+    DB_USER: Optional[str] = os.getenv("DB_USER")
+    DB_PASSWORD: Optional[str] = os.getenv("DB_PASSWORD")
+    DB_HOST: Optional[str] = os.getenv("DB_HOST")
+    DB_PORT: str = os.getenv("DB_PORT", "5432")
+    DB_NAME: str = os.getenv("DB_NAME", "postgres")
+    DB_SSLMODE: str = os.getenv("DB_SSLMODE", "require")
+    DATABASE_URL: Optional[str] = os.getenv("DATABASE_URL")
+
     # --- Rate Limiting ---
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_PER_MINUTE: int = 60

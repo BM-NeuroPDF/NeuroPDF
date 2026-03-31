@@ -99,7 +99,7 @@ export default function ProfilePage() {
         setStats(statsData);
         try {
           const llmData = await sendRequest("/files/user/llm-choice");
-          if (llmData?.provider) setLlmChoice(llmData.provider as "local" | "cloud");
+          if (llmData?.provider) setLlmChoice(llmData.provider.toLowerCase() as "local" | "cloud");
         } catch {
           /* default kalır */
         }
@@ -498,15 +498,10 @@ export default function ProfilePage() {
                 {t('aiPreference') || "AI Model Tercihi"}
             </h3>
             {/* Kapsayıcıya gap-2 eklendi ve padding biraz artırıldı */}
-            <div className="relative flex justify-center items-center gap-4 p-1.5 bg-gray-100 dark:bg-black/20 border border-gray-200 dark:border-white/5 rounded-xl mb-6 w-full">
-                
+            <div className="llm-selection-container">
                 <button 
                     onClick={() => handleLlmSelection('local')} 
-                    className={`relative z-10 flex-1 max-w-[180px] py-2.5 px-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all duration-200 
-                    ${llmChoice === 'local' 
-                        ? 'bg-[#FFC107] text-black shadow-md' 
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-black/5 dark:hover:bg-white/5'
-                    }`}
+                    className={`llm-selection-button ${llmChoice === 'local' ? 'active' : ''}`}
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 shrink-0"><path fillRule="evenodd" d="M3 6a3 3 0 013-3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6zm14.25 6a.75.75 0 01-.75.75h-2.25a.75.75 0 01-.75-.75v-2.25a.75.75 0 01.75-.75h2.25a.75.75 0 01.75.75v2.25zM9 7.5A.75.75 0 008.25 8.25v2.25a.75.75 0 00.75.75h2.25a.75.75 0 00.75-.75v-2.25a.75.75 0 00-.75-.75H9z" clipRule="evenodd" /></svg>
                     <span className="truncate">Local LLM</span>
@@ -514,11 +509,7 @@ export default function ProfilePage() {
 
                 <button 
                     onClick={() => handleLlmSelection('cloud')} 
-                    className={`relative z-10 flex-1 max-w-[180px] py-2.5 px-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all duration-200 
-                    ${llmChoice === 'cloud' 
-                        ? 'bg-[#FFC107] text-black shadow-md' 
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-black/5 dark:hover:bg-white/5'
-                    }`}
+                    className={`llm-selection-button ${llmChoice === 'cloud' ? 'active' : ''}`}
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 shrink-0"><path d="M4.5 9.75a6 6 0 0111.573-2.226 3.75 3.75 0 014.133 4.303A4.5 4.5 0 0118 20.25H6.75a5.25 5.25 0 01-2.25-10.5z" /></svg>
                     <span className="truncate">Cloud LLM</span>

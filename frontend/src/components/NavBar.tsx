@@ -66,7 +66,7 @@ export default function NavBar() {
 
   return (
     <header
-      className="sticky top-0 z-50 backdrop-blur-md transition-colors duration-300 border-b shadow-sm"
+      className="sticky top-0 z-[1000] backdrop-blur-md transition-colors duration-300 border-b shadow-sm"
       style={{
         borderColor: "var(--navbar-border)",
         backgroundColor: "rgba(var(--background-rgb), 0.8)",

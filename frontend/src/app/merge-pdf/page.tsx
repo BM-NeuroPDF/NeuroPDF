@@ -277,8 +277,15 @@ export default function MergePdfPage() {
         <>
           {/* Dropzone Alanı */}
           <div
-            {...getRootProps()}
-            onDrop={handleDropFromPanel}
+            {...getRootProps({
+                onDrop: (e) => {
+                    const isPanel = e.dataTransfer.getData("application/x-neuro-pdf");
+                    if (isPanel) {
+                        handleDropFromPanel(e);
+                    }
+                    // else: react-dropzone handles files
+                }
+            })}
             className={`container-card border-2 border-dashed p-10 text-center cursor-pointer transition-all duration-300
               ${isDragActive 
                 ? "border-[var(--button-bg)] opacity-80 bg-[var(--background)]" 

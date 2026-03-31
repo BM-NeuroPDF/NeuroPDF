@@ -200,12 +200,15 @@ export const translations = {
 
     // --- PDF CHAT ---
     chatWelcome: "👋 Merhaba! Dosyayı analiz ettim. Bana her şeyi sorabilirsin.",
+    chatWelcomeGlobal: "Merhaba ben Neuro AI. Sana yardımcı olmak için burdayım.",
     chatInitError: "🚫 Sohbet başlatılamadı.",
     chatConnError: "⚠️ Bağlantı hatası oluştu.",
     analyzing: "Belge analiz ediliyor...",
     aiTyping: "Neuro yanıt yazıyor...",
     chatPlaceholder: "PDF hakkında bir soru sorun...",
     chatDisclaimer: "NeuroPDF yapay zekası bazen hata yapabilir. Lütfen bilgileri kontrol edin.",
+    errorOnlyPdf: "Sadece PDF dosyaları yüklenebilir.",
+    errorFileTooLarge: "Dosya çok büyük (Maks {size}MB).",
 
 
     // --- PROFILE & ACCOUNT ---
@@ -467,12 +470,15 @@ export const translations = {
     
     // --- PDF VIEWER & PANEL ---
     chatWelcome: "👋 Hello! I have analyzed the document. You can ask me anything.",
+    chatWelcomeGlobal: "Hello, I am Neuro AI. I am here to help you.",
     chatInitError: "🚫 Chat could not be started.",
     chatConnError: "⚠️ A connection error occurred.",
     analyzing: "Analyzing document...",
     aiTyping: "Neuro is typing...",
     chatPlaceholder: "Ask a question about the PDF...",
-    chatDisclaimer: "NeuroPDF AI can make mistakes. Please verify important information.",    
+    chatDisclaimer: "NeuroPDF AI can make mistakes. Please verify important information.",
+    errorOnlyPdf: "Only PDF files are allowed.",
+    errorFileTooLarge: "File too large (Max {size}MB).",    
 
     // --- PROFILE & ACCOUNT ---
     profileTitle: "My Profile",

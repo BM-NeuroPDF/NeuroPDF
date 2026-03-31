@@ -4,7 +4,7 @@ frontend/.env.local
 aiService/.env
 *.env
 client_secret_*.json
-*.json
+#*.json
 
 
 # === Python Virtual Environments ===

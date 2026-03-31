@@ -42,7 +42,7 @@ export function PopupProvider({ children }: { children: React.ReactNode }) {
     <PopupContext.Provider value={{ showSuccess, showError, showInfo }}>
       {children}
 
-      <div className="fixed top-6 right-6 flex flex-col gap-3 z-50">
+      <div className="fixed top-6 right-6 flex flex-col gap-3 z-[10000]">
         {popups.map((popup) => (
           <Popup
             key={popup.id}

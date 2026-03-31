@@ -1,11 +1,13 @@
-"use client";
-
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import NeuroLogoIcon from "@/assets/icons/NeuroPDF-Chat.svg";
+import { MAX_USER_MB, mbToBytes } from "@/app/config/fileLimits";
+import { usePopup } from "@/context/PopupContext";
+import { useLanguage } from "@/context/LanguageContext";
+import { usePdf } from "@/context/PdfContext";
 
 export type ProChatMessage = {
   role: "user" | "assistant";
@@ -17,6 +19,7 @@ export type ProChatPanelProps = {
   onClose: () => void;
   messages: ProChatMessage[];
   onSend: () => void;
+  onFileUpload: (file: File) => void;
   loading: boolean;
   initializing: boolean;
   input: string;
@@ -29,6 +32,8 @@ export type ProChatPanelProps = {
   disclaimer?: string;
   initializingLabel?: string;
   typingLabel?: string;
+  isRecording?: boolean;
+  onVoiceToggle?: () => void;
 };
 
 function getInitials(name: string) {
@@ -46,6 +51,7 @@ export default function ProChatPanel({
   onClose,
   messages,
   onSend,
+  onFileUpload,
   loading,
   initializing,
   input,
@@ -58,12 +64,67 @@ export default function ProChatPanel({
   disclaimer = "NeuroPDF yapay zekası bazen hata yapabilir. Lütfen bilgileri kontrol edin.",
   initializingLabel = "Başlatılıyor...",
   typingLabel = "Neuro yanıt yazıyor...",
+  isRecording = false,
+  onVoiceToggle,
 }: ProChatPanelProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { showError } = usePopup();
+  const { t } = useLanguage();
+  const { pdfFile } = usePdf();
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  const validateAndUpload = (file: File) => {
+    if (file.type !== "application/pdf") {
+      showError(t("errorOnlyPdf") || "Sadece PDF dosyaları yüklenebilir.");
+      return;
+    }
+    if (file.size > mbToBytes(MAX_USER_MB)) {
+      showError(
+        (t("errorFileTooLarge") || "Dosya çok büyük (Maks {size}MB).").replace(
+          "{size}",
+          MAX_USER_MB.toString()
+        )
+      );
+      return;
+    }
+    onFileUpload(file);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) validateAndUpload(file);
+    if (e.target) e.target.value = "";
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    // 1. Sağ Panelden (Aktif PDF) drop kontrolü
+    const isPanel = e.dataTransfer.getData("application/x-neuro-pdf");
+    if (isPanel && pdfFile) {
+        validateAndUpload(pdfFile);
+        return;
+    }
+
+    // 2. Masaüstünden dosya drop kontrolü
+    const file = e.dataTransfer.files?.[0];
+    if (file) validateAndUpload(file);
+  };
 
   return (
     <AnimatePresence>
@@ -83,13 +144,51 @@ export default function ProChatPanel({
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: "100%", opacity: 0.5 }}
             transition={{ type: "spring", stiffness: 260, damping: 25 }}
-            className="fixed top-[64px] right-2 bottom-2 w-full sm:w-[480px] z-[120] flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.1)] overflow-hidden rounded-l-[2rem] rounded-r-lg"
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`fixed top-[64px] right-2 bottom-2 w-full sm:w-[480px] z-[120] flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.11)] overflow-hidden rounded-l-[2rem] rounded-r-lg transition-all ${isDragging ? "ring-2 ring-indigo-500 ring-inset" : ""
+              }`}
             style={{
               backgroundColor: "var(--background)",
               border: "1px solid var(--container-border)",
             }}
           >
             <div className="chat-border-glow" />
+
+            {/* Drag Overlay */}
+            <AnimatePresence>
+              {isDragging && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 bg-indigo-600/10 backdrop-blur-[2px] z-50 flex items-center justify-center pointer-events-none"
+                >
+                  <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-2xl border-2 border-indigo-500 flex flex-col items-center gap-3">
+                    <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center animate-bounce">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2}
+                        stroke="currentColor"
+                        className="w-8 h-8"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M12 4.5v15m0 0l6.75-6.75M12 19.5l-6.75-6.75"
+                        />
+                      </svg>
+                    </div>
+                    <p className="font-bold text-indigo-600 dark:text-indigo-400">
+                      PDF'i Buraya Bırakın
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Header */}
             <div
@@ -184,16 +283,14 @@ export default function ProChatPanel({
                       key={idx}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className={`flex ${
-                        msg.role === "user" ? "justify-end" : "justify-start"
-                      }`}
+                      className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"
+                        }`}
                     >
                       <div
-                        className={`flex max-w-[90%] gap-3 ${
-                          msg.role === "user"
+                        className={`flex max-w-[90%] gap-3 ${msg.role === "user"
                             ? "flex-row-reverse"
                             : "flex-row"
-                        }`}
+                          }`}
                       >
                         <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-white border border-gray-100 shadow-sm overflow-hidden text-[10px] font-bold text-black">
                           {msg.role === "user" ? (
@@ -219,11 +316,10 @@ export default function ProChatPanel({
                         </div>
 
                         <div
-                          className={`chat-bubble ${
-                            msg.role === "user"
+                          className={`chat-bubble ${msg.role === "user"
                               ? "chat-bubble-user"
                               : "chat-bubble-ai"
-                          }`}
+                            }`}
                         >
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {msg.content}
@@ -234,7 +330,15 @@ export default function ProChatPanel({
                   ))}
                 </AnimatePresence>
                 {loading && (
-                  <div className="text-xs opacity-50 animate-pulse font-bold">
+                  <div className="flex items-center gap-2 text-xs opacity-50 animate-pulse font-bold">
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center bg-white border border-gray-100 shadow-sm overflow-hidden">
+                      <Image
+                        src={NeuroLogoIcon}
+                        alt="AI"
+                        width={12}
+                        height={12}
+                      />
+                    </div>
                     {typingLabel}
                   </div>
                 )}
@@ -242,7 +346,7 @@ export default function ProChatPanel({
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
+            {/* Input Area */}
             <div
               className="p-4 relative z-10"
               style={{
@@ -250,43 +354,116 @@ export default function ProChatPanel({
                 borderTop: "1px solid var(--navbar-border)",
               }}
             >
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  onSend();
-                }}
-                className="flex items-center gap-2"
-              >
+              <div className="flex items-stretch gap-2">
                 <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder={placeholder}
-                  disabled={loading || initializing}
-                  className="chat-input-field flex-1"
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  accept="application/pdf"
+                  className="hidden"
                 />
-                <motion.button
-                  whileTap={{ scale: 0.9 }}
-                  type="submit"
-                  disabled={!input.trim() || loading || initializing}
-                  className="btn-primary p-3 rounded-xl"
-                  data-testid="chat-send-button"
-                  aria-label="Send"
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    onSend();
+                  }}
+                  className="flex-1 flex gap-2"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
+                  <div className="relative flex-1 group/input">
+                    <input
+                      type="text"
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      placeholder={isRecording ? "Dinleniyor..." : placeholder}
+                      disabled={loading || initializing}
+                      className={`chat-input-field w-full pr-24 ${isRecording ? "ring-2 ring-red-500/50" : ""}`}
+                    />
+                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={onVoiceToggle}
+                        disabled={loading || initializing}
+                        className={`p-2.5 rounded-xl transition-all flex items-center justify-center relative ${isRecording
+                            ? "text-red-500 bg-red-50 dark:bg-red-900/20 opacity-100"
+                            : "text-[var(--foreground)] opacity-40 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/5"
+                          }`}
+                        aria-label="Sesli Yaz"
+                        title="Sesli Girdi"
+                      >
+                        {isRecording && (
+                          <motion.span
+                            initial={{ scale: 0.8, opacity: 0.5 }}
+                            animate={{ scale: 1.5, opacity: 0 }}
+                            transition={{ repeat: Infinity, duration: 1.5 }}
+                            className="absolute inset-0 rounded-xl bg-red-500/30"
+                          />
+                        )}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                          <line x1="12" x2="12" y1="19" y2="22" />
+                        </svg>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={loading || initializing}
+                        className="p-2.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-all text-[var(--foreground)] opacity-40 hover:opacity-100 flex items-center justify-center"
+                        aria-label="PDF Ekle"
+                        title="PDF Dosyası Yükle"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.51a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    type="submit"
+                    disabled={!input.trim() || loading || initializing}
+                    className="btn-primary p-3 rounded-xl flex-shrink-0"
+                    data-testid="chat-send-button"
+                    aria-label="Send"
                   >
-                    <path d="m5 12 7-7 7 7" />
-                    <path d="M12 19V5" />
-                  </svg>
-                </motion.button>
-              </form>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    >
+                      <path d="m5 12 7-7 7 7" />
+                      <path d="M12 19V5" />
+                    </svg>
+                  </motion.button>
+                </form>
+              </div>
 
               <p className="text-[10px] text-center mt-3 opacity-40 leading-tight">
                 {disclaimer}

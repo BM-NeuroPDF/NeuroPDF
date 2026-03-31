@@ -114,10 +114,24 @@ def gemini_generate(text_content: str, prompt_instruction: str, mode: str = "fla
     full_prompt = f"{prompt_instruction}\n\nMETİN:\n---\n{text_content}\n---"
     
     # Modeli seç
+    # Eğer PRO istenmişse ve hata alınırsa FLASH'a düş (Fallback)
+    if mode == "pro":
+        try:
+            # PRO ile sınırlı deneme
+            response = _generate_with_retry(pro_model, full_prompt, attempts=2)
+            if getattr(response, "candidates", None):
+                return response.text
+        except Exception as e:
+            if not _is_quota_or_rate_limit_error(e):
+                raise e
+            print("⚠️ Gemini Pro kotası dolu, Flash modeline geçiliyor (Sohbet)...")
+            mode = "flash"
+
+    # Ana model (veya fallback sonrası flash) ile deneme
     model = flash_model if mode == "flash" else pro_model
     
     try:
-        # Retry mekanizması ile çağır (5 deneme, daha uzun bekleme süreleri)
+        # Retry mekanizması ile çağır
         response = _generate_with_retry(model, full_prompt, attempts=5)
         
         if getattr(response, "candidates", None):

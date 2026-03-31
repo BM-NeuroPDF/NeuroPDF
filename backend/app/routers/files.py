@@ -1328,16 +1328,27 @@ async def markdown_to_pdf(request: MarkdownToPdfRequest):
             # HTML karakterlerini bozmamak için escape et
             text = html.escape(text)
             
+            # Emojiler (ReportLab çökmelerini engellemek için BMP dışındaki unicode'ları temizle)
+            # Standart metin ve basit sembolleri korur, yeni nesil emojileri siler.
+            text = "".join(c for c in text if ord(c) < 0xFFFF)
+            
+            # Kod aralıklarını geçici olarak sakla (İçi Markdown etkilemesin)
+            codes = []
+            def code_repl(m):
+                codes.append(m.group(1))
+                return f"__CODE_BLOCK_{len(codes)-1}__"
+            text = re.sub(r'`(.*?)`', code_repl, text)
+            
             # Bold: **text** -> <b>text</b>
-            # Not: registerFontFamily yapılmazsa <b> tagi Helvetica'ya düşebilir. 
-            # Ancak yukarıda registerFontFamily eklediysek veya fontlar doğruysa çalışır.
             text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
             
             # Italic: *text* -> <i>text</i>
             text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text)
             
-            # Code: `text` -> kırmızı courier font (Kod blokları genelde Courier kalır)
-            text = re.sub(r'`(.*?)`', r'<font face="Courier" color="#e74c3c">\1</font>', text)
+            # Saklanan kod aralıklarını geri yerleştir
+            for i, c in enumerate(codes):
+                text = text.replace(f"__CODE_BLOCK_{i}__", f'<font face="Courier" color="#e74c3c">{c}</font>')
+                
             return text
 
         # --- 3. Ana İşleme Döngüsü ---
@@ -1424,9 +1435,9 @@ async def markdown_to_pdf(request: MarkdownToPdfRequest):
                 story.append(Paragraph(formatted_text, style_heading_2))
 
             elif original_line.startswith(('-', '*', '•')):
-                formatted_text = format_inline_markdown(original_line)
-                clean_text = re.sub(r'^[\-\*\•]\s*', '', formatted_text)
-                story.append(Paragraph(f"• {clean_text}", style_bullet))
+                clean_raw = re.sub(r'^[\-\*\•]\s*', '', original_line)
+                formatted_text = format_inline_markdown(clean_raw)
+                story.append(Paragraph(f"• {formatted_text}", style_bullet))
 
             else:
                 formatted_text = format_inline_markdown(original_line)

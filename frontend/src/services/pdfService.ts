@@ -267,6 +267,33 @@ class PDFService {
     console.log('✅ PDF saved successfully:', result);
     return result;
   }
+
+  /**
+   * Convert markdown string to PDF and trigger download
+   * @param markdown - The markdown content
+   * @param filename - Optional default filename
+   */
+  async createPdfFromMarkdown(markdown: string, filename: string = 'summary.pdf', apiToken?: string | null): Promise<void> {
+    const authHeaders = this.getAuthHeaders(apiToken);
+    
+    // Using sendRequest logic here or fetch directly
+    const response = await fetch(`${API_BASE_URL}/files/markdown-to-pdf`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders
+      },
+      body: JSON.stringify({ markdown })
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      throw new Error(error?.detail || `Failed to create PDF from markdown: ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    this.downloadFile(blob, filename);
+  }
 }
 
 // Singleton instance

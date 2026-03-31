@@ -19,12 +19,42 @@ export default function MarkdownViewer({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Normalizes markdown text to fix common issues like:
+   * 1. Unicode bullets (•) instead of markdown bullets (*).
+   * 2. Excess spaces after bullets/points (common in older or local LLM outputs).
+   */
+  const normalizeMarkdown = (text: string) => {
+    if (!text) return "";
+    
+    return text.split('\n').map(line => {
+      let l = line;
+      // Start with trimming to find bullet/number
+      const trimmed = l.trim();
+      
+      // Match bullet characters or numbered lists
+      if (/^[•\-*]\s+/.test(trimmed)) {
+        // Standardize to '*' and remove extra spaces
+        return trimmed.replace(/^[•\-*]\s+/, '* ');
+      }
+      
+      // Also handle numbered lists followed by excessive spaces (e.g., "1.    Text")
+      if (/^\d+\.\s+/.test(trimmed)) {
+        return trimmed.replace(/^(\d+\.)\s+/, '$1 ');
+      }
+
+      return l; // Keep original line if no match
+    }).join('\n');
+  };
+
+  const processedMarkdown = normalizeMarkdown(markdown);
+
   const handleDownloadPdf = async () => {
     setError(null);
     try {
       setLoading(true);
       // PDF oluştur ve indir
-      await pdfService.createPdfFromMarkdown(markdown, defaultPdfName);
+      await pdfService.createPdfFromMarkdown(processedMarkdown, defaultPdfName);
     } catch (err: any) {
       console.error("❌ PDF oluşturulamadı:", err);
       setError("PDF oluşturulamadı. Lütfen tekrar deneyin.");
@@ -45,7 +75,7 @@ export default function MarkdownViewer({
     <div className="w-full flex flex-col gap-4 font-sans text-[var(--foreground)]">
       {/* Markdown Render */}
       <div
-        className="prose max-w-full p-4 rounded-xl border overflow-auto"
+        className="prose dark:prose-invert max-w-full p-4 rounded-xl border overflow-auto"
         style={{
           height: height || "auto",
           backgroundColor: "var(--background)",
@@ -54,9 +84,13 @@ export default function MarkdownViewer({
         }}
       >
         <ReactMarkdown remarkPlugins={[remarkGfm]}>
-          {markdown}
+          {processedMarkdown}
         </ReactMarkdown>
       </div>
+
+      {error && (
+        <p className="text-sm text-red-500 mt-1">{error}</p>
+      )}
     </div>
   );
 }

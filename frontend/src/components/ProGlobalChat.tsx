@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,7 +14,7 @@ import ProChatPanel from "./ProChatPanel";
 export default function ProGlobalChat() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   const {
     pdfFile,
@@ -31,6 +31,7 @@ export default function ProGlobalChat() {
     setGeneralChatMessages,
     generalSessionId,
     setGeneralSessionId,
+    savePdf,
   } = usePdf();
 
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -39,6 +40,31 @@ export default function ProGlobalChat() {
   const [initializing, setInitializing] = useState(false);
   const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
   const [showProRequiredModal, setShowProRequiredModal] = useState(false);
+  const [typingAudio, setTypingAudio] = useState<HTMLAudioElement | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  // Yazıyor... sesi efekti (Loading sırasında döngüsel)
+  useEffect(() => {
+    let audio: HTMLAudioElement | null = null;
+    if (loading) {
+      audio = new Audio("/sounds/typing.mp3");
+      audio.loop = true;
+      audio.volume = 0.3;
+      audio.play().catch((e) => console.error("Typing sound error:", e));
+      setTypingAudio(audio);
+    } else {
+      if (typingAudio) {
+        typingAudio.pause();
+        setTypingAudio(null);
+      }
+    }
+    return () => {
+      if (audio) {
+        audio.pause();
+      }
+    };
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeSessionId = pdfSessionId || generalSessionId;
   const activeChatMessages = pdfSessionId ? pdfChatMessages : generalChatMessages;
@@ -143,6 +169,129 @@ export default function ProGlobalChat() {
     };
   }, [userId, proChatPanelOpen, session?.user]);
 
+  // --- Voice Input (Speech-to-Text) Logic ---
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) return;
+
+    const recog = new SpeechRecognition();
+    recog.continuous = false;
+    recog.interimResults = false;
+    recog.lang = language === "tr" ? "tr-TR" : "en-US";
+
+    console.log("SpeechRecognition initialized for language:", recog.lang);
+
+    recog.onstart = () => {
+      console.log("SpeechRecognition.onstart: Voice session started.");
+    };
+
+    recog.onspeechstart = () => {
+      console.log("SpeechRecognition.onspeechstart: Speech detected.");
+    };
+
+    recog.onspeechend = () => {
+      console.log("SpeechRecognition.onspeechend: Speech ended.");
+    };
+
+    recog.onsoundstart = () => {
+      console.log("SpeechRecognition.onsoundstart: Sound detected (hardware level).");
+    };
+
+    recog.onresult = (event: any) => {
+      let finalTranscript = "";
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        }
+      }
+      
+      if (finalTranscript) {
+        console.log("SpeechRecognition.onresult (final):", finalTranscript);
+        setInput((prev) => {
+          const trimmed = prev.trim();
+          return trimmed ? trimmed + " " + finalTranscript : finalTranscript;
+        });
+      }
+    };
+
+    recog.onerror = (event: any) => {
+      console.error("SpeechRecognition.onerror:", event.error);
+      const errorMsg = event.error === "no-speech"
+        ? "Ses algılanamadı, mikrofonu kontrol edin."
+        : event.error === "not-allowed"
+          ? "Mikrofon izni reddedildi."
+          : `Hata: ${event.error}`;
+      alert(errorMsg);
+      setIsRecording(false);
+    };
+
+    recog.onend = () => {
+      console.log("SpeechRecognition.onend: Session ended cycle.");
+      setIsRecording(false);
+    };
+
+    recognitionRef.current = recog;
+
+    // Cleanup: Bileşen unmount olduğunda veya dil değiştiğinde eski dinleyiciyi kapat
+    return () => {
+      try {
+        if (recognitionRef.current) {
+          recognitionRef.current.stop();
+          recognitionRef.current.onstart = null;
+          recognitionRef.current.onresult = null;
+          recognitionRef.current.onerror = null;
+          recognitionRef.current.onend = null;
+        }
+      } catch (e) {
+        console.error("Cleanup error:", e);
+      }
+    };
+  }, [language]);
+
+  const handleVoiceToggle = () => {
+    const recognition = recognitionRef.current;
+    if (!recognition) {
+      alert("Tarayıcınız ses tanıma özelliğini desteklemiyor.");
+      return;
+    }
+
+    if (isRecording) {
+      console.log("Attempting to stop recording manually...");
+      recognition.stop();
+      setIsRecording(false);
+    } else {
+      try {
+        console.log("Attempting to start recording (Single-Shot)...");
+        recognition.stop();
+        setTimeout(() => {
+          recognition.start();
+          setIsRecording(true);
+        }, 100);
+      } catch (e: any) {
+        console.error("Recognition start error:", e);
+        setIsRecording(false);
+      }
+    }
+  };
+
+  const handleFileUpload = async (file: File) => {
+    setInitializing(true);
+    try {
+      // Önceki PDF oturumunu temizle ve yeni dosyayı kaydet
+      await savePdf(null);
+      await savePdf(file);
+      // Bu işlem useEffect'i (satır 59) tetikler ve analizi başlatır.
+    } catch (e) {
+      console.error("Chat PDF yükleme hatası:", e);
+    } finally {
+      // setInitializing(false); useEffect içinde yapılacak
+    }
+  };
+
   const initChatSession = async () => {
     if (activeSessionId) return;
     setInitializing(true);
@@ -190,6 +339,7 @@ export default function ProGlobalChat() {
 
   const handleSend = async () => {
     if (!input.trim() || !activeSessionId) return;
+    if (isRecording && recognitionRef.current) recognitionRef.current.stop();
     const userMsg = input.trim();
     setInput("");
 
@@ -225,6 +375,15 @@ export default function ProGlobalChat() {
           { role: "assistant", content: res.answer },
         ]);
       }
+      
+      // Bildirim sesi çal (Peş peşe 2 defa)
+      const playNotify = () => {
+        const audio = new Audio("/sounds/notification.mp3");
+        audio.volume = 0.5;
+        audio.play().catch(() => {});
+      };
+      playNotify();
+      setTimeout(playNotify, 600);
     } catch (e: unknown) {
       console.error("Chat mesaj hatası:", e);
       const errorMessage =
@@ -288,6 +447,15 @@ export default function ProGlobalChat() {
                 ...prev,
                 { role: "assistant", content: retryRes.answer },
               ]);
+
+              // Bildirim sesi çal (Retry sonrası da 2 defa)
+              const playNotify = () => {
+                const audio = new Audio("/sounds/notification.mp3");
+                audio.volume = 0.5;
+                audio.play().catch(() => {});
+              };
+              playNotify();
+              setTimeout(playNotify, 600);
             } else {
               throw new Error("Yeni session başlatılamadı");
             }
@@ -326,24 +494,47 @@ export default function ProGlobalChat() {
       {/* FAB: Her zaman görünür; tıklanınca erişim kontrolü */}
       <AnimatePresence>
         {!proChatPanelOpen && (
-          <motion.button
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0, opacity: 0 }}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={handleFabClick}
-            className="fixed bottom-6 right-6 z-[999] bg-indigo-600 text-white p-4 rounded-full shadow-[0_10px_40px_rgba(79,70,229,0.4)] border-2 border-white/20 group"
-            aria-label="AI Asistanı"
-          >
-            <Image src={NeuroLogoIcon} alt="AI Chat" width={24} height={24} />
-            <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-              PRO
-            </span>
-            <span className="absolute right-16 top-1/2 -translate-y-1/2 bg-gray-900 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none font-bold shadow-xl">
-              AI Asistanı
-            </span>
-          </motion.button>
+          <div className="fixed bottom-6 right-6 z-[999] flex flex-col items-end gap-3">
+            {/* Konuşma Balonu */}
+            <motion.div
+              initial={{ opacity: 0, y: 15, scale: 0.8 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 15, scale: 0.8 }}
+              transition={{ delay: 1, duration: 0.4, type: "spring" }}
+              className="bg-[var(--container-bg)] text-[var(--foreground)] px-4 py-2.5 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.15)] border border-[var(--container-border)] whitespace-nowrap font-bold text-sm relative mb-1 mr-1 pointer-events-none group-hover:scale-105 transition-transform origin-bottom-right"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg">✨</span>
+                {t("chatWelcomeGlobal") || "Merhaba ben Neuro AI. Sana yardımcı olmak için burdayım."}
+              </div>
+              {/* Kuyruk (Tail) */}
+              <div
+                className="absolute -bottom-[6px] right-6 w-3 h-3 bg-[var(--container-bg)] border-r border-b border-[var(--container-border)] rotate-45"
+              />
+            </motion.div>
+
+            {/* FAB */}
+            <motion.button
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              whileHover={{ scale: 1.1, rotate: 2 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={handleFabClick}
+              className="p-4 rounded-full shadow-[0_15px_40px_rgba(0,0,0,0.15)] border border-[var(--container-border)] group relative overflow-hidden bg-[var(--container-bg)]"
+              aria-label="AI Asistanı"
+            >
+              <div className="relative z-10">
+                <Image
+                  src={NeuroLogoIcon}
+                  alt="AI Chat"
+                  width={28}
+                  height={28}
+                  className="drop-shadow-sm brightness-100 dark:brightness-110"
+                />
+              </div>
+            </motion.button>
+          </div>
         )}
       </AnimatePresence>
 
@@ -413,13 +604,16 @@ export default function ProGlobalChat() {
           onClose={() => setProChatPanelOpen(false)}
           messages={activeChatMessages}
           onSend={handleSend}
+          onFileUpload={handleFileUpload}
           loading={loading}
           initializing={initializing}
           input={input}
           setInput={setInput}
           headerTitle="Neuro AI"
           headerSubtitle={
-            isPdfChat ? "PDF AI Asistanı" : "Genel AI Asistanı"
+            isPdfChat 
+              ? (pdfFile?.name ? `Analiz: ${pdfFile.name}` : "PDF AI Asistanı")
+              : "Genel AI Asistanı"
           }
           avatarSrc={avatarSrc}
           userName={session?.user?.name ?? "U"}
@@ -430,6 +624,8 @@ export default function ProGlobalChat() {
           }
           initializingLabel="Başlatılıyor..."
           typingLabel={t("aiTyping") || "Neuro yanıt yazıyor..."}
+          isRecording={isRecording}
+          onVoiceToggle={handleVoiceToggle}
         />
       )}
     </>

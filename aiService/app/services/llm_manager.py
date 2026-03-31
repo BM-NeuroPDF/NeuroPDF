@@ -41,12 +41,14 @@ def chat_over_pdf(
     full_prompt = _build_chat_prompt(session_text, filename, history_text, user_message)
 
     if llm_provider == "cloud":
-        # DÜZELTME: ai_service.gemini_chat YOKTU. 
-        # Bunun yerine elimizdeki 'gemini_generate' fonksiyonunu kullanıyoruz.
-        # Hazırladığımız 'full_prompt'u metin olarak veriyoruz.
         return ai_service.gemini_generate(
             text_content=full_prompt, 
-            prompt_instruction="Aşağıdaki PDF bağlamına ve sohbet geçmişine göre yanıtla:", 
+            prompt_instruction=(
+                "Aşağıdaki PDF bağlamına ve sohbet geçmişine göre yanıtla. "
+                "Cevabını tıpkı modern bir yapay zeka asistanı gibi profesyonel, samimi, "
+                "anlaşılır ve emojilerle (📄✨ vb.) zenginleştirilmiş Markdown formatında ver. "
+                "Metin yığını yerine kısa paragraflar, kalın yazılar ve listeler kullan:"
+            ), 
             mode=mode
         )
 
@@ -130,7 +132,12 @@ KULLANICI SORUSU:
     if llm_provider == "cloud":
         return ai_service.gemini_generate(
             text_content=full_prompt,
-            prompt_instruction="Yukarıdaki sohbet geçmişine göre kullanıcının sorusuna yanıt ver:",
+            prompt_instruction=(
+                "Yukarıdaki sohbet geçmişine göre kullanıcının sorusuna yanıt ver. "
+                "Cevabını tıpkı modern bir yapay zeka asistanı gibi profesyonel, samimi, "
+                "anlaşılır ve emojilerle (🤖💡 vb.) zenginleştirilmiş Markdown formatında ver. "
+                "Metin yığını yerine kısa paragraflar, kalın yazılar ve listeler kullan:"
+            ),
             mode=mode
         )
 

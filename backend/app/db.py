@@ -62,23 +62,43 @@ if SUPABASE_URL and SUPABASE_KEY:
 # =================================================
 # SQLALCHEMY (Postgres)
 # =================================================
-def build_db_url() -> URL:
-    user = os.getenv("DB_USER")
-    password = os.getenv("DB_PASSWORD")
-    host = os.getenv("DB_HOST")
-    port = os.getenv("DB_PORT", "5432")
-    name = os.getenv("DB_NAME", "postgres")
-    ssl = os.getenv("DB_SSLMODE", "require")
+# Eski Yöntem (Yorum satırı olarak korunuyor):
+# def build_db_url() -> URL:
+#     user = os.getenv("DB_USER")
+#     password = os.getenv("DB_PASSWORD")
+#     host = os.getenv("DB_HOST")
+#     port = os.getenv("DB_PORT", "5432")
+#     name = os.getenv("DB_NAME", "postgres")
+#     ssl = os.getenv("DB_SSLMODE", "require")
+#
+#     return URL.create(
+#         "postgresql+psycopg2",
+#         username=user,
+#         password=password,
+#         host=host,
+#         port=int(port),
+#         database=name,
+#         query={"sslmode": ssl},
+#     )
 
-    return URL.create(
-        "postgresql+psycopg2",
-        username=user,
-        password=password,
-        host=host,
-        port=int(port),
-        database=name,
-        query={"sslmode": ssl},
-    )
+def build_db_url() -> str:
+    # Eğer DATABASE_URL tam olarak verilmişse onu kullan
+    if settings.DATABASE_URL:
+        # Pydantic-settings bazen tırnaklı karakterleri bozabilir, PostgreSQL için +psycopg2 ekle
+        url = settings.DATABASE_URL
+        if url.startswith("postgresql://") and not url.startswith("postgresql+psycopg2://"):
+            url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        return url
+
+    # Yoksa bileşenlerden oluştur
+    user = settings.DB_USER
+    password = settings.DB_PASSWORD
+    host = settings.DB_HOST
+    port = settings.DB_PORT
+    name = settings.DB_NAME
+    ssl = settings.DB_SSLMODE
+
+    return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{name}?sslmode={ssl}"
 
 try:
     engine = create_engine(

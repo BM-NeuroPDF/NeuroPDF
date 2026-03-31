@@ -27,10 +27,23 @@ async def summarize_synchronous(
         pdf_bytes = await file.read()
         text = pdf_service.extract_text_from_pdf_bytes(pdf_bytes)
 
-        prompt = (
-            "Bu PDF belgesini Türkçe olarak özetle. "
-            "Ana konuları ve önemli noktaları madde madde belirt."
-        )
+        if llm_provider == "cloud":
+            prompt = (
+                "Bu PDF belgesini Türkçe olarak, anlaşılır ve ilgi çekici bir şekilde özetle. "
+                "Lütfen yanıtını tıpkı modern bir yapay zeka asistanı gibi profesyonel ama samimi bir tonda, "
+                "aralara uygun emojiler (📄✨) serpiştirerek yapılandır. "
+                "Aşağıdaki formatı kullanmaya özen göster:\n"
+                "1. 🎯 **Ana Fikir**: Belgenin temel amacını 1-2 cümleyle özetle.\n"
+                "2. 💡 **Önemli Noktalar**: Öne çıkan argümanları ve detayları okunabilir kısa maddeler halinde listele.\n"
+                "3. 📊 **Sonuç/Kısa Değerlendirme**: Belgenin ulaştığı sonucu veya genel çıkarımı yaz.\n\n"
+                "Yanıtın sıkıcı ve uzun bir metin yığını (wall of text) olmasın; "
+                "paragraflar kısa, başlıklar belirgin ve okuması çok keyifli olsun."
+            )
+        else:
+            prompt = (
+                "Bu PDF belgesini Türkçe olarak özetle. "
+                "Ana konuları ve önemli noktaları madde madde belirt."
+            )
 
         # Blocking LLM çağrısını thread pool'da çalıştır (event loop'u bloklamaz)
         summary = await asyncio.to_thread(

@@ -31,7 +31,7 @@ const formatTime = (seconds: number) => {
 export default function SummarizePdfPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const { setSessionId, setIsChatActive, setChatMessages, setProChatOpen } = usePdf();
+  const { pdfFile, savePdf, clearPdf, setSessionId, setIsChatActive, setChatMessages, setProChatOpen } = usePdf();
   
   const { t, language } = useLanguage();
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -85,6 +85,7 @@ export default function SummarizePdfPage() {
 
   const resetState = (f: File) => {
       setFile(f);
+      savePdf(f);
       setSummary("");
       clearError();
       resetAudio();
@@ -317,10 +318,10 @@ export default function SummarizePdfPage() {
 
   const handleNew = () => {
     setFile(null);
+    clearPdf();
     setSummary("");
     resetAudio();
     clearError();
-    setShowChat(false);
   };
 
   // ✅ Hata Mesajı Renderlayıcı
@@ -391,8 +392,16 @@ export default function SummarizePdfPage() {
 
       {/* Dropzone Alanı */}
       <div
-        {...getRootProps()}
-        onDrop={handleDropFromPanel}
+        {...getRootProps({
+          onDrop: (e) => {
+            // Sağ panelden gelen veriyi kontrol et
+            const isPanel = e.dataTransfer.getData("application/x-neuro-pdf");
+            if (isPanel) {
+                handleDropFromPanel(e);
+            }
+            // else: Masaüstünden gelen dosyalar react-dropzone'un iç onDrop handler'ı ile zaten işlenecek (onDrop callback'i sayesinde)
+          }
+        })}
         className={`container-card border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-300
           ${isDragActive
             ? "border-[var(--button-bg)] bg-[var(--background)] opacity-80"
@@ -507,7 +516,7 @@ export default function SummarizePdfPage() {
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.159 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
                     </svg>
-                    {isProUser ? (t("chatButton") || "Sohbet Et") : (t("upgradeToChat") || "Sohbet için Pro'ya geç")}
+                    {isProUser ? ((t as any)("chatButton") || "Sohbet Et") : ((t as any)("upgradeToChat") || "Sohbet için Pro'ya geç")}
                   </button>
                 )}
                 

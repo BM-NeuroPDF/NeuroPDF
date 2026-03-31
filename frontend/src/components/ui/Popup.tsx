@@ -20,7 +20,7 @@ export default function Popup({ type, message, open, onClose }: Props) {
   };
 
   return (
-    <div className="fixed top-6 right-6 z-50">
+    <div className="fixed top-6 right-6 z-[9999]">
       <div
         className={`flex items-center gap-3 border-l-4 px-5 py-4 rounded-lg shadow-lg ${styles[type]}`}
       >
