@@ -1,5 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
-@import "tailwindcss";
+@import 'tailwindcss';
 @plugin "@tailwindcss/typography";
 
 /* --- Açık Mod (Light Theme) --- */
@@ -14,7 +14,7 @@
 
   /* Bilgi/Uyarı Kutusu (Info Box) */
   --info-bg: #eff6ff;
-  --info-text: #172554; 
+  --info-text: #172554;
   --info-border: #bfdbfe;
 
   /* Hata Kutusu (Error Box - Açık Mod) */
@@ -24,7 +24,7 @@
 
   --container-bg: #ffffff;
   --container-border: #e5e7eb;
-  --card-shadow: 0 10px 15px rgba(0,0,0,0.05);
+  --card-shadow: 0 10px 15px rgba(0, 0, 0, 0.05);
 
   --font-sans: 'IBM Plex Sans', sans-serif;
   --font-mono: var(--font-geist-mono, monospace);
@@ -32,17 +32,17 @@
   --danger-action-text: #ffffff;
 
   /* ✅ CHAT DEĞİŞKENLERİ (Light) */
-  --chat-bg: #f9fafb;        /* Hafif Gri Arka Plan */
+  --chat-bg: #f9fafb; /* Hafif Gri Arka Plan */
   --chat-bubble-user-bg: #ef4444;
   --chat-bubble-user-text: #ffffff;
-  --chat-bubble-ai-bg: #e5e7eb;  /* Gri Baloncuk */
+  --chat-bubble-ai-bg: #e5e7eb; /* Gri Baloncuk */
   --chat-bubble-ai-text: #1f2937;
-  --chat-input-bg: #ffffff;      /* Beyaz Input */
+  --chat-input-bg: #ffffff; /* Beyaz Input */
   --chat-input-border: #d1d5db;
 
   /* 🔧 SUMMARIZE - Light Mode Güçlendirilmiş */
   --summarize-border-light: #b45309; /* amber-700 */
-  --summarize-text-light: #92400e;   /* amber-800 */
+  --summarize-text-light: #92400e; /* amber-800 */
   --summarize-hover-bg-light: #fef3c7; /* amber-100 */
 
   /* ✅ GOOGLE BUTON ÇERÇEVESİ (Light) */
@@ -51,10 +51,18 @@
 
   /* ✅ LLM SELECTION (Light) */
   --llm-toggle-bg: #f3f4f6;
-  --llm-active-bg: #FFC107;
+  --llm-active-bg: #ffc107;
   --llm-active-text: #000000;
   --llm-inactive-text: #9ca3af;
   --llm-active-shadow: 0 4px 20px rgba(255, 193, 7, 0.3);
+
+  /* Documents page soft theme tokens */
+  --docs-surface-bg: #f8fafc;
+  --docs-muted-btn-bg: #ffffff;
+  --docs-muted-btn-hover: #f1f5f9;
+  --docs-accent-btn-bg: #e8eefc;
+  --docs-accent-btn-text: #1e3a8a;
+  --docs-accent-btn-hover: #dbe6fb;
 }
 
 /* --- Koyu Mod (Dark Theme) --- */
@@ -79,25 +87,25 @@
 
   --container-bg: #2a2540;
   --container-border: #3b3655;
-  --card-shadow: 0 10px 15px rgba(0,0,0,0.3);
+  --card-shadow: 0 10px 15px rgba(0, 0, 0, 0.3);
 
   --danger-action-text: #000000;
 
   /* ✅ CHAT DEĞİŞKENLERİ (Dark) */
-  --chat-bg: #171522;            /* Ana arka plandan biraz daha koyu */
+  --chat-bg: #171522; /* Ana arka plandan biraz daha koyu */
   --chat-bubble-user-bg: #fbbf24; /* Sarı buton rengi */
   --chat-bubble-user-text: #1e1b2c; /* Koyu metin */
-  
-  --chat-bubble-ai-bg: #374151;   /* Koyu Gri Baloncuk */
+
+  --chat-bubble-ai-bg: #374151; /* Koyu Gri Baloncuk */
   --chat-bubble-ai-text: #f3f4f6; /* Beyaz metin */
-  
-  --chat-input-bg: #2a2540;       /* Koyu Input Arka Planı */
-  --chat-input-border: #4b5563;   /* Koyu Border */
+
+  --chat-input-bg: #2a2540; /* Koyu Input Arka Planı */
+  --chat-input-border: #4b5563; /* Koyu Border */
 
   /* ✅ SUMMARIZE (ALTIN) RENKLERİ - Dark Mod */
   --gold-border: #fbbf24; /* amber-400 */
   --gold-bg-hover: rgba(251, 191, 36, 0.1);
-  
+
   /* ✅ GOOGLE BUTON ÇERÇEVESİ (Dark) */
   --google-btn-border: #4b5563; /* Gri-600 */
   --google-btn-hover-bg: rgba(255, 255, 255, 0.05);
@@ -108,6 +116,14 @@
   --llm-active-text: #1e1b2c;
   --llm-inactive-text: #6b7280;
   --llm-active-shadow: 0 4px 20px rgba(251, 191, 36, 0.4);
+
+  /* Documents page soft theme tokens */
+  --docs-surface-bg: #332f4b;
+  --docs-muted-btn-bg: #2a2540;
+  --docs-muted-btn-hover: #3b3655;
+  --docs-accent-btn-bg: #3c3560;
+  --docs-accent-btn-text: #dbeafe;
+  --docs-accent-btn-hover: #4a4370;
 }
 
 /* --- Tailwind Typography (prose) Renk Uyumu --- */
@@ -144,7 +160,7 @@
     justify-content: center;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   }
-    
+
   .btn-google {
     width: 100%;
     display: flex;
@@ -257,7 +273,9 @@
     padding: 0.75rem 1rem;
     border-radius: 0.75rem;
     outline: none;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    transition:
+      border-color 0.2s,
+      box-shadow 0.2s;
   }
 
   .chat-input-field:focus {
@@ -273,16 +291,19 @@
     z-index: 60;
     border: 2px solid transparent;
     border-radius: inherit;
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
     mask-composite: exclude;
     background: linear-gradient(
-      90deg,
-      transparent,
-      transparent,
-      var(--gold-border),
-      transparent,
-      transparent
-    ) border-box;
+        90deg,
+        transparent,
+        transparent,
+        var(--gold-border),
+        transparent,
+        transparent
+      )
+      border-box;
     background-size: 200% 100%;
     animation: slide-glow 3s linear infinite;
   }
@@ -355,6 +376,34 @@
     opacity: 1;
     filter: grayscale(0);
   }
+
+  .docs-surface {
+    background-color: var(--docs-surface-bg);
+    border: 1px solid var(--container-border);
+    border-radius: 1rem;
+  }
+
+  .docs-btn-muted {
+    background-color: var(--docs-muted-btn-bg) !important;
+    color: var(--foreground) !important;
+    border: 1px solid var(--container-border) !important;
+    transition: background-color 0.2s ease-in-out;
+  }
+
+  .docs-btn-muted:hover {
+    background-color: var(--docs-muted-btn-hover) !important;
+  }
+
+  .docs-btn-accent {
+    background-color: var(--docs-accent-btn-bg) !important;
+    color: var(--docs-accent-btn-text) !important;
+    border: 1px solid var(--container-border) !important;
+    transition: background-color 0.2s ease-in-out;
+  }
+
+  .docs-btn-accent:hover {
+    background-color: var(--docs-accent-btn-hover) !important;
+  }
 }
 
 @keyframes slide-glow {
@@ -371,13 +420,23 @@ body {
   font-weight: 600;
   margin: 0;
   padding: 0;
-  transition: background-color 0.3s, color 0.3s;
+  transition:
+    background-color 0.3s,
+    color 0.3s;
+}
+
+html,
+body {
+  width: 100%;
+  overflow-x: hidden;
 }
 
 header {
   background-color: var(--navbar-bg);
   border-bottom: 1px solid var(--navbar-border);
-  transition: background-color 0.3s, border-color 0.3s;
+  transition:
+    background-color 0.3s,
+    border-color 0.3s;
 }
 
 /* --- Kart Yapısı --- */
@@ -387,7 +446,10 @@ header {
   border: 1px solid var(--container-border);
   border-radius: 1rem;
   box-shadow: var(--card-shadow);
-  transition: background-color 0.3s, color 0.3s, box-shadow 0.3s;
+  transition:
+    background-color 0.3s,
+    color 0.3s,
+    box-shadow 0.3s;
 }
 
 /* --- Buton Genel --- */
@@ -399,7 +461,10 @@ button {
   font-weight: 700;
   cursor: pointer;
   border-radius: 0.75rem;
-  transition: background-color 0.2s, transform 0.2s, box-shadow 0.2s;
+  transition:
+    background-color 0.2s,
+    transform 0.2s,
+    box-shadow 0.2s;
 }
 
 button:hover {

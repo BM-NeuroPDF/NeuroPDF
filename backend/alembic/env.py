@@ -3,7 +3,8 @@ from alembic import context
 from sqlalchemy import pool, create_engine
 from sqlalchemy.engine import URL
 from dotenv import load_dotenv
-import os, sys
+import os
+import sys
 
 # =========================
 # PATH + ENV LOAD
@@ -19,6 +20,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+
 # =========================
 # FORCE: only split env vars (NO DATABASE_URL)
 # =========================
@@ -31,13 +33,22 @@ def build_db_url_strict():
     dbname = os.getenv("DB_NAME", "postgres")
     sslmode = os.getenv("DB_SSLMODE", "require")
 
-    missing = [k for k, v in {
-        "DB_USER": user, "DB_PASSWORD": password, "DB_HOST": host, "DB_NAME": dbname
-    }.items() if not v]
+    missing = [
+        k
+        for k, v in {
+            "DB_USER": user,
+            "DB_PASSWORD": password,
+            "DB_HOST": host,
+            "DB_NAME": dbname,
+        }.items()
+        if not v
+    ]
 
     if missing:
-        raise RuntimeError(f"Missing DB env vars in .env: {missing}. "
-                           f"Expected DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME")
+        raise RuntimeError(
+            f"Missing DB env vars in .env: {missing}. "
+            f"Expected DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME"
+        )
 
     url_obj = URL.create(
         "postgresql+psycopg2",
@@ -55,16 +66,22 @@ def build_db_url_strict():
 
     return url_obj
 
+
 db_url_obj = build_db_url_strict()
 
 # Alembic configparser '%' sevmez → escape
-config.set_main_option("sqlalchemy.url", db_url_obj.render_as_string(hide_password=False).replace("%", "%%"))
+config.set_main_option(
+    "sqlalchemy.url",
+    db_url_obj.render_as_string(hide_password=False).replace("%", "%%"),
+)
 
 # =========================
 # METADATA
 # =========================
 from app.models import Base
+
 target_metadata = Base.metadata
+
 
 # =========================
 # MIGRATIONS
@@ -79,6 +96,7 @@ def run_migrations_offline():
     )
     with context.begin_transaction():
         context.run_migrations()
+
 
 def run_migrations_online():
     # engine’i URL objesiyle kur
@@ -96,6 +114,7 @@ def run_migrations_online():
         )
         with context.begin_transaction():
             context.run_migrations()
+
 
 if context.is_offline_mode():
     run_migrations_offline()

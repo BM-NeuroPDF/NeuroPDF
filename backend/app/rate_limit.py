@@ -1,10 +1,10 @@
 # app/rate_limit.py
 """Simple rate limiting middleware using Redis"""
-import time
-from typing import Optional
-from fastapi import Request, HTTPException, status
+
+from fastapi import Request
 from .redis_client import redis_client
 from .config import settings
+
 
 def check_rate_limit(request: Request, key: str, limit: int, window: int = 60) -> bool:
     """
@@ -13,15 +13,15 @@ def check_rate_limit(request: Request, key: str, limit: int, window: int = 60) -
     """
     if not settings.RATE_LIMIT_ENABLED or redis_client is None:
         return True  # Rate limiting kapalıysa veya Redis yoksa izin ver
-    
+
     try:
         # IP adresini al
         client_ip = request.client.host if request.client else "unknown"
         redis_key = f"ratelimit:{key}:{client_ip}"
-        
+
         # Mevcut sayıyı al
         current = redis_client.get(redis_key)
-        
+
         if current is None:
             # İlk istek, sayacı başlat
             redis_client.setex(redis_key, window, 1)
@@ -32,10 +32,9 @@ def check_rate_limit(request: Request, key: str, limit: int, window: int = 60) -
                 # Rate limit aşıldı - log security event
                 try:
                     from .security_logger import log_rate_limit_exceeded
+
                     log_rate_limit_exceeded(
-                        ip_address=client_ip,
-                        endpoint=key,
-                        request=request
+                        ip_address=client_ip, endpoint=key, request=request
                     )
                 except Exception:
                     pass  # Don't fail if logging fails
@@ -47,6 +46,7 @@ def check_rate_limit(request: Request, key: str, limit: int, window: int = 60) -
     except Exception as e:
         # Redis hatası durumunda izin ver (fail-open)
         import logging
+
         logger = logging.getLogger(__name__)
         logger.warning(f"Rate limit check failed: {e}")
         return True

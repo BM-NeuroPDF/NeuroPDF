@@ -1,61 +1,82 @@
-import { getSession, signOut } from "next-auth/react";
+import { getSession, signOut } from 'next-auth/react';
 
-// Backend Adresi
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const resolveBaseUrl = (): string => {
+  const envBase = (process.env.NEXT_PUBLIC_API_URL ?? '').trim();
+  const isHttpsBrowser =
+    typeof window !== 'undefined' && window.location.protocol === 'https:';
+
+  // HTTPS'te http backend'e doğrudan gitmek mixed-content üretir.
+  // Bu durumda same-origin rewrite kullanmak için relative URL döndürürüz.
+  if (isHttpsBrowser && envBase.startsWith('http://')) {
+    return '';
+  }
+  return envBase || 'http://localhost:8000';
+};
 
 /**
  * Token expire durumunda kullanıcıyı login sayfasına yönlendir
  */
 const handleTokenExpired = async () => {
   // Sadece browser ortamında çalış
-  if (typeof window === "undefined") return;
-  
+  if (typeof window === 'undefined') return;
+
   try {
     // NextAuth session'ını temizle ve login sayfasına yönlendir
-    await signOut({ 
-      callbackUrl: "/login",
-      redirect: true 
+    await signOut({
+      callbackUrl: '/login',
+      redirect: true,
     });
   } catch (error) {
-    console.error("Sign out hatası:", error);
+    console.error('Sign out hatası:', error);
     // Fallback: Manuel yönlendirme
-    window.location.href = "/login";
+    window.location.href = '/login';
   }
 };
 
 export const sendRequest = async (
   endpoint: string,
-  method: string = "GET",
+  method: string = 'GET',
   body: any = null,
   isFileUpload: boolean = false
 ) => {
+  const baseUrl = resolveBaseUrl();
+  // Chat mesajında rewrite proxy timeout'una takılmamak için
+  // her durumda App Router proxy route'unu kullan.
+  const normalizedEndpoint =
+    endpoint === '/files/chat/message' ? '/api/proxy/chat/message' : endpoint;
 
   // 1. KRİTİK ADIM: Token'ı Session'dan (Cookie'den) Çek
   // getSession() fonksiyonu NextAuth cookie'sini çözer ve veriyi getirir.
   const session = await getSession();
 
-  // route.ts dosyasında 'accessToken' olarak kaydetmiştik:
-  const token = (session as any)?.accessToken;
+  // Farklı NextAuth callback sürümlerinden gelen token alanlarını destekle.
+  const token =
+    (session as any)?.accessToken ??
+    (session as any)?.apiToken ??
+    (session as any)?.user?.accessToken ??
+    (session as any)?.user?.apiToken ??
+    null;
 
   // Misafir ID (Hala LocalStorage'da durur, bu doğru)
-  const guestId = typeof window !== "undefined" ? localStorage.getItem("guest_id") : null;
+  const guestId =
+    typeof window !== 'undefined' ? localStorage.getItem('guest_id') : null;
 
   // 2. Headerları Hazırla
   const headers: Record<string, string> = {};
 
   // ✅ Token varsa ekle (Backend artık 'Misafir' demeyecek)
   if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+    headers['Authorization'] = `Bearer ${token}`;
   }
 
   // Misafir ID varsa ekle
   if (guestId) {
-    headers["X-Guest-ID"] = guestId;
+    headers['X-Guest-ID'] = guestId;
   }
 
   // Dosya yüklemiyorsak JSON olduğunu belirt
   if (!isFileUpload && body) {
-    headers["Content-Type"] = "application/json";
+    headers['Content-Type'] = 'application/json';
   }
 
   // 3. İsteği Gönder
@@ -69,7 +90,7 @@ export const sendRequest = async (
   }
 
   try {
-    const response = await fetch(`${BASE_URL}${endpoint}`, config);
+    const response = await fetch(`${baseUrl}${normalizedEndpoint}`, config);
 
     if (!response.ok) {
       // ✅ Token expire kontrolü (401 Unauthorized)
@@ -77,7 +98,7 @@ export const sendRequest = async (
         // Token expire olduğunda kullanıcıyı login sayfasına yönlendir
         await handleTokenExpired();
         // Yönlendirme yapıldıktan sonra hata fırlatma (kullanıcı zaten yönlendirildi)
-        throw new Error("Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.");
+        throw new Error('Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
       }
 
       const errorData = await response.json().catch(() => ({}));
@@ -86,8 +107,8 @@ export const sendRequest = async (
       if (errorData.detail) {
         if (Array.isArray(errorData.detail)) {
           // FastAPI Validator Error Array (422)
-          errorMessage = errorData.detail.map((err: any) => err.msg).join(", ");
-        } else if (typeof errorData.detail === "string") {
+          errorMessage = errorData.detail.map((err: any) => err.msg).join(', ');
+        } else if (typeof errorData.detail === 'string') {
           errorMessage = errorData.detail;
         } else {
           errorMessage = JSON.stringify(errorData.detail);
@@ -98,22 +119,28 @@ export const sendRequest = async (
     }
 
     // Yanıt tipine göre dön (JSON veya Dosya/Blob)
-    const contentType = response.headers.get("content-type");
-    if (contentType && contentType.includes("application/json")) {
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
       return await response.json();
     } else {
       return await response.blob();
     }
-
   } catch (error) {
     // 401 hatası zaten handleTokenExpired ile yönetildi, tekrar loglamaya gerek yok
-    if (error instanceof Error && error.message.includes("Oturum süreniz dolmuş")) {
+    if (
+      error instanceof Error &&
+      error.message.includes('Oturum süreniz dolmuş')
+    ) {
       throw error; // Yönlendirme yapıldı, hata mesajını fırlat ama loglama
     }
-    console.error("API İsteği Hatası:", error);
+    console.error('API İsteği Hatası:', error);
     throw error;
   }
 };
+
+export async function swrFetcher<T = unknown>(endpoint: string): Promise<T> {
+  return sendRequest(endpoint, 'GET') as Promise<T>;
+}
 
 /** Kayıtlı PDF sohbet oturumu (backend `pdf_chat_sessions` satırı) */
 export type ChatSessionListItem = {
@@ -129,7 +156,7 @@ export type ChatSessionListItem = {
 export async function fetchChatSessions(): Promise<{
   sessions: ChatSessionListItem[];
 }> {
-  return sendRequest("/files/chat/sessions", "GET");
+  return sendRequest('/files/chat/sessions', 'GET');
 }
 
 export async function fetchSessionMessages(sessionDbId: string): Promise<{
@@ -139,7 +166,7 @@ export async function fetchSessionMessages(sessionDbId: string): Promise<{
     created_at?: string | null;
   }>;
 }> {
-  return sendRequest(`/files/chat/sessions/${sessionDbId}/messages`, "GET");
+  return sendRequest(`/files/chat/sessions/${sessionDbId}/messages`, 'GET');
 }
 
 export async function resumeChatSession(sessionDbId: string): Promise<{
@@ -148,9 +175,24 @@ export async function resumeChatSession(sessionDbId: string): Promise<{
   db_session_id: string;
   filename?: string;
 }> {
-  return sendRequest(`/files/chat/sessions/${sessionDbId}/resume`, "POST");
+  return sendRequest(`/files/chat/sessions/${sessionDbId}/resume`, 'POST');
 }
 
 export async function fetchStoredPdfBlob(pdfId: string): Promise<Blob> {
-  return sendRequest(`/files/stored/${pdfId}`, "GET") as Promise<Blob>;
+  return sendRequest(`/files/stored/${pdfId}`, 'GET') as Promise<Blob>;
+}
+
+export type UserDocumentListItem = {
+  id: string;
+  filename: string | null;
+  file_size: number | null;
+  created_at: string | null;
+  page_count: number | null;
+};
+
+export async function getUserDocuments(): Promise<{
+  files: UserDocumentListItem[];
+  total: number;
+}> {
+  return sendRequest('/files/my-files', 'GET');
 }

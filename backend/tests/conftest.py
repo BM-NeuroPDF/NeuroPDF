@@ -5,6 +5,7 @@ Global pytest configuration and fixtures for backend tests.
 - Test DB is separate (TEST_DB_NAME / test_db); Alembic runs against it in session setup.
 - Optional deps (e.g. pypdf) are checked at session start; tests can skip if missing.
 """
+
 import os
 import pytest
 from sqlalchemy import create_engine, text
@@ -19,11 +20,14 @@ from typing import Generator
 # Set test environment before importing app modules
 os.environ["ENVIRONMENT"] = "test"
 
-from app.db import Base, get_db, get_supabase
+from app.db import get_db, get_supabase
 from app.main import app
 from app.models import (
-    User, UserAuth, UserSettings, UserStats, PDF, GuestSession,
-    LLMChoice, UserRole,
+    User,
+    UserAuth,
+    PDF,
+    LLMChoice,
+    UserRole,
 )
 from app.core.security import create_jwt
 
@@ -32,10 +36,12 @@ from app.core.security import create_jwt
 # DEPENDENCY / ENV CHECKS (fail fast, e.g. ModuleNotFoundError: pypdf)
 # ==========================================
 
+
 def _check_optional_deps():
     """Check optional dependencies; set flags for skipif."""
     try:
         import pypdf  # noqa: F401
+
         _pypdf_available = True
     except ImportError:
         _pypdf_available = False
@@ -54,6 +60,7 @@ requires_pypdf = pytest.mark.skipif(
 # PYTEST MARKERS
 # ==========================================
 
+
 def pytest_configure(config):
     config.addinivalue_line("markers", "unit: Unit tests (no DB).")
     config.addinivalue_line("markers", "integration: Integration tests (real test DB).")
@@ -63,6 +70,7 @@ def pytest_configure(config):
 # ==========================================
 # TEST DATABASE CONFIGURATION
 # ==========================================
+
 
 def build_test_db_url() -> URL:
     """Build test database URL from environment variables."""
@@ -87,7 +95,7 @@ def build_test_db_url() -> URL:
 def run_alembic_migrations():
     """Run Alembic migrations on test database."""
     test_db_url = build_test_db_url()
-    
+
     # Temporarily set environment variables for Alembic
     original_env = {}
     env_vars_to_set = {
@@ -98,11 +106,11 @@ def run_alembic_migrations():
         "DB_NAME": test_db_url.database,
         "DB_SSLMODE": test_db_url.query.get("sslmode", "disable"),
     }
-    
+
     for key, value in env_vars_to_set.items():
         original_env[key] = os.environ.get(key)
         os.environ[key] = value
-    
+
     try:
         # Run Alembic upgrade
         result = subprocess.run(
@@ -126,7 +134,7 @@ def run_alembic_migrations():
 def create_test_database():
     """Create test database if it doesn't exist."""
     test_db_url = build_test_db_url()
-    
+
     # Connect to postgres database to create test_db
     admin_url = URL.create(
         "postgresql+psycopg2",
@@ -137,20 +145,18 @@ def create_test_database():
         database="postgres",
         query={"sslmode": test_db_url.query.get("sslmode", "disable")},
     )
-    
+
     admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
-    
+
     try:
         with admin_engine.connect() as conn:
             # Check if database exists
             result = conn.execute(
-                text(
-                    "SELECT 1 FROM pg_database WHERE datname = :dbname"
-                ),
-                {"dbname": test_db_url.database}
+                text("SELECT 1 FROM pg_database WHERE datname = :dbname"),
+                {"dbname": test_db_url.database},
             )
             exists = result.fetchone()
-            
+
             if not exists:
                 conn.execute(text(f'CREATE DATABASE "{test_db_url.database}"'))
                 print(f"Created test database: {test_db_url.database}")
@@ -161,6 +167,7 @@ def create_test_database():
 # ==========================================
 # FIXTURES
 # ==========================================
+
 
 @pytest.fixture(scope="session")
 def test_db_engine():
@@ -257,17 +264,18 @@ def ensure_base_data(session: Session) -> None:
 def test_supabase_client():
     """Mock Supabase client for tests."""
     mock_client = MagicMock()
-    
+
     # Setup common mock responses
     mock_table = MagicMock()
     mock_client.table.return_value = mock_table
-    
+
     yield mock_client
 
 
 @pytest.fixture(scope="function")
 def test_client(test_db: Session, test_supabase_client):
     """FastAPI TestClient with get_db and get_supabase overridden (test_db = rollback-only session)."""
+
     def override_get_db():
         yield test_db
 
@@ -336,12 +344,12 @@ def sample_pdf_file(sample_pdf_content: bytes):
     """Create a mock PDF file for testing."""
     from io import BytesIO
     from fastapi import UploadFile
-    
+
     file_content = BytesIO(sample_pdf_content)
     return UploadFile(
         filename="test.pdf",
         file=file_content,
-        headers={"content-type": "application/pdf"}
+        headers={"content-type": "application/pdf"},
     )
 
 
@@ -349,20 +357,23 @@ def sample_pdf_file(sample_pdf_content: bytes):
 # TEST HELPER FUNCTIONS
 # ==========================================
 
-def create_test_pdf(db: Session, user_id: str, filename: str = "test.pdf", pdf_data: bytes = None) -> PDF:
+
+def create_test_pdf(
+    db: Session, user_id: str, filename: str = "test.pdf", pdf_data: bytes = None
+) -> PDF:
     """Helper function to create a test PDF record."""
     import uuid
     from app.models import PDF
-    
+
     if pdf_data is None:
         pdf_data = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\nxref\n0 0\ntrailer\n<< /Size 0 /Root 1 0 R >>\nstartxref\n9\n%%EOF"
-    
+
     pdf = PDF(
         id=str(uuid.uuid4()),
         user_id=user_id,
         pdf_data=pdf_data,
         filename=filename,
-        file_size=len(pdf_data)
+        file_size=len(pdf_data),
     )
     db.add(pdf)
     db.commit()

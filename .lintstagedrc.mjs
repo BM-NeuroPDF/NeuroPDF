@@ -37,11 +37,11 @@ export default {
   'backend/**/*.py': (filenames) => {
     if (filenames.length === 0) return [];
     const args = filenames.map((f) => shellQuote(path.resolve(__dirname, f))).join(' ');
-    return [`npx ruff check --fix ${args}`, `npx ruff format ${args}`];
+    return [`python -m ruff check --fix ${args}`, `python -m ruff format ${args}`];
   },
   'aiService/**/*.py': (filenames) => {
     if (filenames.length === 0) return [];
     const args = filenames.map((f) => shellQuote(path.resolve(__dirname, f))).join(' ');
-    return [`npx ruff check --fix ${args}`, `npx ruff format ${args}`];
+    return [`python -m ruff check --fix ${args}`, `python -m ruff format ${args}`];
   },
 };

@@ -1,15 +1,16 @@
 import os
 import logging
 import httpx
+from fastapi import HTTPException
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy.engine import URL
+from sqlalchemy.exc import OperationalError, PendingRollbackError
 
 # Supabase
 from supabase import create_client, Client
 
 # Ayarlar
-from .config import settings 
+from .config import settings
 
 logger = logging.getLogger(__name__)
 Base = declarative_base()
@@ -20,36 +21,40 @@ Base = declarative_base()
 SUPABASE_URL = settings.SUPABASE_URL
 SUPABASE_KEY = settings.SUPABASE_KEY
 
+
 def get_supabase() -> Client:
     """
-    Supabase REST istemcisini döndürür. 
+    Supabase REST istemcisini döndürür.
     SSL hatalarını aşmak için HTTP istemcisi özel olarak yapılandırılmıştır.
     """
     if not SUPABASE_URL or not SUPABASE_KEY:
-        raise RuntimeError("Supabase client not configured. SUPABASE_URL / SUPABASE_KEY missing.")
-    
+        raise RuntimeError(
+            "Supabase client not configured. SUPABASE_URL / SUPABASE_KEY missing."
+        )
+
     try:
         # ClientOptions karmaşasından kaçınmak için doğrudan httpx kullanıyoruz
         # SSL verification: Production'da açık, development'ta opsiyonel
         env = os.getenv("ENVIRONMENT", "development").lower()
         verify_ssl = env not in ["development", "dev", "local"]
-        
+
         # Supabase client'ı oluştururken httpx istemcisini manuel enjekte ediyoruz
         return create_client(
-            SUPABASE_URL, 
+            SUPABASE_URL,
             SUPABASE_KEY,
             options={
                 "http_client": httpx.Client(verify=verify_ssl),
-            }
+            },
         )
-    except Exception as e:
-        # Eğer yukarıdaki yöntem de hata verirse (bazı sürümlerde dict kabul etmez), 
+    except Exception:
+        # Eğer yukarıdaki yöntem de hata verirse (bazı sürümlerde dict kabul etmez),
         # en yalın haliyle dene
         try:
             return create_client(SUPABASE_URL, SUPABASE_KEY)
         except Exception as final_e:
             logger.error(f"Supabase bağlantı hatası: {final_e}")
             raise
+
 
 # Global örnek
 supabase = None
@@ -81,12 +86,15 @@ if SUPABASE_URL and SUPABASE_KEY:
 #         query={"sslmode": ssl},
 #     )
 
+
 def build_db_url() -> str:
     # Eğer DATABASE_URL tam olarak verilmişse onu kullan
     if settings.DATABASE_URL:
         # Pydantic-settings bazen tırnaklı karakterleri bozabilir, PostgreSQL için +psycopg2 ekle
         url = settings.DATABASE_URL
-        if url.startswith("postgresql://") and not url.startswith("postgresql+psycopg2://"):
+        if url.startswith("postgresql://") and not url.startswith(
+            "postgresql+psycopg2://"
+        ):
             url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
         return url
 
@@ -99,6 +107,7 @@ def build_db_url() -> str:
     ssl = settings.DB_SSLMODE
 
     return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{name}?sslmode={ssl}"
+
 
 try:
     engine = create_engine(
@@ -132,73 +141,81 @@ else:
     # Fallback: Engine yoksa None döndürecek bir sessionmaker
     SessionLocal = None
 
+
 def get_db():
     """
-    Database session dependency. 
-    Retry mekanizması ile bağlantı sorunlarını yönetir.
-    Development ortamında DB bağlantısı başarısız olursa None döndürür.
+    Database session dependency.
+    Bağlantı havuzu/rollback sorunlarında kontrollü 503 döner.
     """
-    env = os.getenv("ENVIRONMENT", "development").lower()
-    is_development = env in ["development", "dev", "local"]
-    
-    if SessionLocal is None:
-        if is_development:
-            logger.warning("Database engine not initialized. Returning None for development.")
-            yield None
-            return
-        raise RuntimeError("Database engine not initialized. Check database connection settings.")
-    
-    if engine is None:
-        if is_development:
-            logger.warning("Database engine not available. Returning None for development.")
-            yield None
-            return
-        raise RuntimeError("Database engine not available. Check database connection settings.")
-    
-    # Bağlantıyı test et ve gerekirse yeniden dene
-    max_retries = 2 if is_development else 3
-    retry_delay = 1  # saniye
     db = None
-    
-    for attempt in range(max_retries):
-        try:
-            db = SessionLocal()
-            # Bağlantıyı test et
-            db.execute(text("SELECT 1"))
-            break
-        except Exception as e:
-            if db:
-                try:
-                    db.close()
-                except:
-                    pass
-            if attempt < max_retries - 1:
-                logger.warning(f"Database connection attempt {attempt + 1} failed, retrying... Error: {repr(e)}")
-                import time
-                time.sleep(retry_delay)
-                retry_delay *= 2  # Exponential backoff
-            else:
-                logger.error(f"Database connection failed after {max_retries} attempts: {repr(e)}")
-                if is_development:
-                    logger.warning("Development mode: Returning None instead of raising error.")
-                    yield None
-                    return
-                raise RuntimeError(f"Unable to connect to database after {max_retries} attempts. Please check your database connection settings.")
-    
-    if db is None:
-        if is_development:
-            logger.warning("Failed to create database session. Returning None for development.")
-            yield None
-            return
-        raise RuntimeError("Failed to create database session.")
-    
+
+    if SessionLocal is None:
+        logger.error("Database session factory not initialized.")
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection temporarily unavailable. Please try again.",
+        )
+
+    if engine is None:
+        logger.error("Database engine not initialized.")
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection temporarily unavailable. Please try again.",
+        )
+
+    try:
+        db = SessionLocal()
+        # dead connection'ı erken tespit etmek için ön ping
+        db.execute(text("SELECT 1"))
+    except (OperationalError, PendingRollbackError) as e:
+        logger.error("Database session init failed: %r", e, exc_info=True)
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection temporarily unavailable. Please try again.",
+        ) from e
+    except Exception as e:
+        logger.error("Unexpected database session init error: %r", e, exc_info=True)
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection temporarily unavailable. Please try again.",
+        ) from e
+
     try:
         yield db
-    except Exception as e:
-        if db:
+    except (OperationalError, PendingRollbackError) as e:
+        logger.error("Database operational error during request: %r", e, exc_info=True)
+        try:
             db.rollback()
-        logger.error(f"Database session error: {repr(e)}")
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection temporarily unavailable. Please try again.",
+        ) from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        if db is not None:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+        logger.error("Database session error: %r", e, exc_info=True)
         raise
     finally:
-        if db:
-            db.close()
+        if db is not None:
+            try:
+                db.close()
+            except (OperationalError, PendingRollbackError) as e:
+                # close/rollback anındaki bağlantı kopmaları API'yi düşürmemeli
+                logger.warning("Database close failed (ignored): %r", e)

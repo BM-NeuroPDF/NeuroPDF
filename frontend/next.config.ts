@@ -1,6 +1,28 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
+
+const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:8000';
 
 const nextConfig: NextConfig = {
+  async rewrites() {
+    return [
+      {
+        source: '/auth/:path*',
+        destination: `${backendUrl}/auth/:path*`,
+      },
+      {
+        source: '/files/:path*',
+        destination: `${backendUrl}/files/:path*`,
+      },
+      {
+        source: '/api/v1/:path*',
+        destination: `${backendUrl}/api/v1/:path*`,
+      },
+      {
+        source: '/guest/:path*',
+        destination: `${backendUrl}/guest/:path*`,
+      },
+    ];
+  },
   async headers() {
     return [
       {
@@ -28,8 +50,8 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()'
-          }
+            value: 'camera=(), microphone=(self), geolocation=()',
+          },
         ],
       },
     ];

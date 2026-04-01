@@ -2,7 +2,17 @@
 
 import { guestService } from './guestService';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const resolveApiBaseUrl = (): string => {
+  const envBase = (process.env.NEXT_PUBLIC_API_URL ?? '').trim();
+  const isHttpsBrowser =
+    typeof window !== 'undefined' && window.location.protocol === 'https:';
+
+  // HTTPS sayfada http backend çağrısını same-origin rewrite'e düşür.
+  if (isHttpsBrowser && envBase.startsWith('http://')) {
+    return '';
+  }
+  return envBase || 'http://localhost:8000';
+};
 
 interface UploadResponse {
   filename: string;
@@ -18,12 +28,12 @@ class PDFService {
    */
   private getAuthHeaders(apiToken?: string | null): HeadersInit {
     const headers: HeadersInit = {};
-    
+
     if (apiToken) {
       headers['Authorization'] = `Bearer ${apiToken}`;
       console.log('✅ Using NextAuth token for request');
     }
-    
+
     return headers;
   }
 
@@ -32,13 +42,13 @@ class PDFService {
    */
   private async getGuestHeaders(isLoggedIn: boolean): Promise<HeadersInit> {
     const headers: HeadersInit = {};
-    
+
     if (!isLoggedIn) {
       const guestId = await guestService.getGuestId();
       headers['X-Guest-ID'] = guestId;
       console.log('✅ Using guest ID for request:', guestId);
     }
-    
+
     return headers;
   }
 
@@ -47,17 +57,17 @@ class PDFService {
    */
   private downloadFile(blob: Blob, filename: string): void {
     console.log('📥 Downloading file:', filename, 'Size:', blob.size, 'bytes');
-    
+
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.style.display = 'none';
     a.href = url;
     a.download = filename;
-    
+
     document.body.appendChild(a);
     console.log('🔗 Download link created, clicking...');
     a.click();
-    
+
     // Cleanup
     setTimeout(() => {
       window.URL.revokeObjectURL(url);
@@ -70,19 +80,20 @@ class PDFService {
    * PDF Upload (geçici olarak)
    */
   async upload(file: File, apiToken?: string | null): Promise<UploadResponse> {
+    const apiBaseUrl = resolveApiBaseUrl();
     const formData = new FormData();
     formData.append('file', file);
 
     const authHeaders = this.getAuthHeaders(apiToken);
     const guestHeaders = await this.getGuestHeaders(!!apiToken);
 
-    const response = await fetch(`${API_BASE_URL}/files/upload`, {
+    const response = await fetch(`${apiBaseUrl}/files/upload`, {
       method: 'POST',
       headers: {
         ...authHeaders,
-        ...guestHeaders
+        ...guestHeaders,
       },
-      body: formData
+      body: formData,
     });
 
     if (!response.ok) {
@@ -98,6 +109,7 @@ class PDFService {
    * Download sonrası guest usage artır
    */
   async convertToText(file: File, apiToken?: string | null): Promise<void> {
+    const apiBaseUrl = resolveApiBaseUrl();
     const isLoggedIn = !!apiToken;
     const formData = new FormData();
     formData.append('file', file);
@@ -105,13 +117,13 @@ class PDFService {
     const authHeaders = this.getAuthHeaders(apiToken);
     const guestHeaders = await this.getGuestHeaders(isLoggedIn);
 
-    const response = await fetch(`${API_BASE_URL}/files/convert-text`, {
+    const response = await fetch(`${apiBaseUrl}/files/convert-text`, {
       method: 'POST',
       headers: {
         ...authHeaders,
-        ...guestHeaders
+        ...guestHeaders,
       },
-      body: formData
+      body: formData,
     });
 
     if (!response.ok) {
@@ -121,7 +133,7 @@ class PDFService {
 
     const blob = await response.blob();
     const filename = file.name.replace(/\.pdf$/i, '.txt');
-    
+
     // Dosyayı indir
     this.downloadFile(blob, filename);
 
@@ -142,7 +154,12 @@ class PDFService {
    * Extract Pages
    * Download sonrası guest usage artır
    */
-  async extractPages(file: File, pageRange: string, apiToken?: string | null): Promise<void> {
+  async extractPages(
+    file: File,
+    pageRange: string,
+    apiToken?: string | null
+  ): Promise<void> {
+    const apiBaseUrl = resolveApiBaseUrl();
     const isLoggedIn = !!apiToken;
     const formData = new FormData();
     formData.append('file', file);
@@ -151,13 +168,13 @@ class PDFService {
     const authHeaders = this.getAuthHeaders(apiToken);
     const guestHeaders = await this.getGuestHeaders(isLoggedIn);
 
-    const response = await fetch(`${API_BASE_URL}/files/extract-pages`, {
+    const response = await fetch(`${apiBaseUrl}/files/extract-pages`, {
       method: 'POST',
       headers: {
         ...authHeaders,
-        ...guestHeaders
+        ...guestHeaders,
       },
-      body: formData
+      body: formData,
     });
 
     if (!response.ok) {
@@ -168,7 +185,7 @@ class PDFService {
     const blob = await response.blob();
     const safePageRange = pageRange.replace(/[^a-zA-Z0-9-]/g, '_');
     const filename = file.name.replace('.pdf', `_pages_${safePageRange}.pdf`);
-    
+
     // Dosyayı indir
     this.downloadFile(blob, filename);
 
@@ -190,6 +207,7 @@ class PDFService {
    * Download sonrası guest usage artır
    */
   async mergePDFs(files: File[], apiToken?: string | null): Promise<void> {
+    const apiBaseUrl = resolveApiBaseUrl();
     const isLoggedIn = !!apiToken;
     const formData = new FormData();
     files.forEach((file) => {
@@ -199,13 +217,13 @@ class PDFService {
     const authHeaders = this.getAuthHeaders(apiToken);
     const guestHeaders = await this.getGuestHeaders(isLoggedIn);
 
-    const response = await fetch(`${API_BASE_URL}/files/merge-pdfs`, {
+    const response = await fetch(`${apiBaseUrl}/files/merge-pdfs`, {
       method: 'POST',
       headers: {
         ...authHeaders,
-        ...guestHeaders
+        ...guestHeaders,
       },
-      body: formData
+      body: formData,
     });
 
     if (!response.ok) {
@@ -215,7 +233,7 @@ class PDFService {
 
     const blob = await response.blob();
     const filename = 'merged.pdf';
-    
+
     // Dosyayı indir
     this.downloadFile(blob, filename);
 
@@ -239,7 +257,12 @@ class PDFService {
    * @param filename - Dosya adı
    * @param apiToken - NextAuth session'dan gelen token
    */
-  async saveProcessed(blob: Blob, filename: string, apiToken?: string | null): Promise<any> {
+  async saveProcessed(
+    blob: Blob,
+    filename: string,
+    apiToken?: string | null
+  ): Promise<any> {
+    const apiBaseUrl = resolveApiBaseUrl();
     if (!apiToken) {
       throw new Error('You must be logged in to save files');
     }
@@ -252,10 +275,10 @@ class PDFService {
 
     console.log('💾 Saving processed PDF with auth token...');
 
-    const response = await fetch(`${API_BASE_URL}/files/save-processed`, {
+    const response = await fetch(`${apiBaseUrl}/files/save-processed`, {
       method: 'POST',
       headers: authHeaders,
-      body: formData
+      body: formData,
     });
 
     if (!response.ok) {
@@ -276,11 +299,12 @@ class PDFService {
     filename: string = 'summary.pdf',
     apiToken?: string | null
   ): Promise<void> {
+    const apiBaseUrl = resolveApiBaseUrl();
     const isLoggedIn = !!apiToken;
     const authHeaders = this.getAuthHeaders(apiToken);
     const guestHeaders = await this.getGuestHeaders(isLoggedIn);
 
-    const response = await fetch(`${API_BASE_URL}/files/markdown-to-pdf`, {
+    const response = await fetch(`${apiBaseUrl}/files/markdown-to-pdf`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -292,7 +316,9 @@ class PDFService {
 
     if (!response.ok) {
       const error = await response.json().catch(() => null);
-      throw new Error(error?.detail || `Markdown PDF failed: ${response.status}`);
+      throw new Error(
+        error?.detail || `Markdown PDF failed: ${response.status}`
+      );
     }
 
     const blob = await response.blob();

@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { pdfService } from "@/services/pdfService";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { useState } from 'react';
+import { pdfService } from '@/services/pdfService';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 type Props = {
   markdown: string;
@@ -13,7 +13,7 @@ type Props = {
 
 export default function MarkdownViewer({
   markdown,
-  defaultPdfName = "summary.pdf",
+  defaultPdfName = 'summary.pdf',
   height,
 }: Props) {
   const [loading, setLoading] = useState(false);
@@ -25,26 +25,29 @@ export default function MarkdownViewer({
    * 2. Excess spaces after bullets/points (common in older or local LLM outputs).
    */
   const normalizeMarkdown = (text: string) => {
-    if (!text) return "";
-    
-    return text.split('\n').map(line => {
-      let l = line;
-      // Start with trimming to find bullet/number
-      const trimmed = l.trim();
-      
-      // Match bullet characters or numbered lists
-      if (/^[•\-*]\s+/.test(trimmed)) {
-        // Standardize to '*' and remove extra spaces
-        return trimmed.replace(/^[•\-*]\s+/, '* ');
-      }
-      
-      // Also handle numbered lists followed by excessive spaces (e.g., "1.    Text")
-      if (/^\d+\.\s+/.test(trimmed)) {
-        return trimmed.replace(/^(\d+\.)\s+/, '$1 ');
-      }
+    if (!text) return '';
 
-      return l; // Keep original line if no match
-    }).join('\n');
+    return text
+      .split('\n')
+      .map((line) => {
+        const l = line;
+        // Start with trimming to find bullet/number
+        const trimmed = l.trim();
+
+        // Match bullet characters or numbered lists
+        if (/^[•\-*]\s+/.test(trimmed)) {
+          // Standardize to '*' and remove extra spaces
+          return trimmed.replace(/^[•\-*]\s+/, '* ');
+        }
+
+        // Also handle numbered lists followed by excessive spaces (e.g., "1.    Text")
+        if (/^\d+\.\s+/.test(trimmed)) {
+          return trimmed.replace(/^(\d+\.)\s+/, '$1 ');
+        }
+
+        return l; // Keep original line if no match
+      })
+      .join('\n');
   };
 
   const processedMarkdown = normalizeMarkdown(markdown);
@@ -56,8 +59,8 @@ export default function MarkdownViewer({
       // PDF oluştur ve indir
       await pdfService.createPdfFromMarkdown(processedMarkdown, defaultPdfName);
     } catch (err: any) {
-      console.error("❌ PDF oluşturulamadı:", err);
-      setError("PDF oluşturulamadı. Lütfen tekrar deneyin.");
+      console.error('❌ PDF oluşturulamadı:', err);
+      setError('PDF oluşturulamadı. Lütfen tekrar deneyin.');
     } finally {
       setLoading(false);
     }
@@ -77,10 +80,10 @@ export default function MarkdownViewer({
       <div
         className="prose dark:prose-invert max-w-full p-4 rounded-xl border overflow-auto"
         style={{
-          height: height || "auto",
-          backgroundColor: "var(--background)",
-          borderColor: "var(--navbar-border)",
-          color: "var(--foreground)",
+          height: height || 'auto',
+          backgroundColor: 'var(--background)',
+          borderColor: 'var(--navbar-border)',
+          color: 'var(--foreground)',
         }}
       >
         <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -88,9 +91,7 @@ export default function MarkdownViewer({
         </ReactMarkdown>
       </div>
 
-      {error && (
-        <p className="text-sm text-red-500 mt-1">{error}</p>
-      )}
+      {error && <p className="text-sm text-red-500 mt-1">{error}</p>}
     </div>
   );
 }

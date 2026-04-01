@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import {
   createContext,
@@ -9,21 +9,21 @@ import {
   useReducer,
   useRef,
   ReactNode,
-} from "react";
-import { useSession } from "next-auth/react";
-import { toast } from "sonner";
+} from 'react';
+import { useSession } from 'next-auth/react';
+import { toast } from 'sonner';
 import {
   fetchChatSessions,
   fetchSessionMessages,
   resumeChatSession,
   fetchStoredPdfBlob,
   type ChatSessionListItem,
-} from "@/utils/api";
+} from '@/utils/api';
 
-const STORAGE_KEY = "activePdfBase64";
+const STORAGE_KEY = 'activePdfBase64';
 
 export type Message = {
-  role: "user" | "assistant";
+  role: 'user' | 'assistant';
   content: string;
 };
 
@@ -33,22 +33,20 @@ type PdfCoreState = {
 };
 
 type PdfAction =
-  | { type: "ADD_PDFS"; files: File[] }
-  | { type: "REMOVE"; fileName: string }
-  | { type: "SET_ACTIVE"; fileName: string }
-  | { type: "SAVE_PDF"; file: File | null }
-  | { type: "CLEAR" }
-  | { type: "HYDRATE"; file: File };
+  | { type: 'ADD_PDFS'; files: File[] }
+  | { type: 'REMOVE'; fileName: string }
+  | { type: 'SET_ACTIVE'; fileName: string }
+  | { type: 'SAVE_PDF'; file: File | null }
+  | { type: 'CLEAR' }
+  | { type: 'HYDRATE'; file: File };
 
 function isPdfFile(f: File): boolean {
-  return (
-    f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf")
-  );
+  return f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
 }
 
 function pdfReducer(state: PdfCoreState, action: PdfAction): PdfCoreState {
   switch (action.type) {
-    case "ADD_PDFS": {
+    case 'ADD_PDFS': {
       const candidates = action.files.filter(isPdfFile);
       const names = new Set(state.list.map((f) => f.name));
       const toAdd: File[] = [];
@@ -62,22 +60,24 @@ function pdfReducer(state: PdfCoreState, action: PdfAction): PdfCoreState {
       const active = state.active ?? list[0] ?? null;
       return { list, active };
     }
-    case "REMOVE": {
+    case 'REMOVE': {
       const list = state.list.filter((f) => f.name !== action.fileName);
       const active =
-        state.active?.name === action.fileName ? list[0] ?? null : state.active;
+        state.active?.name === action.fileName
+          ? (list[0] ?? null)
+          : state.active;
       return { list, active };
     }
-    case "SET_ACTIVE": {
+    case 'SET_ACTIVE': {
       const f = state.list.find((x) => x.name === action.fileName);
       if (!f) return state;
       return { ...state, active: f };
     }
-    case "SAVE_PDF": {
+    case 'SAVE_PDF': {
       if (!action.file) {
         return { list: [], active: null };
       }
-      if (typeof action.file.slice !== "function") {
+      if (typeof action.file.slice !== 'function') {
         return state;
       }
       const file = action.file;
@@ -88,9 +88,9 @@ function pdfReducer(state: PdfCoreState, action: PdfAction): PdfCoreState {
           : [...state.list, file];
       return { list, active: file };
     }
-    case "CLEAR":
+    case 'CLEAR':
       return { list: [], active: null };
-    case "HYDRATE":
+    case 'HYDRATE':
       return { list: [action.file], active: action.file };
     default:
       return state;
@@ -101,6 +101,7 @@ interface PdfContextType {
   pdfFile: File | null;
   pdfList: File[];
   savePdf: (file: File | null) => Promise<void>;
+  saveExistingPdf: (file: File, documentId: string) => Promise<void>;
   addPdfs: (files: File[]) => void;
   removePdf: (fileName: string) => void;
   setActivePdf: (fileName: string) => void;
@@ -125,6 +126,8 @@ interface PdfContextType {
   chatSessionsLoading: boolean;
   activeSessionDbId: string | null;
   setActiveSessionDbId: (id: string | null) => void;
+  existingDocumentId: string | null;
+  setExistingDocumentId: (id: string | null) => void;
   loadChatSessions: () => Promise<void>;
   restoreSession: (sessionDbId: string) => Promise<void>;
 }
@@ -156,23 +159,26 @@ export function PdfProvider({ children }: { children: ReactNode }) {
   const [activeSessionDbId, setActiveSessionDbId] = useState<string | null>(
     null
   );
+  const [existingDocumentId, setExistingDocumentId] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     try {
       const stored = sessionStorage.getItem(STORAGE_KEY);
       if (stored) {
-        const byteString = atob(stored.split(",")[1]);
+        const byteString = atob(stored.split(',')[1]);
         const array = new Uint8Array(byteString.length);
         for (let i = 0; i < byteString.length; i++)
           array[i] = byteString.charCodeAt(i);
-        const blob = new Blob([array], { type: "application/pdf" });
-        const file = new File([blob], "restored_document.pdf", {
-          type: "application/pdf",
+        const blob = new Blob([array], { type: 'application/pdf' });
+        const file = new File([blob], 'restored_document.pdf', {
+          type: 'application/pdf',
         });
-        dispatch({ type: "HYDRATE", file });
+        dispatch({ type: 'HYDRATE', file });
       }
     } catch (e) {
-      console.error("PDF kurtarma hatası:", e);
+      console.error('PDF kurtarma hatası:', e);
       sessionStorage.removeItem(STORAGE_KEY);
     } finally {
       setHydrated(true);
@@ -201,7 +207,7 @@ export function PdfProvider({ children }: { children: ReactNode }) {
   }, [pdfState.active, hydrated]);
 
   const loadChatSessions = useCallback(async () => {
-    if (authStatus !== "authenticated") {
+    if (authStatus !== 'authenticated') {
       setChatSessions([]);
       return;
     }
@@ -217,11 +223,12 @@ export function PdfProvider({ children }: { children: ReactNode }) {
   }, [authStatus]);
 
   useEffect(() => {
-    if (authStatus === "authenticated") {
+    if (authStatus === 'authenticated') {
       void loadChatSessions();
     } else {
       setChatSessions([]);
       setActiveSessionDbId(null);
+      setExistingDocumentId(null);
     }
   }, [authStatus, loadChatSessions]);
 
@@ -232,10 +239,10 @@ export function PdfProvider({ children }: { children: ReactNode }) {
         const ui: Message[] = (messages ?? [])
           .filter(
             (m) =>
-              (m.role === "user" || m.role === "assistant") && m.content != null
+              (m.role === 'user' || m.role === 'assistant') && m.content != null
           )
           .map((m) => ({
-            role: m.role as "user" | "assistant",
+            role: m.role as 'user' | 'assistant',
             content: String(m.content),
           }));
 
@@ -243,10 +250,10 @@ export function PdfProvider({ children }: { children: ReactNode }) {
 
         let chatUi = ui;
         if (chatUi.length === 0) {
-          const fn = resume.filename?.trim() || "document.pdf";
+          const fn = resume.filename?.trim() || 'document.pdf';
           chatUi = [
             {
-              role: "assistant",
+              role: 'assistant',
               content: `👋 Merhaba! **"${fn}"** dosyasını analiz ettim. Bana bu belgeyle ilgili her şeyi sorabilirsin.`,
             },
           ];
@@ -254,6 +261,7 @@ export function PdfProvider({ children }: { children: ReactNode }) {
         setChatMessages(chatUi);
         setSessionId(resume.session_id);
         setActiveSessionDbId(sessionDbId);
+        setExistingDocumentId(resume.pdf_id ?? null);
         setIsChatActive(true);
         setProChatOpen(false);
         setProChatPanelOpen(true);
@@ -262,25 +270,24 @@ export function PdfProvider({ children }: { children: ReactNode }) {
         if (resume.pdf_id) {
           try {
             const blob = await fetchStoredPdfBlob(resume.pdf_id);
-            let fname = resume.filename?.trim() || "document.pdf";
-            if (!fname.toLowerCase().endsWith(".pdf")) {
+            let fname = resume.filename?.trim() || 'document.pdf';
+            if (!fname.toLowerCase().endsWith('.pdf')) {
               fname = `${fname}.pdf`;
             }
-            const file = new File([blob], fname, { type: "application/pdf" });
-            dispatch({ type: "SAVE_PDF", file });
+            const file = new File([blob], fname, { type: 'application/pdf' });
+            dispatch({ type: 'SAVE_PDF', file });
           } catch (pdfErr) {
-            console.warn("Kayıtlı PDF yüklenemedi:", pdfErr);
+            console.warn('Kayıtlı PDF yüklenemedi:', pdfErr);
             toast.message(
-              "Sohbet yüklendi; PDF önizlemesi sunucudan alınamadı."
+              'Sohbet yüklendi; PDF önizlemesi sunucudan alınamadı.'
             );
           }
         }
 
         void loadChatSessions();
-        toast.success("Sohbet oturumu geri yüklendi.");
+        toast.success('Sohbet oturumu geri yüklendi.');
       } catch (e: unknown) {
-        const msg =
-          e instanceof Error ? e.message : "Oturum yüklenemedi.";
+        const msg = e instanceof Error ? e.message : 'Oturum yüklenemedi.';
         toast.error(msg);
       }
     },
@@ -290,44 +297,59 @@ export function PdfProvider({ children }: { children: ReactNode }) {
   const savePdf = useCallback((file: File | null) => {
     return new Promise<void>((resolve) => {
       if (!file) {
-        dispatch({ type: "CLEAR" });
+        dispatch({ type: 'CLEAR' });
         sessionStorage.removeItem(STORAGE_KEY);
         setIsChatActive(false);
         setChatMessages([]);
         setSessionId(null);
         setActiveSessionDbId(null);
+        setExistingDocumentId(null);
         setRefreshKey((k) => k + 1);
         resolve();
         return;
       }
-      if (typeof file.slice !== "function") {
+      if (typeof file.slice !== 'function') {
         resolve();
         return;
       }
-      dispatch({ type: "SAVE_PDF", file });
+      dispatch({ type: 'SAVE_PDF', file });
+      setExistingDocumentId(null);
+      resolve();
+    });
+  }, []);
+
+  const saveExistingPdf = useCallback((file: File, documentId: string) => {
+    return new Promise<void>((resolve) => {
+      if (typeof file.slice !== 'function') {
+        resolve();
+        return;
+      }
+      dispatch({ type: 'SAVE_PDF', file });
+      setExistingDocumentId(documentId);
       resolve();
     });
   }, []);
 
   const addPdfs = useCallback((files: File[]) => {
     if (!files.length) return;
-    dispatch({ type: "ADD_PDFS", files });
+    dispatch({ type: 'ADD_PDFS', files });
   }, []);
 
   const removePdf = useCallback((fileName: string) => {
-    dispatch({ type: "REMOVE", fileName });
+    dispatch({ type: 'REMOVE', fileName });
   }, []);
 
   const setActivePdf = useCallback((fileName: string) => {
-    dispatch({ type: "SET_ACTIVE", fileName });
+    dispatch({ type: 'SET_ACTIVE', fileName });
   }, []);
 
   const clearPdf = useCallback(() => {
-    dispatch({ type: "CLEAR" });
+    dispatch({ type: 'CLEAR' });
     setIsChatActive(false);
     setChatMessages([]);
     setSessionId(null);
     setActiveSessionDbId(null);
+    setExistingDocumentId(null);
     sessionStorage.removeItem(STORAGE_KEY);
     setRefreshKey((k) => k + 1);
   }, []);
@@ -338,6 +360,7 @@ export function PdfProvider({ children }: { children: ReactNode }) {
         pdfFile,
         pdfList,
         savePdf,
+        saveExistingPdf,
         addPdfs,
         removePdf,
         setActivePdf,
@@ -362,6 +385,8 @@ export function PdfProvider({ children }: { children: ReactNode }) {
         chatSessionsLoading,
         activeSessionDbId,
         setActiveSessionDbId,
+        existingDocumentId,
+        setExistingDocumentId,
         loadChatSessions,
         restoreSession,
       }}
@@ -373,6 +398,6 @@ export function PdfProvider({ children }: { children: ReactNode }) {
 
 export function usePdf() {
   const context = useContext(PdfContext);
-  if (!context) throw new Error("usePdf must be used within a PdfProvider");
+  if (!context) throw new Error('usePdf must be used within a PdfProvider');
   return context;
 }
