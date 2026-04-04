@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 from app.main import app
-from app.db import get_supabase
+from app.db import get_supabase, get_db
 
 client = TestClient(app)
 
@@ -15,17 +15,30 @@ def mock_supabase_client():
 
 @pytest.fixture
 def override_get_supabase():
+    """Supabase + DB: get_db() gerçek engine olmadan 503 verir; tüm auth API testlerinde mock'lanır."""
     mock_client = mock_supabase_client()
+    mock_session = MagicMock()
+
+    def _db():
+        yield mock_session
+
     app.dependency_overrides[get_supabase] = lambda: mock_client
+    app.dependency_overrides[get_db] = _db
     yield mock_client
     app.dependency_overrides.clear()
 
 
 class TestAuthEndpoints:
+    @patch("app.routers.auth.settings.USE_SUPABASE", True)
+    @patch("app.routers.auth.check_rate_limit", return_value=True)
     @patch("app.routers.auth.security.verify_password")
     @patch("app.routers.auth.security.create_jwt")
     def test_login_success_bcrypt(
-        self, mock_create_jwt, mock_verify_password, override_get_supabase
+        self,
+        mock_create_jwt,
+        mock_verify_password,
+        mock_check_rate_limit,
+        override_get_supabase,
     ):
         # Mocking auth record finding
         mock_auth_record = {
@@ -65,6 +78,7 @@ class TestAuthEndpoints:
         assert data["user_id"] == "123"
         assert data["email"] == "test@example.com"
 
+    @patch("app.routers.auth.settings.USE_SUPABASE", True)
     @patch("app.routers.auth.check_rate_limit")
     def test_login_invalid_credentials_user_not_found(
         self, mock_rate_limit, override_get_supabase
@@ -84,6 +98,7 @@ class TestAuthEndpoints:
         assert response.status_code == 401
         assert response.json()["detail"] == "Invalid credentials"
 
+    @patch("app.routers.auth.settings.USE_SUPABASE", True)
     @patch("app.routers.auth.check_rate_limit")
     @patch("app.routers.auth.security.verify_password")
     def test_login_invalid_credentials_wrong_password(

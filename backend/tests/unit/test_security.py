@@ -134,6 +134,15 @@ class TestJWT:
         assert isinstance(token, str)
         assert len(token) > 0
 
+    def test_create_jwt_accepts_sub_when_id_missing(self):
+        """conftest / helpers may pass sub instead of id (must not become string 'None')."""
+        import jwt
+        from app.config import settings
+
+        token = create_jwt({"sub": "uuid-abc", "email": "x@y.com"})
+        decoded = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
+        assert decoded["sub"] == "uuid-abc"
+
     def test_jwt_contains_required_fields(self):
         """Test that JWT contains required fields."""
         import jwt

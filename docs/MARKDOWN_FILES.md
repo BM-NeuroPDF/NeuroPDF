@@ -29,6 +29,30 @@ Bu doküman, NeuroPDF projesindeki Markdown dosyalarının konumunu, amacını v
 
 ---
 
+## AI Service dizini (`aiService/`)
+
+| Dosya | Açıklama | Ne zaman kullanılır |
+|-------|----------|---------------------|
+| **README.md** | LLM entegrasyonu (Gemini / Ollama), prompt mühendisliği ve RAG (ChromaDB) özet mimarisi; çalıştırma ve test girişi. | AI katmanı ve mikro servis davranışı. |
+
+---
+
+## Yük testleri (`load-tests/`)
+
+| Dosya | Açıklama | Ne zaman kullanılır |
+|-------|----------|---------------------|
+| **README.md** | k6 senaryosu: `GET /files/chat/sessions` üzerinden bağlantı havuzu davranışı; auth rate limit ile çakışmayı önleyen tek seferlik login (`setup`); aşamalı VU profili. | Stres testi tasarımı ve metrik yorumu. |
+
+---
+
+## Scripts dizini (`scripts/`)
+
+| Dosya | Açıklama | Ne zaman kullanılır |
+|-------|----------|---------------------|
+| **README.md** | Test/rapor betikleri; **veritabanı:** `bootstrap_local_db.sh` (Alembic + seed), `clone_schema.sh` / `clone_schema_from_image.sh` (şema klonlama); **k6:** `run_stress_test.sh`, `run_stress_test_json.sh` (NDJSON çıktı); **teslim:** `compile_report.sh` (birleşik Markdown raporu). | Operasyon ve akademik rapor üretimi. |
+
+---
+
 ## Dokümantasyon merkezi (`docs/`)
 
 ### Kök (`docs/`)
@@ -76,7 +100,7 @@ Bu doküman, NeuroPDF projesindeki Markdown dosyalarının konumunu, amacını v
 |-------|----------|
 | **frontend/README.md** | Frontend kurulum ve çalıştırma. |
 | **legal/README.md** | EULA referansları. |
-| **assets/** | Demo GIF vb. (ör. `demo.gif`). |
+| **assets/** | Statik varlıklar (örnek görseller, ek materyaller). |
 
 ---
 
@@ -90,4 +114,8 @@ Mimari                  → docs/architecture/ARCHITECTURE.md
 API & çıktı konumları   → docs/reference/
 CI, hook, Docker log    → docs/devops/
 Test strateji & script  → docs/testing/ (+ testing/reports/)
+AI Service özeti        → aiService/README.md
+Yük / stres testi       → load-tests/README.md
+Betikler (DB, k6, rapor)→ scripts/README.md
+Birleşik teslim raporu  → ./scripts/compile_report.sh → NeuroPDF_Final_Report.md
 ```

@@ -41,6 +41,11 @@ backend/htmlcov/
 aiService/htmlcov/
 frontend/coverage/
 frontend/playwright-report/
+load-tests/results.json
+load-tests/results.ndjson
+
+# Otomatik birleşik teslim raporu (./scripts/compile_report.sh); teslim öncesi üretilir, repoya genelde eklenmez
+NeuroPDF_Final_Report.md
 
 # === IDE / Config Folders ===
 .cursor/

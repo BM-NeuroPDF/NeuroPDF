@@ -219,9 +219,12 @@ export default function ProGlobalChat() {
   const [initializing, setInitializing] = useState(false);
   const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
   const [showProRequiredModal, setShowProRequiredModal] = useState(false);
+  const [isRoleLoading, setIsRoleLoading] = useState(true);
   const [typingAudio, setTypingAudio] = useState<HTMLAudioElement | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const isManuallyStopped = useRef(false);
+  const committedTranscriptRef = useRef('');
 
   // Yazıyor... sesi efekti (Loading sırasında döngüsel)
   useEffect(() => {
@@ -326,24 +329,54 @@ export default function ProGlobalChat() {
 
   useEffect(() => {
     const fetchUserRole = async () => {
-      if (status === 'authenticated' && session) {
+      // Auth hydrate tamamlanmadan role isteği atma.
+      if (status === 'loading' || status === 'unauthenticated') {
+        setIsRoleLoading(status === 'loading');
+        setUserRole(null);
+        return;
+      }
+      if (!session) {
+        setIsRoleLoading(false);
+        setUserRole(null);
+        return;
+      }
+
+      setIsRoleLoading(true);
+      // DB/proxy geç cevap verdiğinde ilk seferde başarısız olabiliyor.
+      // Pro yetkisi UI'da bir anda belirlenmediği için FAB tıklanınca modal açılabiliyor.
+      // Bu yüzden kısa retry ile userRole set'ini daha stabil hale getiriyoruz.
+      const maxAttempts = 3;
+      let attempt = 0;
+      while (attempt < maxAttempts) {
+        attempt += 1;
         try {
           const data = await sendRequest('/files/user/stats', 'GET');
           setUserRole(data?.role ?? null);
+          setIsRoleLoading(false);
+          return;
         } catch (error: unknown) {
           const msg =
             error && typeof error === 'object' && 'message' in error
               ? String((error as { message?: string }).message)
               : '';
-          if (
+          const isAuthExpired =
             msg.includes('Oturum süreniz dolmuş') ||
             msg.includes('expired') ||
-            msg.includes('401')
-          ) {
+            msg.includes('401');
+
+          if (isAuthExpired) {
             setUserRole(null);
-          } else {
-            console.error('Rol kontrolü hatası:', error);
+            setIsRoleLoading(false);
+            return;
           }
+
+          if (attempt < maxAttempts) {
+            await new Promise((r) => setTimeout(r, 1200));
+            continue;
+          }
+
+          console.error('Rol kontrolü hatası (retry bitti):', error);
+          setIsRoleLoading(false);
         }
       }
     };
@@ -391,22 +424,27 @@ export default function ProGlobalChat() {
     if (!SpeechRecognition) return;
 
     const recog = new SpeechRecognition();
-    recog.continuous = false;
-    recog.interimResults = false;
-    recog.lang = language === 'tr' ? 'tr-TR' : 'en-US';
+    const currentLang = language === 'tr' ? 'tr-TR' : 'en-US';
+    recog.continuous = true;
+    recog.interimResults = true;
+    recog.lang = currentLang || 'tr-TR';
 
     console.log('SpeechRecognition initialized for language:', recog.lang);
 
     recog.onstart = () => {
-      console.log('SpeechRecognition.onstart: Voice session started.');
+      console.log('🎤 Ses tanıma başladı (Dinleniyor...)');
+    };
+
+    recog.onaudiostart = () => {
+      console.log('🔊 Tarayıcı mikrofon sesini yakalamaya başladı.');
     };
 
     recog.onspeechstart = () => {
-      console.log('SpeechRecognition.onspeechstart: Speech detected.');
+      console.log('🗣️ Tarayıcı insan sesi (konuşma) tespit etti!');
     };
 
     recog.onspeechend = () => {
-      console.log('SpeechRecognition.onspeechend: Speech ended.');
+      console.log('🤐 Konuşma bittiği algılandı.');
     };
 
     recog.onsoundstart = () => {
@@ -417,23 +455,32 @@ export default function ProGlobalChat() {
 
     recog.onresult = (event: any) => {
       let finalTranscript = '';
+      let interimTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         if (event.results[i].isFinal) {
           finalTranscript += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
         }
       }
 
       if (finalTranscript) {
         console.log('SpeechRecognition.onresult (final):', finalTranscript);
-        setInput((prev) => {
-          const trimmed = prev.trim();
-          return trimmed ? trimmed + ' ' + finalTranscript : finalTranscript;
-        });
+        committedTranscriptRef.current =
+          `${committedTranscriptRef.current} ${finalTranscript}`.trim();
       }
+
+      if (interimTranscript) {
+        console.log('… interim transcript:', interimTranscript);
+      }
+
+      const merged =
+        `${committedTranscriptRef.current} ${interimTranscript}`.trim();
+      if (merged) setInput(merged);
     };
 
     recog.onerror = (event: any) => {
-      console.error('SpeechRecognition.onerror:', event.error);
+      console.error('❌ Ses Tanıma Hatası:', event.error);
       const errorMsg =
         event.error === 'no-speech'
           ? 'Ses algılanamadı, mikrofonu kontrol edin.'
@@ -446,8 +493,24 @@ export default function ProGlobalChat() {
       setIsRecording(false);
     };
 
+    recog.onnomatch = () => {
+      console.warn('❓ Ses duyuldu ama hiçbir kelimeyle eşleşmedi (no-match).');
+    };
+
     recog.onend = () => {
       console.log('SpeechRecognition.onend: Session ended cycle.');
+      if (!isManuallyStopped.current) {
+        try {
+          console.log('🔄 Bağlantı koptu, otomatik yeniden başlatılıyor...');
+          const restartLang = language === 'tr' ? 'tr-TR' : 'en-US';
+          recog.lang = restartLang || 'tr-TR';
+          recog.start();
+          setIsRecording(true);
+          return;
+        } catch (e) {
+          console.error('Auto-restart failed:', e);
+        }
+      }
       setIsRecording(false);
     };
 
@@ -457,8 +520,13 @@ export default function ProGlobalChat() {
     return () => {
       try {
         if (recognitionRef.current) {
+          isManuallyStopped.current = true;
           recognitionRef.current.stop();
           recognitionRef.current.onstart = null;
+          recognitionRef.current.onaudiostart = null;
+          recognitionRef.current.onspeechstart = null;
+          recognitionRef.current.onspeechend = null;
+          recognitionRef.current.onnomatch = null;
           recognitionRef.current.onresult = null;
           recognitionRef.current.onerror = null;
           recognitionRef.current.onend = null;
@@ -506,6 +574,7 @@ export default function ProGlobalChat() {
 
     if (isRecording) {
       console.log('Attempting to stop recording manually...');
+      isManuallyStopped.current = true;
       recognition.stop();
       setIsRecording(false);
     } else {
@@ -513,9 +582,16 @@ export default function ProGlobalChat() {
         const hasPermission = await ensureMicrophoneAccess();
         if (!hasPermission) return;
 
+        isManuallyStopped.current = false;
+        committedTranscriptRef.current = input.trim();
+        const currentLang = language === 'tr' ? 'tr-TR' : 'en-US';
+        recognition.lang = currentLang || 'tr-TR';
+        console.log('🌐 SpeechRecognition language set:', recognition.lang);
         console.log('Attempting to start recording (Single-Shot)...');
         recognition.stop();
         setTimeout(() => {
+          // Start öncesi dili her seferinde garanti et.
+          recognition.lang = currentLang || 'tr-TR';
           recognition.start();
           setIsRecording(true);
         }, 100);
@@ -578,6 +654,8 @@ export default function ProGlobalChat() {
       router.push('/pricing');
       return;
     }
+    // Session hydrate/role fetch tamamlanmadan modal açma.
+    if (isRoleLoading) return;
     if (!isProUser) {
       setShowProRequiredModal(true);
       return;
@@ -608,7 +686,10 @@ export default function ProGlobalChat() {
   const handleSend = async (messageOverride?: string) => {
     const userMsg = (messageOverride ?? input).trim();
     if (!userMsg || !activeSessionId) return;
-    if (isRecording && recognitionRef.current) recognitionRef.current.stop();
+    if (isRecording && recognitionRef.current) {
+      isManuallyStopped.current = true;
+      recognitionRef.current.stop();
+    }
     setInput('');
 
     if (isPdfChat) {

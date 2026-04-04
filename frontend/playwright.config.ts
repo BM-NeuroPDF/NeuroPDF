@@ -11,44 +11,87 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e/tests',
-  
+
   /* Global setup: Seed test user before running tests */
   // Manual user is used now, so global setup is disabled
   // globalSetup: './e2e/support/global-setup.mjs',
-  
+
   /* Only match test files in e2e directory */
   testMatch: /.*\.spec\.(ts|tsx|js|jsx)$/,
-  
+
   /* Run tests in files in parallel */
   fullyParallel: true,
-  
+
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
-  
+
   /* Retry on CI only - Fedora'da anlık takılmalar için retry ekle */
   retries: process.env.CI ? 2 : 2,
-  
+
   /* Global test timeout - Fedora'da LLM işlemleri için yeterli süre */
   timeout: 90000,
-  
+
   /* Opt out of parallel tests on CI. Fedora'da CPU darboğazını önlemek için worker sayısını düşür */
   workers: process.env.CI ? 1 : 2,
-  
+
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: 'html',
-  
+
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: 'http://localhost:3000',
+    baseURL: process.env.CI
+      ? 'http://localhost:3000'
+      : 'https://localhost:3000',
+    /* Local dev uses mkcert/self-signed cert on HTTPS. */
+    ignoreHTTPSErrors: !process.env.CI,
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
-    
   },
 
   /* Configure projects for major browsers */
   projects: [
+    {
+      name: 'Mobile (375p)',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 375, height: 812 },
+      },
+    },
+
+    {
+      name: 'Tablet (600p)',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 600, height: 900 },
+      },
+    },
+
+    {
+      name: 'Laptop (1366p)',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1366, height: 768 },
+      },
+    },
+
+    {
+      name: 'Desktop HD (720p)',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 720 },
+      },
+    },
+
+    {
+      name: 'Desktop FHD (1080p)',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1920, height: 1080 },
+      },
+    },
+
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
@@ -61,10 +104,10 @@ export default defineConfig({
 
     {
       name: 'webkit',
-      use: { 
+      use: {
         ...devices['Desktop Safari'],
         // Fedora kütüphane hatası nedeniyle Chromium üzerinden emüle ediyoruz
-        browserName: 'chromium' 
+        browserName: 'chromium',
       },
     },
 

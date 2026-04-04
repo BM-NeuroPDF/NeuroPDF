@@ -4,30 +4,41 @@ import bcrypt
 from datetime import datetime, timedelta, timezone
 from ..config import settings
 
+
 def hash_password(password: str) -> str:
     salt = bcrypt.gensalt()
-    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
         return bcrypt.checkpw(
-            plain_password.encode('utf-8'), 
-            hashed_password.encode('utf-8')
+            plain_password.encode("utf-8"), hashed_password.encode("utf-8")
         )
     except Exception:
         return False
 
+
 def validate_password_strength(password: str) -> tuple[bool, str]:
-    if len(password) < 8: return False, "Şifre en az 8 karakter olmalıdır"
-    if not re.search(r'[A-Z]', password): return False, "Şifre en az bir büyük harf içermelidir"
-    if not re.search(r'[a-z]', password): return False, "Şifre en az bir küçük harf içermelidir"
-    if not re.search(r'\d', password): return False, "Şifre en az bir rakam içermelidir"
+    if len(password) < 8:
+        return False, "Şifre en az 8 karakter olmalıdır"
+    if not re.search(r"[A-Z]", password):
+        return False, "Şifre en az bir büyük harf içermelidir"
+    if not re.search(r"[a-z]", password):
+        return False, "Şifre en az bir küçük harf içermelidir"
+    if not re.search(r"\d", password):
+        return False, "Şifre en az bir rakam içermelidir"
     return True, ""
+
 
 def create_jwt(user: dict) -> str:
     now = datetime.now(timezone.utc)
+    # auth router ve testler: "id"; bazı yardımcılar: "sub" — ikisini de destekle
+    subject = user.get("id")
+    if subject is None:
+        subject = user.get("sub")
     claims = {
-        "sub": str(user.get("id")),
+        "sub": str(subject) if subject is not None else "",
         "email": user.get("email"),
         "username": user.get("username"),
         "eula_accepted": user.get("eula_accepted", False),

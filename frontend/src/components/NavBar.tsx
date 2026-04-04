@@ -29,6 +29,14 @@ type NavLink = {
   variant?: 'default' | 'pro';
 };
 
+/** Pure helper — exported for unit tests (home `/` vs prefix routes). */
+export function isNavLinkActive(
+  pathname: string | null | undefined,
+  href: string
+): boolean {
+  return href === '/' ? pathname === '/' : Boolean(pathname?.startsWith(href));
+}
+
 export default function NavBar() {
   const pathname = usePathname();
   const { t } = useLanguage();
@@ -69,8 +77,7 @@ export default function NavBar() {
     },
   ];
 
-  const isActive = (href: string) =>
-    href === '/' ? pathname === '/' : pathname?.startsWith(href);
+  const isActive = (href: string) => isNavLinkActive(pathname, href);
 
   return (
     <header

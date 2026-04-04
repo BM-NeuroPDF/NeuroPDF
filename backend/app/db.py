@@ -56,12 +56,12 @@ def get_supabase() -> Client:
             raise
 
 
-# Global örnek
+# Global örnek (import sırasındaki isteğe bağlı başlatma; ayrıntılı test get_supabase ile)
 supabase = None
 if SUPABASE_URL and SUPABASE_KEY:
     try:
         supabase = get_supabase()
-    except Exception:
+    except Exception:  # pragma: no cover
         pass
 
 # =================================================
@@ -88,7 +88,29 @@ if SUPABASE_URL and SUPABASE_KEY:
 
 
 def build_db_url() -> str:
-    # Eğer DATABASE_URL tam olarak verilmişse onu kullan
+    use_supabase = os.getenv("USE_SUPABASE", "false").lower() == "true"
+
+    # Supabase ve Local arasında dinamik geçiş:
+    # Supabase kodlarını silmeden, env flag ile seçiyoruz.
+    if use_supabase:
+        if settings.SUPABASE_DATABASE_URL:
+            url = settings.SUPABASE_DATABASE_URL
+            if url.startswith("postgresql://") and not url.startswith(
+                "postgresql+psycopg2://"
+            ):
+                url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+            return url
+
+    else:
+        if settings.LOCAL_DATABASE_URL:
+            url = settings.LOCAL_DATABASE_URL
+            if url.startswith("postgresql://") and not url.startswith(
+                "postgresql+psycopg2://"
+            ):
+                url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+            return url
+
+    # Geriye dönük uyumluluk: Eğer DATABASE_URL tam olarak verilmişse onu kullan
     if settings.DATABASE_URL:
         # Pydantic-settings bazen tırnaklı karakterleri bozabilir, PostgreSQL için +psycopg2 ekle
         url = settings.DATABASE_URL
@@ -110,26 +132,49 @@ def build_db_url() -> str:
 
 
 try:
-    engine = create_engine(
-        build_db_url(),
-        pool_pre_ping=True,  # Her kullanımdan önce bağlantıyı kontrol et
-        pool_recycle=300,  # 5 dakikada bir bağlantıları yenile (Supabase için önerilen)
-        pool_size=5,  # Minimum bağlantı sayısı
-        max_overflow=10,  # Maksimum ekstra bağlantı sayısı
-        connect_args={
-            "connect_timeout": 30,  # Timeout'u 30 saniyeye çıkar
-            "sslmode": "require",  # SSL zorunlu
-            "keepalives": 1,  # TCP keepalive aktif
-            "keepalives_idle": 30,  # 30 saniye idle sonra keepalive gönder
-            "keepalives_interval": 10,  # Her 10 saniyede bir keepalive
-            "keepalives_count": 5,  # Maksimum 5 keepalive denemesi
-        },
-        # Lazy loading: Bağlantıyı ilk kullanımda kur
-        # Modül yüklenirken bağlantı kontrolü yapma
-        echo=False,  # SQL sorgularını loglama (production'da False)
-    )
+    use_supabase = os.getenv("USE_SUPABASE", "false").lower() == "true"
+    db_url = build_db_url()
+
+    if use_supabase:
+        # ESKİ SUPABASE AYARLARI korunuyor.
+        engine = create_engine(
+            db_url,
+            pool_pre_ping=True,
+            pool_recycle=300,
+            pool_size=5,
+            max_overflow=10,
+            pool_timeout=8,
+            connect_args={
+                "connect_timeout": 5,
+                "sslmode": "require",
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 5,
+            },
+            echo=False,
+        )
+    else:
+        # YENİ LOCAL DOCKER DB ayarları.
+        engine = create_engine(
+            db_url,
+            pool_pre_ping=True,
+            pool_recycle=300,
+            pool_size=5,
+            max_overflow=10,
+            pool_timeout=8,
+            connect_args={
+                "connect_timeout": 5,
+                "sslmode": "disable",
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 5,
+            },
+            echo=False,
+        )
     # Bağlantı kontrolünü kaldırdık - ilk kullanımda otomatik kurulacak
-except Exception as e:
+except Exception as e:  # pragma: no cover
     logger.warning(f"Database engine creation warning: {repr(e)}")
     # Engine oluşturulamazsa bile devam et, bağlantı kullanıldığında tekrar denenecek
     engine = None
@@ -137,7 +182,7 @@ except Exception as e:
 # Engine None olsa bile SessionLocal oluştur, kullanıldığında hata verecek
 if engine:
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-else:
+else:  # pragma: no cover
     # Fallback: Engine yoksa None döndürecek bir sessionmaker
     SessionLocal = None
 

@@ -1,7 +1,7 @@
 // src/hooks/useGuestLimit.ts
 
 import { useState, useCallback } from 'react';
-import { useSession } from "next-auth/react"; // ✅ EKLENDİ
+import { useSession } from 'next-auth/react'; // ✅ EKLENDİ
 import { guestService } from '@/services/guestService';
 
 interface UsageInfo {
@@ -13,8 +13,8 @@ interface UsageInfo {
 
 export function useGuestLimit() {
   // ✅ NextAuth session durumunu buradan dinliyoruz
-  const { data: session, status } = useSession(); 
-  
+  const { data: session, status } = useSession();
+
   const [usageInfo, setUsageInfo] = useState<UsageInfo | null>(null);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -25,38 +25,37 @@ export function useGuestLimit() {
    */
   const checkLimit = useCallback(async (): Promise<boolean> => {
     // 1. Durum: Session henüz yükleniyor (Loading)
-    // Beklemesi lazım, ama UI donmasın diye false dönüp işlemi durdurabiliriz 
+    // Beklemesi lazım, ama UI donmasın diye false dönüp işlemi durdurabiliriz
     // veya loading state'i yönetebiliriz. Şimdilik güvenli olan false dönmek.
-    if (status === "loading") {
-      return false; 
+    if (status === 'loading') {
+      return false;
     }
 
     // 2. Durum: Kullanıcı KESİN OLARAK giriş yapmış (Authenticated)
     // guestService'e hiç gitme, direkt izin ver.
-    if (status === "authenticated" || session) {
+    if (status === 'authenticated' || session) {
       return true;
     }
 
     // 3. Durum: Kullanıcı giriş yapmamış, Guest kontrolü yap (Unauthenticated)
     setLoading(true);
+    let allowed = true;
     try {
       const result = await guestService.checkUsage();
       setUsageInfo(result);
 
       if (!result.can_use) {
         setShowLimitModal(true);
-        return false;
+        allowed = false;
       }
-
-      return true;
     } catch (error) {
       console.error('Error checking guest limit:', error);
       // Hata durumunda (API çökükse vs.) kullanıcıyı engellemek yerine izin vermek
       // daha iyi bir UX olabilir, veya false dönüp hata gösterebilirsin.
-      return true; 
-    } finally {
-      setLoading(false);
+      allowed = true;
     }
+    setLoading(false);
+    return allowed;
   }, [session, status]); // ✅ Bağımlılıklara session ve status eklendi
 
   /**
@@ -80,6 +79,6 @@ export function useGuestLimit() {
     loading,
     checkLimit,
     closeLimitModal,
-    redirectToLogin
+    redirectToLogin,
   };
 }

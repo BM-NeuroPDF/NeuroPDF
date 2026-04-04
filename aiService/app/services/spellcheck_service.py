@@ -1,29 +1,5 @@
-import re
-import nltk
-import zeyrek
+"""Geriye dönük uyumluluk: asıl uygulama text_cleaner içindedir."""
 
-# Docker içinde NLTK verileri eksikse indir
-try:
-    nltk.data.find("tokenizers/punkt")
-except LookupError:
-    nltk.download("punkt")
+from .text_cleaner import detect_unknown_words
 
-print("Zeyrek (MorphAnalyzer) yükleniyor... Lütfen bekleyin.")
-analyzer = zeyrek.MorphAnalyzer()
-print("Zeyrek yüklendi!")
-
-def detect_unknown_words(text: str) -> list[str]:
-    if not text:
-        return []
-
-    words = re.findall(r"\b[a-zA-ZçÇğĞıİöÖşŞüÜ]+\b", text)
-
-    unknown = []
-    for word in words:
-        if len(word) < 2:
-            continue
-        results = analyzer.analyze(word.lower())
-        if not results:
-            unknown.append(word)
-
-    return sorted(set(unknown))
+__all__ = ["detect_unknown_words"]

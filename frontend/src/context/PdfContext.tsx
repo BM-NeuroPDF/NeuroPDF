@@ -44,7 +44,10 @@ function isPdfFile(f: File): boolean {
   return f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
 }
 
-function pdfReducer(state: PdfCoreState, action: PdfAction): PdfCoreState {
+export function pdfReducer(
+  state: PdfCoreState,
+  action: PdfAction
+): PdfCoreState {
   switch (action.type) {
     case 'ADD_PDFS': {
       const candidates = action.files.filter(isPdfFile);

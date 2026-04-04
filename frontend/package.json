@@ -10,7 +10,9 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:desktop": "playwright test --project='Desktop HD (720p)' --project='Desktop FHD (1080p)'",
+    "test:e2e:responsive": "playwright test --project='Mobile (375p)' --project='Tablet (600p)' --project='Laptop (1366p)' --project='Desktop FHD (1080p)'"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

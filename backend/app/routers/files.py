@@ -25,6 +25,7 @@ import os
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError, PendingRollbackError
 
 # --- Config & DB ---
 from ..config import settings
@@ -51,6 +52,13 @@ from ..models import UserStatsResponse, User
 import logging
 
 logger = logging.getLogger(__name__)
+DB_UNAVAILABLE_DETAIL = "Database connection temporarily unavailable. Please try again."
+
+
+def _raise_db_unavailable(exc: Exception) -> None:
+    logger.error("Database connection failure in files router: %s", exc, exc_info=True)
+    raise HTTPException(status_code=503, detail=DB_UNAVAILABLE_DETAIL) from exc
+
 
 # --- ReportLab Importları (PDF Oluşturma İçin) ---
 from reportlab.lib.pagesizes import A4
@@ -1053,6 +1061,8 @@ async def start_chat_from_text(
                 out["db_session_id"] = db_row.id
             return out
 
+    except (OperationalError, PendingRollbackError) as e:
+        _raise_db_unavailable(e)
     except HTTPException:
         raise
     except Exception as e:
@@ -1076,6 +1086,13 @@ async def start_chat_session(
     """
     PDF'i veritabanına kaydeder, metnini çıkarır ve AI Service sohbet oturumunu
     pdf_id / user_id ile başlatır (sayfa ayıklama aracı için).
+
+    Legacy not (Supabase kodunu kaybetmemek için):
+    Aşağıdaki eski akış tamamen silinmedi, yorumda korunuyor:
+    # files = {"file": (file.filename, file_content, "application/pdf")}
+    # target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/start"
+    # params = {"llm_provider": llm_provider}
+    # response = await client.post(target_url, files=files, params=params, headers=headers, timeout=60.0)
     """
     print(f"\n--- CHAT START (Dosya: {file.filename}) ---")
 
@@ -1152,6 +1169,8 @@ async def start_chat_session(
                 "db_session_id": db_row.id,
             }
 
+    except (OperationalError, PendingRollbackError) as e:
+        _raise_db_unavailable(e)
     except HTTPException:
         raise
     except Exception as e:
@@ -1280,24 +1299,27 @@ async def list_pdf_chat_sessions(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    user_id = current_user.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Oturum gerekli.")
-    rows = list_user_chat_sessions(db, user_id)
-    return {
-        "sessions": [
-            {
-                "id": r.id,
-                "session_id": r.ai_session_id,
-                "pdf_name": r.filename,
-                "title": r.filename,
-                "pdf_id": r.pdf_id,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
-            }
-            for r in rows
-        ]
-    }
+    try:
+        user_id = current_user.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Oturum gerekli.")
+        rows = list_user_chat_sessions(db, user_id)
+        return {
+            "sessions": [
+                {
+                    "id": r.id,
+                    "session_id": r.ai_session_id,
+                    "pdf_name": r.filename,
+                    "title": r.filename,
+                    "pdf_id": r.pdf_id,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                    "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                }
+                for r in rows
+            ]
+        }
+    except (OperationalError, PendingRollbackError) as e:
+        _raise_db_unavailable(e)
 
 
 @router.get("/chat/sessions/{session_db_id}/messages")
@@ -1306,23 +1328,26 @@ async def get_pdf_chat_session_messages(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    user_id = current_user.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Oturum gerekli.")
-    session = get_chat_session_by_db_id(db, session_db_id, user_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Oturum bulunamadı.")
-    msgs = get_session_messages_ordered(db, session_db_id, user_id)
-    return {
-        "messages": [
-            {
-                "role": m.role,
-                "content": m.content,
-                "created_at": m.created_at.isoformat() if m.created_at else None,
-            }
-            for m in msgs
-        ],
-    }
+    try:
+        user_id = current_user.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Oturum gerekli.")
+        session = get_chat_session_by_db_id(db, session_db_id, user_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Oturum bulunamadı.")
+        msgs = get_session_messages_ordered(db, session_db_id, user_id)
+        return {
+            "messages": [
+                {
+                    "role": m.role,
+                    "content": m.content,
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
+                }
+                for m in msgs
+            ],
+        }
+    except (OperationalError, PendingRollbackError) as e:
+        _raise_db_unavailable(e)
 
 
 @router.post("/chat/sessions/{session_db_id}/resume")
@@ -1331,41 +1356,41 @@ async def resume_pdf_chat_session(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    user_id = current_user.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Oturum gerekli.")
-    session = get_chat_session_by_db_id(db, session_db_id, user_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Oturum bulunamadı.")
-
-    pdf_text = ""
-    if session.pdf_id:
-        pdf_row = get_pdf_from_db(db, session.pdf_id, user_id)
-        if pdf_row:
-            pdf_text = _extract_text_from_pdf_bytes(pdf_row.pdf_data)
-    if not pdf_text.strip() and session.context_text:
-        pdf_text = session.context_text or ""
-    if not pdf_text.strip():
-        raise HTTPException(
-            status_code=410,
-            detail="Bu oturum için PDF metni artık kullanılamıyor. Belge silinmiş veya metin saklanmamış olabilir.",
-        )
-
-    msgs = get_session_messages_ordered(db, session_db_id, user_id)
-    history = history_for_ai_restore(msgs)
-
-    payload = {
-        "session_id": session.ai_session_id,
-        "pdf_text": pdf_text,
-        "filename": session.filename,
-        "history": history,
-        "llm_provider": session.llm_provider,
-        "mode": session.mode,
-        "pdf_id": session.pdf_id,
-        "user_id": user_id,
-    }
-
     try:
+        user_id = current_user.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Oturum gerekli.")
+        session = get_chat_session_by_db_id(db, session_db_id, user_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Oturum bulunamadı.")
+
+        pdf_text = ""
+        if session.pdf_id:
+            pdf_row = get_pdf_from_db(db, session.pdf_id, user_id)
+            if pdf_row:
+                pdf_text = _extract_text_from_pdf_bytes(pdf_row.pdf_data)
+        if not pdf_text.strip() and session.context_text:
+            pdf_text = session.context_text or ""
+        if not pdf_text.strip():
+            raise HTTPException(
+                status_code=410,
+                detail="Bu oturum için PDF metni artık kullanılamıyor. Belge silinmiş veya metin saklanmamış olabilir.",
+            )
+
+        msgs = get_session_messages_ordered(db, session_db_id, user_id)
+        history = history_for_ai_restore(msgs)
+
+        payload = {
+            "session_id": session.ai_session_id,
+            "pdf_text": pdf_text,
+            "filename": session.filename,
+            "history": history,
+            "llm_provider": session.llm_provider,
+            "mode": session.mode,
+            "pdf_id": session.pdf_id,
+            "user_id": user_id,
+        }
+
         async with httpx.AsyncClient(timeout=60.0) as client:
             target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/restore-session"
             headers = get_ai_service_headers()
@@ -1379,6 +1404,8 @@ async def resume_pdf_chat_session(
                 raise HTTPException(
                     status_code=502, detail=f"AI oturum yükleme hatası: {detail}"
                 )
+    except (OperationalError, PendingRollbackError) as e:
+        _raise_db_unavailable(e)
     except HTTPException:
         raise
     except Exception as e:
@@ -2338,6 +2365,7 @@ async def reorder_pdf(
 async def get_user_stats(
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_supabase),
+    db: Session = Depends(get_db),
 ):
     """Giriş yapmış kullanıcının istatistiklerini ve rolünü (Standart, Pro, Admin) getirir."""
     try:
@@ -2345,53 +2373,79 @@ async def get_user_stats(
         if not user_id:
             raise HTTPException(status_code=401, detail="User ID not found")
 
-        # 1. İstatistikleri Çek (user_stats tablosu)
         summary_count = 0
         tools_count = 0
-
-        stats_response = (
-            supabase.table("user_stats")
-            .select("summary_count,tools_count")
-            .eq("user_id", user_id)
-            .execute()
-        )
-
-        if stats_response.data:
-            summary_count = stats_response.data[0].get("summary_count", 0)
-            tools_count = stats_response.data[0].get("tools_count", 0)
-
-        # 2. Rol Bilgisini Çek
-        # Varsayılan rol "Standart" olsun
         role_name_db = "default user"
 
-        try:
-            # users tablosundan role_id'yi bulup, user_roles tablosundan ismini alıyoruz.
-            # Not: Supabase'de Foreign Key kuruluysa şu sorgu çalışır:
-            user_response = (
-                supabase.table("users")
-                .select("user_roles(name)")
-                .eq("id", user_id)
+        if settings.USE_SUPABASE:
+            # 1. İstatistikleri Çek (user_stats tablosu)
+            stats_response = (
+                supabase.table("user_stats")
+                .select("summary_count,tools_count")
+                .eq("user_id", user_id)
                 .execute()
             )
 
-            # Gelen veri yapısı genellikle şöyledir: [{'user_roles': {'name': 'pro user'}}]
-            if user_response.data:
-                user_data = user_response.data[0]
+            if stats_response.data:
+                summary_count = stats_response.data[0].get("summary_count", 0)
+                tools_count = stats_response.data[0].get("tools_count", 0)
 
-                # İlişkili veri obje olarak gelebilir
-                if user_data.get("user_roles"):
-                    roles_data = user_data["user_roles"]
+            # 2. Rol Bilgisini Çek
+            try:
+                user_response = (
+                    supabase.table("users")
+                    .select("user_roles(name)")
+                    .eq("id", user_id)
+                    .execute()
+                )
+                if user_response.data:
+                    user_data = user_response.data[0]
+                    if user_data.get("user_roles"):
+                        roles_data = user_data["user_roles"]
+                        if isinstance(roles_data, list) and len(roles_data) > 0:
+                            role_name_db = roles_data[0].get("name", "default user")
+                        elif isinstance(roles_data, dict):
+                            role_name_db = roles_data.get("name", "default user")
+            except Exception as role_error:
+                print(f"⚠️ Rol çekilemedi, varsayılan atandı: {role_error}")
+        else:
+            stats_row = (
+                db.execute(
+                    text(
+                        """
+                    SELECT summary_count, tools_count
+                    FROM user_stats
+                    WHERE user_id = :user_id
+                    LIMIT 1
+                    """
+                    ),
+                    {"user_id": user_id},
+                )
+                .mappings()
+                .first()
+            )
+            if stats_row:
+                summary_count = int(stats_row.get("summary_count", 0) or 0)
+                tools_count = int(stats_row.get("tools_count", 0) or 0)
 
-                    # Eğer liste ise ilkini al
-                    if isinstance(roles_data, list) and len(roles_data) > 0:
-                        role_name_db = roles_data[0].get("name", "default user")
-                    # Eğer sözlük (dict) ise direkt al
-                    elif isinstance(roles_data, dict):
-                        role_name_db = roles_data.get("name", "default user")
-
-        except Exception as role_error:
-            print(f"⚠️ Rol çekilemedi, varsayılan atandı: {role_error}")
-            # Hata olursa 'default user' olarak kalsın
+            role_row = (
+                db.execute(
+                    text(
+                        """
+                    SELECT ur.name AS role_name
+                    FROM users u
+                    LEFT JOIN user_roles ur ON ur.id = u.role_id
+                    WHERE u.id = :user_id
+                    LIMIT 1
+                    """
+                    ),
+                    {"user_id": user_id},
+                )
+                .mappings()
+                .first()
+            )
+            if role_row and role_row.get("role_name"):
+                role_name_db = str(role_row["role_name"])
 
         # Veritabanındaki rol adını frontend'e uygun formata çevir
         role_name_lower = role_name_db.lower() if role_name_db else ""

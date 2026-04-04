@@ -1,5 +1,8 @@
 import { getSession, signOut } from 'next-auth/react';
 
+const TEMP_DB_ERROR_MESSAGE =
+  'Veritabanı bağlantısı geçici olarak sağlanamadı. Lütfen birkaç saniye sonra tekrar deneyin.';
+
 const resolveBaseUrl = (): string => {
   const envBase = (process.env.NEXT_PUBLIC_API_URL ?? '').trim();
   const isHttpsBrowser =
@@ -40,10 +43,22 @@ export const sendRequest = async (
   isFileUpload: boolean = false
 ) => {
   const baseUrl = resolveBaseUrl();
-  // Chat mesajında rewrite proxy timeout'una takılmamak için
-  // her durumda App Router proxy route'unu kullan.
-  const normalizedEndpoint =
-    endpoint === '/files/chat/message' ? '/api/proxy/chat/message' : endpoint;
+  // Chat akışlarında rewrite kaynaklı ECONNRESET'i azaltmak için
+  // dahili App Router proxy rotalarını kullan.
+  const normalizedEndpoint = (() => {
+    if (endpoint === '/files/chat/message') return '/api/proxy/chat/message';
+    if (endpoint === '/files/chat/start') return '/api/proxy/chat/start';
+    if (endpoint === '/files/chat/general/start')
+      return '/api/proxy/chat/general/start';
+    if (endpoint === '/files/chat/sessions') return '/api/proxy/chat/sessions';
+    if (endpoint.startsWith('/files/chat/sessions/')) {
+      return endpoint.replace(
+        '/files/chat/sessions',
+        '/api/proxy/chat/sessions'
+      );
+    }
+    return endpoint;
+  })();
 
   // 1. KRİTİK ADIM: Token'ı Session'dan (Cookie'den) Çek
   // getSession() fonksiyonu NextAuth cookie'sini çözer ve veriyi getirir.
@@ -101,6 +116,10 @@ export const sendRequest = async (
         throw new Error('Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
       }
 
+      if (response.status === 503 || response.status === 504) {
+        throw new Error(TEMP_DB_ERROR_MESSAGE);
+      }
+
       const errorData = await response.json().catch(() => ({}));
 
       let errorMessage = `Hata: ${response.status}`;
@@ -132,6 +151,29 @@ export const sendRequest = async (
       error.message.includes('Oturum süreniz dolmuş')
     ) {
       throw error; // Yönlendirme yapıldı, hata mesajını fırlat ama loglama
+    }
+
+    if (error instanceof TypeError) {
+      const lowered = (error.message || '').toLowerCase();
+      if (
+        lowered.includes('fetch failed') ||
+        lowered.includes('econnreset') ||
+        lowered.includes('socket hang up') ||
+        lowered.includes('networkerror')
+      ) {
+        throw new Error(TEMP_DB_ERROR_MESSAGE);
+      }
+    }
+
+    if (error instanceof Error) {
+      const lowered = error.message.toLowerCase();
+      if (
+        lowered.includes('econnreset') ||
+        lowered.includes('socket hang up') ||
+        lowered.includes('fetch failed')
+      ) {
+        throw new Error(TEMP_DB_ERROR_MESSAGE);
+      }
     }
     console.error('API İsteği Hatası:', error);
     throw error;

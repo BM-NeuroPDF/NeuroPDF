@@ -9,9 +9,14 @@
 ![Prettier](https://img.shields.io/badge/Prettier-F7B93E?logo=prettier&logoColor=black)
 ![Ruff](https://img.shields.io/badge/Ruff-D7FF64?logo=ruff&logoColor=black)
 
-![NeuroPDF Demo](docs/assets/demo.gif)
+## Özellikler özeti
 
-> *Demo GIF:* `docs/assets/demo.gif` dosyasını eklediğinizde önizleme burada görünür.
+| Özellik | Açıklama |
+|---------|----------|
+| **Responsive UI** | Next.js, Tailwind CSS ve Framer Motion ile modern, mobil ve masaüstüne uyumlu arayüz |
+| **AI sohbet** | Oturum bazlı sohbet, uzun süreli hafıza (PostgreSQL) ve ajan / araç yönlendirmesi |
+| **PDF analizi** | Özetleme, çeviri, sayfa işlemleri; ağır bilişsel iş AI Service’te, hafif işlemler istemcide |
+| **Çok katmanlı güvenlik & QA** | JWT, rate limit, Husky, Pytest, Vitest, Playwright ve CI ile sürekli doğrulama |
 
 ---
 

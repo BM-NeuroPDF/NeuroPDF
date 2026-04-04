@@ -328,6 +328,31 @@ describe('NavBar', () => {
     });
   });
 
+  describe('Mobile summarize link', () => {
+    it('applies gold border when summarize is inactive', async () => {
+      vi.mocked(usePathname).mockReturnValue('/upload');
+      const user = userEvent.setup();
+      const { container } = renderWithProvider(<NavBar />);
+      await user.click(screen.getByLabelText(/Menüyü aç|Open menu/i));
+      const link = container.querySelector(
+        'a[href="/summarize-pdf"]'
+      ) as HTMLAnchorElement;
+      expect(link.className).toMatch(/yellow/);
+    });
+
+    it('applies active styles when on summarize route', async () => {
+      vi.mocked(usePathname).mockReturnValue('/summarize-pdf');
+      const user = userEvent.setup();
+      const { container } = renderWithProvider(<NavBar />);
+      await user.click(screen.getByLabelText(/Menüyü aç|Open menu/i));
+      const mobileNav = container.querySelector('.lg\\:hidden.py-4');
+      const link = mobileNav?.querySelector(
+        'a[href="/summarize-pdf"]'
+      ) as HTMLAnchorElement;
+      expect(link.className).toMatch(/button-bg|shadow-sm/);
+    });
+  });
+
   describe('Authenticated State', () => {
     it('should show user info when authenticated', () => {
       vi.mocked(useSession).mockReturnValue({

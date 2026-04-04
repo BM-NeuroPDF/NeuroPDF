@@ -1,4 +1,24 @@
 services:
+  db:
+    image: postgres:15-alpine
+    container_name: neuropdf_db
+    restart: always
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: neuropdf_local
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d neuropdf_local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_network
+
   # 1. Redis
   redis_cache:
     image: redis:7-alpine
@@ -30,6 +50,8 @@ services:
     env_file:
       - ./backend/.env
     depends_on:
+      db:
+        condition: service_healthy
       redis_cache:
         condition: service_healthy
     restart: unless-stopped
@@ -123,6 +145,7 @@ services:
 
 # --- VOLUMES ---
 volumes:
+  postgres_data:
   shared_uploads:
   ollama_storage:        # UNCOMMENTED THIS
   frontend_node_modules: # Matches the name in frontend service

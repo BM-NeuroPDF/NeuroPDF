@@ -1,9 +1,9 @@
 """
 Global pytest configuration and fixtures for backend tests.
 
-- test_db: Session with transaction rollback (never commits to DB; real DB untouched).
-- Test DB is separate (TEST_DB_NAME / test_db); Alembic runs against it in session setup.
-- Optional deps (e.g. pypdf) are checked at session start; tests can skip if missing.
+- Entegrasyon: USE_SUPABASE=false, varsayılan DB adı neuropdf_test, şema SQLAlchemy create_all / drop_all.
+- test_db / db_session: transaction rollback ile izolasyon (çoğu test).
+- Optional deps (e.g. pypdf): skipif yalnızca paket yoksa.
 """
 
 import os
@@ -13,14 +13,14 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.engine import URL
 from fastapi.testclient import TestClient
 from unittest.mock import MagicMock
-import subprocess
-import sys
 from typing import Generator
 
-# Set test environment before importing app modules
+# Ortam: Supabase kapalı; gerçek Postgres URL'si TEST_DB_* / DB_* ile (varsayılan DB: neuropdf_test)
+os.environ["USE_SUPABASE"] = "false"
+os.environ.setdefault("TEST_DB_NAME", "neuropdf_test")
 os.environ["ENVIRONMENT"] = "test"
 
-from app.db import get_db, get_supabase
+from app.db import get_db, get_supabase, Base
 from app.main import app
 from app.models import (
     User,
@@ -78,7 +78,7 @@ def build_test_db_url() -> URL:
     password = os.getenv("TEST_DB_PASSWORD") or os.getenv("DB_PASSWORD", "")
     host = os.getenv("TEST_DB_HOST") or os.getenv("DB_HOST", "localhost")
     port = os.getenv("TEST_DB_PORT") or os.getenv("DB_PORT", "5432")
-    name = os.getenv("TEST_DB_NAME", "test_db")
+    name = os.getenv("TEST_DB_NAME", "neuropdf_test")
     sslmode = os.getenv("TEST_DB_SSLMODE") or os.getenv("DB_SSLMODE", "disable")
 
     return URL.create(
@@ -90,45 +90,6 @@ def build_test_db_url() -> URL:
         database=name,
         query={"sslmode": sslmode},
     )
-
-
-def run_alembic_migrations():
-    """Run Alembic migrations on test database."""
-    test_db_url = build_test_db_url()
-
-    # Temporarily set environment variables for Alembic
-    original_env = {}
-    env_vars_to_set = {
-        "DB_USER": test_db_url.username,
-        "DB_PASSWORD": test_db_url.password or "",
-        "DB_HOST": test_db_url.host,
-        "DB_PORT": str(test_db_url.port),
-        "DB_NAME": test_db_url.database,
-        "DB_SSLMODE": test_db_url.query.get("sslmode", "disable"),
-    }
-
-    for key, value in env_vars_to_set.items():
-        original_env[key] = os.environ.get(key)
-        os.environ[key] = value
-
-    try:
-        # Run Alembic upgrade
-        result = subprocess.run(
-            [sys.executable, "-m", "alembic", "upgrade", "head"],
-            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            print(f"Alembic migration error: {result.stderr}")
-            raise RuntimeError(f"Failed to run migrations: {result.stderr}")
-    finally:
-        # Restore original environment
-        for key, original_value in original_env.items():
-            if original_value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = original_value
 
 
 def create_test_database():
@@ -171,21 +132,17 @@ def create_test_database():
 
 @pytest.fixture(scope="session")
 def test_db_engine():
-    """Create test database engine (session-scoped). Skips if test DB unreachable."""
+    """
+    Session-scoped engine: neuropdf_test veritabanı, tablolar create_all ile kurulur,
+    oturum sonunda drop_all (Alembic yerine; entegrasyon için yeterli şema).
+    Bağlantı yoksa test fail (skip yok).
+    """
     try:
         create_test_database()
     except Exception as e:
-        pytest.skip(
-            f"Could not create test database (is PostgreSQL running?): {e}. "
-            "Set TEST_DB_NAME/test_db or create DB manually."
-        )
-
-    try:
-        run_alembic_migrations()
-    except Exception as e:
-        pytest.skip(
-            f"Alembic migrations failed on test DB: {e}. "
-            "Check TEST_DB_* / DB_* and that test_db exists."
+        pytest.fail(
+            f"PostgreSQL gerekli — test veritabanı oluşturulamadı: {e}. "
+            "Örn: docker compose up db veya TEST_DB_* değişkenlerini ayarlayın."
         )
 
     test_db_url = build_test_db_url()
@@ -196,16 +153,23 @@ def test_db_engine():
             pool_recycle=300,
             echo=False,
         )
-        # Verify connection
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
     except Exception as e:
-        pytest.skip(
-            f"Test DB connection failed: {e}. "
-            "Start PostgreSQL, create test_db, or set TEST_DB_*."
+        pytest.fail(
+            f"PostgreSQL bağlantısı başarısız: {e}. "
+            "Yerel DB çalışıyor mu ve TEST_DB_HOST/PORT/USER/PASSWORD doğru mu?"
         )
 
+    # Tüm model tablolarını metadata'ya yükle
+    import app.models  # noqa: F401, F403
+
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+
     yield engine
+
+    Base.metadata.drop_all(engine)
     engine.dispose()
 
 
@@ -229,20 +193,26 @@ def test_db_session(test_db_engine) -> Generator[Session, None, None]:
 
 
 @pytest.fixture(scope="function")
-def test_db(test_db_session: Session) -> Generator[Session, None, None]:
-    """
-    Test database session with base data (LLMChoice, UserRole) seeded in the same
-    transaction. Use this when tests need DB; no commits, rollback at teardown.
-    """
-    ensure_base_data(test_db_session)
+def db_session(test_db_session) -> Generator[Session, None, None]:
+    """Entegrasyon testleri için test_db_session ile aynı oturum (alias)."""
     yield test_db_session
 
 
 @pytest.fixture(scope="function")
-def clean_db(test_db_session: Session):
+def test_db(db_session: Session) -> Generator[Session, None, None]:
+    """
+    Test database session with base data (LLMChoice, UserRole) seeded in the same
+    transaction. Use this when tests need DB; no commits, rollback at teardown.
+    """
+    ensure_base_data(db_session)
+    yield db_session
+
+
+@pytest.fixture(scope="function")
+def clean_db(db_session: Session):
     """Alias: ensure base data in session. Prefer test_db for rollback-only isolation."""
-    ensure_base_data(test_db_session)
-    yield test_db_session
+    ensure_base_data(db_session)
+    yield db_session
 
 
 def ensure_base_data(session: Session) -> None:

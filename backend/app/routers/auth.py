@@ -1,14 +1,17 @@
 import logging
 import hashlib
+import uuid
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import PlainTextResponse
 from supabase import Client
+from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from ..core import security
 from ..schemas import auth as auth_schemas
 from ..services import auth_service
 from ..utils import helpers
-from ..db import get_supabase
+from ..db import get_supabase, get_db
 from ..deps import get_current_user as get_current_user_dep
 from ..rate_limit import check_rate_limit
 from ..config import settings
@@ -108,6 +111,7 @@ def register_user(
     request: Request,
     payload: auth_schemas.RegisterIn,
     supabase: Client = Depends(get_supabase),
+    db: Session = Depends(get_db),
 ):
     if not check_rate_limit(
         request, "auth:register", settings.RATE_LIMIT_AUTH_PER_MINUTE, 60
@@ -119,76 +123,167 @@ def register_user(
             status_code=400, detail="EULA must be accepted to register."
         )
 
-    # Username check (users table)
-    username_check = (
-        supabase.table("users").select("id").eq("username", payload.username).execute()
-    )
-    if username_check.data:
+    if settings.USE_SUPABASE:
+        # Username check (users table)
+        username_check = (
+            supabase.table("users")
+            .select("id")
+            .eq("username", payload.username)
+            .execute()
+        )
+        if username_check.data:
+            raise HTTPException(status_code=400, detail="Username already taken")
+
+        # Email check (user_auth table)
+        email_check = (
+            supabase.table("user_auth")
+            .select("user_id")
+            .eq("provider_key", payload.email)
+            .execute()
+        )
+        if email_check.data:
+            raise HTTPException(status_code=400, detail="Email already taken")
+
+        hashed = security.hash_password(payload.password)
+        new_id = str(uuid.uuid4())
+
+        # 1. Create User
+        user_insert = {
+            "id": new_id,
+            "username": payload.username,
+            "llm_choice_id": 2,
+            "role_id": 1,
+        }
+        user_response = supabase.table("users").insert(user_insert).execute()
+        if not user_response.data:
+            raise HTTPException(status_code=500, detail="Failed to create user")
+
+        user = user_response.data[0]
+
+        # 2. Create Auth Record
+        auth_insert = {
+            "user_id": new_id,
+            "provider": "local",
+            "provider_key": payload.email,
+            "password_hash": hashed,
+        }
+        supabase.table("user_auth").insert(auth_insert).execute()
+
+        # 3. Create Settings Record
+        settings_insert = {
+            "user_id": new_id,
+            "eula_accepted": True,
+            "active_avatar_url": None,  # Avatar create_user_avatar tarafından oluşturulacak
+        }
+        supabase.table("user_settings").insert(settings_insert).execute()
+
+        # 4. Create Stats Record
+        stats_insert = {"user_id": new_id, "summary_count": 0, "tools_count": 0}
+        supabase.table("user_stats").insert(stats_insert).execute()
+
+        try:
+            auth_service.create_user_avatar(new_id, payload.username)
+        except Exception as e:
+            logger.warning(f"Avatar creation failed (non-critical): {e}")
+
+        jwt_user = {**user, "email": payload.email, "eula_accepted": True}
+        token = security.create_jwt(jwt_user)
+
+        return {
+            "message": "User registered successfully",
+            "user_id": new_id,
+            "access_token": token,
+            "token_type": "bearer",
+            "created_at": user.get("created_at"),
+        }
+
+    # Local SQLAlchemy / raw SQL branch
+    username_exists = db.execute(
+        text("SELECT 1 FROM users WHERE username = :username LIMIT 1"),
+        {"username": payload.username},
+    ).first()
+    if username_exists:
         raise HTTPException(status_code=400, detail="Username already taken")
 
-    # Email check (user_auth table)
-    email_check = (
-        supabase.table("user_auth")
-        .select("user_id")
-        .eq("provider_key", payload.email)
-        .execute()
-    )
-    if email_check.data:
+    email_exists = db.execute(
+        text(
+            """
+            SELECT 1 FROM user_auth
+            WHERE provider = 'local' AND provider_key = :email
+            LIMIT 1
+            """
+        ),
+        {"email": payload.email},
+    ).first()
+    if email_exists:
         raise HTTPException(status_code=400, detail="Email already taken")
 
     hashed = security.hash_password(payload.password)
-    import uuid
-
     new_id = str(uuid.uuid4())
 
-    # 1. Create User
-    user_insert = {
-        "id": new_id,
-        "username": payload.username,
-        "llm_choice_id": 2,
-        "role_id": 1,
-    }
-    user_response = supabase.table("users").insert(user_insert).execute()
-    if not user_response.data:
-        raise HTTPException(status_code=500, detail="Failed to create user")
-
-    user = user_response.data[0]
-
-    # 2. Create Auth Record
-    auth_insert = {
-        "user_id": new_id,
-        "provider": "local",
-        "provider_key": payload.email,
-        "password_hash": hashed,
-    }
-    supabase.table("user_auth").insert(auth_insert).execute()
-
-    # 3. Create Settings Record
-    settings_insert = {
-        "user_id": new_id,
-        "eula_accepted": True,
-        "active_avatar_url": None,  # Avatar create_user_avatar tarafından oluşturulacak
-    }
-    supabase.table("user_settings").insert(settings_insert).execute()
-
-    # 4. Create Stats Record
-    stats_insert = {"user_id": new_id, "summary_count": 0, "tools_count": 0}
-    supabase.table("user_stats").insert(stats_insert).execute()
+    try:
+        db.execute(
+            text(
+                """
+                INSERT INTO users (id, username, llm_choice_id, role_id)
+                VALUES (:id, :username, 2, 1)
+                """
+            ),
+            {"id": new_id, "username": payload.username},
+        )
+        db.execute(
+            text(
+                """
+                INSERT INTO user_auth (user_id, provider, provider_key, password_hash)
+                VALUES (:user_id, 'local', :email, :password_hash)
+                """
+            ),
+            {"user_id": new_id, "email": payload.email, "password_hash": hashed},
+        )
+        db.execute(
+            text(
+                """
+                INSERT INTO user_settings (user_id, eula_accepted, active_avatar_url)
+                VALUES (:user_id, true, NULL)
+                """
+            ),
+            {"user_id": new_id},
+        )
+        db.execute(
+            text(
+                """
+                INSERT INTO user_stats (user_id, summary_count, tools_count)
+                VALUES (:user_id, 0, 0)
+                ON CONFLICT (user_id) DO NOTHING
+                """
+            ),
+            {"user_id": new_id},
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
     try:
         auth_service.create_user_avatar(new_id, payload.username)
     except Exception as e:
         logger.warning(f"Avatar creation failed (non-critical): {e}")
 
-    jwt_user = {**user, "email": payload.email, "eula_accepted": True}
-    token = security.create_jwt(jwt_user)
+    token = security.create_jwt(
+        {
+            "id": new_id,
+            "username": payload.username,
+            "email": payload.email,
+            "eula_accepted": True,
+        }
+    )
 
     return {
         "message": "User registered successfully",
         "user_id": new_id,
         "access_token": token,
         "token_type": "bearer",
-        "created_at": user.get("created_at"),
+        "created_at": None,
     }
 
 
@@ -197,6 +292,7 @@ def login(
     request: Request,
     payload: auth_schemas.LoginIn,
     supabase: Client = Depends(get_supabase),
+    db: Session = Depends(get_db),
 ):
     from ..security_logger import (
         log_failed_login,
@@ -214,60 +310,134 @@ def login(
         )
         raise HTTPException(status_code=429, detail="Too many requests")
 
-    # 1. Buls auth records (email = provider_key in local strategy)
-    auth_res = (
-        supabase.table("user_auth")
-        .select("*")
-        .eq("provider_key", payload.email)
-        .eq("provider", "local")
-        .execute()
-    )
-    if not auth_res.data:
-        log_failed_login(
-            email=payload.email,
-            ip_address=request.client.host if request.client else None,
-            request=request,
+    if settings.USE_SUPABASE:
+        # 1. Find auth records (email = provider_key in local strategy)
+        auth_res = (
+            supabase.table("user_auth")
+            .select("*")
+            .eq("provider_key", payload.email)
+            .eq("provider", "local")
+            .execute()
         )
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        if not auth_res.data:
+            log_failed_login(
+                email=payload.email,
+                ip_address=request.client.host if request.client else None,
+                request=request,
+            )
+            raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    auth_record = auth_res.data[0]
-    user_id = auth_record["user_id"]
-    stored_pw = auth_record.get("password_hash")
+        auth_record = auth_res.data[0]
+        user_id = auth_record["user_id"]
+        stored_pw = auth_record.get("password_hash")
 
-    # 2. Check password
-    is_valid = False
-    if stored_pw and stored_pw.startswith("$2b$"):
-        is_valid = security.verify_password(payload.password, stored_pw)
-    elif stored_pw:
-        if hashlib.sha256(payload.password.encode()).hexdigest() == stored_pw:
-            is_valid = True
-            supabase.table("user_auth").update(
-                {"password_hash": security.hash_password(payload.password)}
-            ).eq("id", auth_record["id"]).execute()
+        # 2. Check password
+        is_valid = False
+        if stored_pw and stored_pw.startswith("$2b$"):
+            is_valid = security.verify_password(payload.password, stored_pw)
+        elif stored_pw:
+            if hashlib.sha256(payload.password.encode()).hexdigest() == stored_pw:
+                is_valid = True
+                supabase.table("user_auth").update(
+                    {"password_hash": security.hash_password(payload.password)}
+                ).eq("id", auth_record["id"]).execute()
 
-    if not is_valid:
-        log_failed_login(
-            email=payload.email,
-            ip_address=request.client.host if request.client else None,
-            request=request,
+        if not is_valid:
+            log_failed_login(
+                email=payload.email,
+                ip_address=request.client.host if request.client else None,
+                request=request,
+            )
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+
+        # 3. Get user & settings for payload
+        user_res = supabase.table("users").select("*").eq("id", user_id).execute()
+        user = user_res.data[0] if user_res.data else {}
+
+        settings_res = (
+            supabase.table("user_settings")
+            .select("eula_accepted")
+            .eq("user_id", user_id)
+            .execute()
         )
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        eula_accepted = (
+            settings_res.data[0]["eula_accepted"] if settings_res.data else False
+        )
+        jwt_user = {**user, "email": payload.email, "eula_accepted": eula_accepted}
+    else:
+        auth_row = (
+            db.execute(
+                text(
+                    """
+                SELECT id, user_id, password_hash
+                FROM user_auth
+                WHERE provider = 'local' AND provider_key = :email
+                ORDER BY id DESC
+                LIMIT 1
+                """
+                ),
+                {"email": payload.email},
+            )
+            .mappings()
+            .first()
+        )
+        if not auth_row:
+            log_failed_login(
+                email=payload.email,
+                ip_address=request.client.host if request.client else None,
+                request=request,
+            )
+            raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # 3. Get user & settings for payload
-    user_res = supabase.table("users").select("*").eq("id", user_id).execute()
-    user = user_res.data[0] if user_res.data else {}
+        user_id = auth_row["user_id"]
+        stored_pw = auth_row["password_hash"]
+        is_valid = False
+        if stored_pw and stored_pw.startswith("$2b$"):
+            is_valid = security.verify_password(payload.password, stored_pw)
+        elif stored_pw:
+            if hashlib.sha256(payload.password.encode()).hexdigest() == stored_pw:
+                is_valid = True
+                db.execute(
+                    text("UPDATE user_auth SET password_hash = :pw WHERE id = :id"),
+                    {
+                        "pw": security.hash_password(payload.password),
+                        "id": auth_row["id"],
+                    },
+                )
+                db.commit()
 
-    settings_res = (
-        supabase.table("user_settings")
-        .select("eula_accepted")
-        .eq("user_id", user_id)
-        .execute()
-    )
-    eula_accepted = (
-        settings_res.data[0]["eula_accepted"] if settings_res.data else False
-    )
+        if not is_valid:
+            log_failed_login(
+                email=payload.email,
+                ip_address=request.client.host if request.client else None,
+                request=request,
+            )
+            raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    jwt_user = {**user, "email": payload.email, "eula_accepted": eula_accepted}
+        user_row = (
+            db.execute(
+                text("SELECT id, username FROM users WHERE id = :user_id"),
+                {"user_id": user_id},
+            )
+            .mappings()
+            .first()
+        )
+        settings_row = (
+            db.execute(
+                text(
+                    "SELECT eula_accepted FROM user_settings WHERE user_id = :user_id LIMIT 1"
+                ),
+                {"user_id": user_id},
+            )
+            .mappings()
+            .first()
+        )
+        eula_accepted = bool(settings_row["eula_accepted"]) if settings_row else False
+        user = {
+            "id": user_id,
+            "username": user_row["username"] if user_row else None,
+        }
+        jwt_user = {**user, "email": payload.email, "eula_accepted": eula_accepted}
 
     # Log successful login
     log_successful_login(

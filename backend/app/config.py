@@ -7,6 +7,7 @@ import logging
 # Sadece kritik hataları görmek için yapılandırma
 logger = logging.getLogger(__name__)
 
+
 class Settings(BaseSettings):
     # --- API Configuration ---
     API_NAME: str = os.getenv("API_NAME", "PDF Project API")
@@ -22,6 +23,9 @@ class Settings(BaseSettings):
     # --- Supabase Configuration ---
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+    USE_SUPABASE: bool = os.getenv("USE_SUPABASE", "false").lower() == "true"
+    SUPABASE_DATABASE_URL: Optional[str] = os.getenv("SUPABASE_DATABASE_URL")
+    LOCAL_DATABASE_URL: Optional[str] = os.getenv("LOCAL_DATABASE_URL")
 
     # --- Redis Configuration ---
     REDIS_URL: Optional[str] = os.getenv("REDIS_URL")
@@ -34,7 +38,9 @@ class Settings(BaseSettings):
     AI_SERVICE_API_KEY: Optional[str] = os.getenv("AI_SERVICE_API_KEY", "")
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
     XAI_API_KEY: Optional[str] = os.getenv("XAI_API_KEY")
-    HUGGINGFACE_API_KEY: Optional[str] = os.getenv("HUGGINGFACE_API_KEY", "")  # Opsiyonel, rate limit için önerilir
+    HUGGINGFACE_API_KEY: Optional[str] = os.getenv(
+        "HUGGINGFACE_API_KEY", ""
+    )  # Opsiyonel, rate limit için önerilir
 
     # --- User & File Limits ---
     MAX_GUEST_USAGE: int = int(os.getenv("MAX_GUEST_USAGE", "3"))
@@ -67,11 +73,11 @@ class Settings(BaseSettings):
             except Exception:
                 pass
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def validate_production_settings(self):
         """Validate critical settings in production environment"""
         env = os.getenv("ENVIRONMENT", "development").lower()
-        
+
         # JWT_SECRET validation
         if self.JWT_SECRET == "fallback_secret_change_this":
             if env in ["production", "prod"]:
@@ -79,7 +85,7 @@ class Settings(BaseSettings):
                     "JWT_SECRET must be set to a secure value in production! "
                     "Do not use the default fallback secret."
                 )
-        
+
         # Production environment variable validation
         if env in ["production", "prod"]:
             required_vars = [
@@ -88,14 +94,14 @@ class Settings(BaseSettings):
                 "SUPABASE_KEY",
                 "DB_USER",
                 "DB_PASSWORD",
-                "DB_HOST"
+                "DB_HOST",
             ]
             missing = [var for var in required_vars if not os.getenv(var)]
             if missing:
                 raise RuntimeError(
                     f"Missing required environment variables in production: {', '.join(missing)}"
                 )
-        
+
         return self
 
     model_config = SettingsConfigDict(
@@ -103,7 +109,8 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         env_prefix="",
         case_sensitive=False,
-        extra="ignore"
+        extra="ignore",
     )
+
 
 settings = Settings()

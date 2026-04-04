@@ -1,11 +1,13 @@
 [run]
 source = app
-omit = 
+omit =
     */tests/*
     */test_*.py
     */__pycache__/*
     */venv/*
     */env/*
+    app/config.py
+    app/main.py
 
 [report]
 exclude_lines =
@@ -22,6 +24,7 @@ exclude_lines =
 precision = 2
 show_missing = True
 skip_covered = False
+fail_under = 100
 
 [html]
 directory = htmlcov

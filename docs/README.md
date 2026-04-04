@@ -14,7 +14,7 @@ Tüm proje dokümanları bu ağaç altında toplanır. Kurulum ve ürün özeti 
 | **[testing/](testing/)** | Test stratejisi, script rehberi, `reports/` altında arşiv raporlar, backend/frontend rehberleri |
 | **[frontend/](frontend/)** | Frontend kurulum ve çalıştırma notları |
 | **[legal/](legal/)** | EULA ve yasal metinlere referans |
-| **[assets/](assets/)** | Demo GIF vb. statik varlıklar (ör. `demo.gif`) |
+| **[assets/](assets/)** | Statik varlıklar (örnek görseller, ek materyaller) |
 
 Kök `docs/` altında yalnızca bu indeks ve [MARKDOWN_FILES.md](MARKDOWN_FILES.md) (tüm `.md` envanteri) bulunur; teknik belgeler yukarıdaki alt klasörlerde gruplanmıştır.
 
@@ -33,6 +33,7 @@ Kök `docs/` altında yalnızca bu indeks ve [MARKDOWN_FILES.md](MARKDOWN_FILES.
 | Husky / lint-staged | [devops/PRE_COMMIT.md](devops/PRE_COMMIT.md) |
 | Docker’da auth ve loglar | [devops/docker-auth-and-logging.md](devops/docker-auth-and-logging.md) |
 | Tüm `.md` dosya rehberi | [MARKDOWN_FILES.md](MARKDOWN_FILES.md) |
+| Birleşik teslim raporu | Proje kökünde `./scripts/compile_report.sh` → `NeuroPDF_Final_Report.md` |
 
 ---
 

@@ -2,16 +2,16 @@
 """
 RAG (Retrieval-Augmented Generation) service using ChromaDB.
 Stores PDF/document chunks with embeddings and supports similarity search.
+
+chromadb yalnızca RAGStore / build_rag_store_for_tests kullanıldığında import edilir;
+chunk_text ve deterministik embedding testleri chromadb olmadan çalışabilir.
 """
+
 from __future__ import annotations
 
 import hashlib
 import re
 from typing import Any, Optional
-
-import chromadb
-from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
-
 
 # Default embedding dimension (ChromaDB compatible)
 DEFAULT_EMBEDDING_DIM = 384
@@ -21,18 +21,19 @@ DEFAULT_CHUNK_SIZE = 512
 DEFAULT_CHUNK_OVERLAP = 64
 
 
-class DeterministicEmbeddingFunction(EmbeddingFunction[Documents]):
+class DeterministicEmbeddingFunction:
     """
     Deterministic embedding for tests and offline use.
     Same text always produces the same vector; similar texts produce similar vectors
     (by sharing hash prefixes). No API cost.
+    ChromaDB embedding_function arayüzüyle uyumlu callable.
     """
 
     def __init__(self, dimension: int = DEFAULT_EMBEDDING_DIM):
         self.dimension = dimension
 
-    def __call__(self, input: Documents) -> Embeddings:
-        return [_text_to_vector(t) for t in input]
+    def __call__(self, input: list[str]) -> list[list[float]]:  # noqa: A002
+        return [_text_to_vector(t, self.dimension) for t in input]
 
     def _embed(self, text: str) -> list[float]:
         return _text_to_vector(text, self.dimension)
@@ -68,7 +69,7 @@ def chunk_text(
 
     chunks = []
     # Prefer splitting on sentence boundaries
-    sentences = re.split(r'(?<=[.!?\n])\s+', text)
+    sentences = re.split(r"(?<=[.!?\n])\s+", text)
     current = []
     current_len = 0
 
@@ -97,10 +98,17 @@ class RAGStore:
     def __init__(
         self,
         client: Optional[Any] = None,
-        embedding_function: Optional[EmbeddingFunction] = None,
+        embedding_function: Optional[Any] = None,
     ):
-        self._client = client or chromadb.EphemeralClient()
-        self._embedding_function = embedding_function or DeterministicEmbeddingFunction()
+        if client is None:
+            import chromadb  # noqa: PLC0415
+
+            self._client = chromadb.EphemeralClient()
+        else:
+            self._client = client
+        self._embedding_function = (
+            embedding_function or DeterministicEmbeddingFunction()
+        )
 
     def get_or_create_collection(self, name: str):
         return self._client.get_or_create_collection(
@@ -153,6 +161,8 @@ class RAGStore:
 
 def build_rag_store_for_tests() -> RAGStore:
     """In-memory RAG store with deterministic embeddings (no API)."""
+    import chromadb  # noqa: PLC0415
+
     return RAGStore(
         client=chromadb.EphemeralClient(),
         embedding_function=DeterministicEmbeddingFunction(),

@@ -87,8 +87,6 @@ test.describe('Chat History E2E', () => {
 
       await route.continue();
     });
-
-    await page.setViewportSize({ width: 1280, height: 800 });
   });
 
   test('lists mocked sessions on sidebar and restores chat on click', async ({

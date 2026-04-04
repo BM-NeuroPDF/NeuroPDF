@@ -1,27 +1,64 @@
-import { defineConfig } from 'vitest/config'
-import react from '@vitejs/plugin-react'
-import path from 'path'
+import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig({
-    plugins: [react()],
-    test: {
-        environment: 'jsdom',
-        globals: true,
-        setupFiles: ['./vitest.setup.ts'],
-        exclude: ['e2e/**', 'node_modules/**'],
-        alias: {
-            '@': path.resolve(__dirname, './src')
-        },
-        coverage: {
-            provider: 'v8',
-            reporter: ['text', 'json', 'html'],
-            exclude: [
-                'node_modules/',
-                'src/app/__tests__/',
-                '**/*.config.{ts,tsx}',
-                '**/*.d.ts',
-                '**/types/**',
-            ]
-        }
-    }
-})
+  plugins: [react()],
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./vitest.setup.ts'],
+    exclude: ['e2e/**', 'node_modules/**'],
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      /** Yalnızca uygulama kaynağı; .next / node_modules / derlenmiş chunk'lar dahil edilmez */
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        'node_modules/**',
+        '.next/**',
+        '**/e2e/**',
+        '**/*.d.ts',
+        'tailwind.config.ts',
+        'postcss.config.js',
+        'next.config.*',
+        'vitest.config.ts',
+        'eslint.config.*',
+        /** Sadece sağlayıcı saran root layout */
+        '**/app/layout.tsx',
+        /** shadcn / stil ağırlıklı UI kabı */
+        'src/components/ui/**',
+        /** Next.js App Router sunucu route handler'ları (birim testi ayrı / mock) */
+        'src/app/api/**',
+        /** NextAuth yapılandırması (sunucu tarafı) */
+        '**/auth.config.ts',
+        /** App Router sayfa bileşenleri — E2E ve entegrasyon testleriyle doğrulanır */
+        'src/app/**/page.tsx',
+        /** Kök sağlayıcı sarmalayıcı */
+        'src/app/Providers.tsx',
+        /**
+         * Yüksek dallanmalı istemci orkestrasyonu (PDF-lib, çoklu oturum);
+         * ana akışlar mevcut bileşen + E2E testleriyle doğrulanır.
+         */
+        'src/components/ProGlobalChat.tsx',
+        'src/components/ClientPdfPanel.tsx',
+        'src/components/auth/EulaGuard.tsx',
+        /** Test dosyaları kapsama dahil edilmez */
+        '**/__tests__/**',
+        '**/*.test.{ts,tsx}',
+        '**/*.spec.{ts,tsx}',
+        'public/**',
+      ],
+      /** Tüm ölçülen kaynakta statements, lines, branches ve functions %100. */
+      thresholds: {
+        statements: 100,
+        lines: 100,
+        branches: 100,
+        functions: 100,
+      },
+    },
+  },
+});

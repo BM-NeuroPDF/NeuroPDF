@@ -91,6 +91,17 @@ export default function MarkdownViewer({
         </ReactMarkdown>
       </div>
 
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={handleDownloadPdf}
+          disabled={loading}
+          className="text-sm px-3 py-1.5 rounded-lg border border-[var(--navbar-border)] hover:opacity-90 disabled:opacity-50"
+        >
+          {loading ? '…' : 'PDF indir'}
+        </button>
+      </div>
+
       {error && <p className="text-sm text-red-500 mt-1">{error}</p>}
     </div>
   );
