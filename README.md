@@ -84,7 +84,7 @@ Sohbet oturumları **PostgreSQL** üzerinde saklanır; şema evrimi **Alembic** 
 
 | Bileşen | Not |
 |---------|-----|
-| Node.js | 20+ |
+| Node.js | 22+ |
 | Python | 3.13 önerilir (backend Dockerfile ile uyumlu) |
 | PostgreSQL | 14+ (yerel veya Supabase) |
 | Redis | Cache, rate limit, Celery broker |

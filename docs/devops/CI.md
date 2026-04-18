@@ -5,8 +5,8 @@
 The file [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs on **push** and **pull_request** to **`main`**:
 
 1. **`backend-tests`** — Python 3.13, PostgreSQL 16 service, pytest in `backend/tests` and `aiService/tests` (separate venvs per project).
-2. **`frontend-unit-tests`** — Node 20, `npm install`, `npm run test:run` (Vitest).
-3. **`e2e-tests`** — Depends on both jobs above; Node 20, Playwright Chromium, `npm run build`, then `npx playwright test --project=chromium`. Uploads **`playwright-report`** as an artifact on every run (`if: always()`).
+2. **`frontend-unit-tests`** — Node 22, `npm install`, `npm run test:run` (Vitest).
+3. **`e2e-tests`** — Depends on both jobs above; Node 22, Playwright Chromium, `npm run build`, then `npx playwright test --project=chromium`. Uploads **`playwright-report`** as an artifact on every run (`if: always()`).
 
 ## E2E job and `continue-on-error`
 
