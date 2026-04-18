@@ -10,6 +10,21 @@ type LoginOptions = {
 const defaultBackendUrl =
   process.env.BACKEND_API_URL || 'http://localhost:8000';
 
+function resolveOtpCodeForEmail(email: string): string | null {
+  const normalized = email
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '_');
+  const scopedKey = `E2E_OTP_CODE_${normalized}`;
+  const scopedValue = process.env[scopedKey]?.trim();
+  if (scopedValue) return scopedValue;
+
+  const genericValue = process.env.E2E_OTP_CODE?.trim();
+  if (genericValue) return genericValue;
+
+  return null;
+}
+
 async function ensureUserSeeded(page: Page, user: E2ETestUser): Promise<void> {
   // Önce login ile kullanıcı var mı kontrol et; 429 olursa exponential backoff ile retry et.
   const maxSeedAttempts = 4;
@@ -172,7 +187,9 @@ export async function login(
     options.username || email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_');
   const user: E2ETestUser = { email, password, username };
 
-  if (options.seedUser !== false) {
+  const seedUserEnabledByEnv =
+    (process.env.E2E_SEED_USER || 'true').toLowerCase() !== 'false';
+  if (options.seedUser !== false && seedUserEnabledByEnv) {
     await ensureUserSeeded(page, user);
   }
 
@@ -205,7 +222,16 @@ export async function login(
     .then(() => true)
     .catch(() => false);
   if (otpStepVisible) {
-    const code = process.env.E2E_OTP_CODE || '123456';
+    const code = resolveOtpCodeForEmail(email);
+    if (!code) {
+      throw new Error(
+        `OTP step detected for ${email} but no OTP code is configured. ` +
+          `Set E2E_OTP_CODE or E2E_OTP_CODE_${email
+            .trim()
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '_')} in your environment.`
+      );
+    }
     const otpField = page.locator('input[inputmode="numeric"]').first();
     await otpField.fill(code);
     await page

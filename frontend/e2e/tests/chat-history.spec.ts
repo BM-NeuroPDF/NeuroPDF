@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { login } from '../support/helpers';
 
-const TEST_EMAIL = 'test1@gmail.com';
-const TEST_PASSWORD = 'Test1234.';
+const TEST_EMAIL = process.env.E2E_TEST_EMAIL || 'test1@gmail.com';
+const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD || 'Test1234.';
 
 /** Backend ile uyumlu: GET /files/chat/sessions */
 const MOCK_SESSIONS_BODY = {

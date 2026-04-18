@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { login, logout } from '../support/helpers';
 
-const TEST_EMAIL = 'test1@gmail.com';
-const TEST_PASSWORD = 'Test1234.';
+const TEST_EMAIL = process.env.E2E_TEST_EMAIL || 'test1@gmail.com';
+const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD || 'Test1234.';
 
 test.describe('Authentication Flow', () => {
   test('user can login', async ({ page }) => {
@@ -49,12 +49,10 @@ test.describe('Authentication Flow', () => {
     await page.click('button[type="submit"]');
 
     // Wait for error popup
-    const errorPopup = page
-      .locator('.fixed.top-6.right-6')
-      .filter({
-        hasText:
-          /CredentialsSignin|Invalid credentials|Geçersiz|Giriş yapılamadı|Kod geçersiz|Invalid or expired code/i,
-      });
+    const errorPopup = page.locator('.fixed.top-6.right-6').filter({
+      hasText:
+        /CredentialsSignin|Invalid credentials|Geçersiz|Giriş yapılamadı|Kod geçersiz|Invalid or expired code/i,
+    });
     await expect(errorPopup.first()).toBeVisible({ timeout: 10000 });
 
     // Verify we're still on login page

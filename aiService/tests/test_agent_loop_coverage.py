@@ -73,7 +73,7 @@ def test_normalize_plain_string():
 
 
 def test_run_with_tools_cloud_no_tool_calls():
-    def cg(text, instr, mode):
+    def cg(text, instr, mode, language="tr", **_kwargs):
         return "düz cevap"
 
     def lg(u, i, h):
@@ -97,7 +97,7 @@ def test_run_with_tools_cloud_no_tool_calls():
 def test_run_with_tools_cloud_with_tool_second_turn(mock_disp):
     state = {"n": 0}
 
-    def cg(text, instr, mode):
+    def cg(text, instr, mode, language="tr", **_kwargs):
         state["n"] += 1
         if state["n"] == 1:
             return '<tool_call>{"name": "clear_pdfs", "args": {}}</tool_call>'
@@ -125,7 +125,7 @@ def test_run_with_tools_cloud_with_tool_second_turn(mock_disp):
 def test_run_with_tools_local_with_tool(mock_disp):
     state = {"n": 0}
 
-    def cg(text, instr, mode):
+    def cg(text, instr, mode, language="tr", **_kwargs):
         return "cloud"
 
     def lg(u, i, h):
@@ -147,3 +147,35 @@ def test_run_with_tools_local_with_tool(mock_disp):
     )
     assert "ikinci" in ans
     assert acts == [{"type": "A"}]
+
+
+@patch("app.core.tools.agent_loop._dispatch_one")
+def test_run_with_tools_local_language_en_second_turn(mock_disp):
+    """English follow-up prompts for local provider after a tool call (agent_loop 116–123)."""
+    state = {"n": 0}
+
+    def cg(text, instr, mode, language="tr", **_kwargs):
+        return "unused"
+
+    def lg(u, i, h):
+        state["n"] += 1
+        if state["n"] == 1:
+            return '<tool_call>{"name": "clear_pdfs", "args": {}}</tool_call>'
+        return "Final answer in English."
+
+    mock_disp.return_value = ("tool ok", [])
+    ans, acts = run_with_tools(
+        llm_provider="local",
+        mode="flash",
+        cloud_prompt="ctx",
+        local_instruction="loc",
+        local_user_message="user question",
+        local_history=None,
+        cloud_generate=cg,
+        local_generate=lg,
+        language="en",
+    )
+    assert "Final answer" in ans
+    assert acts == []
+    assert state["n"] == 2
+    mock_disp.assert_called_once()

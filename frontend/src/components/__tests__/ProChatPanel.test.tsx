@@ -70,7 +70,7 @@ describe('ProChatPanel (presentational)', () => {
   it('renders when open', () => {
     render(<ProChatPanel {...defaultProps} />);
     expect(screen.getByText('Neuro AI')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/sorunuzu/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/chatPlaceholder/i)).toBeInTheDocument();
   });
 
   it('does not render when closed', () => {
@@ -104,7 +104,7 @@ describe('ProChatPanel (presentational)', () => {
   it('calls setInput when typing', () => {
     const setInput = vi.fn();
     render(<ProChatPanel {...defaultProps} setInput={setInput} />);
-    const input = screen.getByPlaceholderText(/sorunuzu/i);
+    const input = screen.getByPlaceholderText(/chatPlaceholder/i);
     fireEvent.change(input, { target: { value: 'Test' } });
     expect(setInput).toHaveBeenCalledWith('Test');
   });
@@ -119,7 +119,9 @@ describe('ProChatPanel (presentational)', () => {
         onSend={onSend}
       />
     );
-    const form = screen.getByPlaceholderText(/sorunuzu/i).closest('form');
+    const form = screen
+      .getByPlaceholderText(/chatPlaceholder/i)
+      .closest('form');
     if (form) {
       fireEvent.submit(form);
     }
@@ -128,7 +130,7 @@ describe('ProChatPanel (presentational)', () => {
 
   it('shows initializing state', () => {
     render(<ProChatPanel {...defaultProps} initializing={true} />);
-    expect(screen.getByText(/başlatılıyor/i)).toBeInTheDocument();
+    expect(screen.getByText(/chatInitializing/i)).toBeInTheDocument();
   });
 
   it('shows loading (typing) label', () => {
@@ -158,15 +160,15 @@ describe('ProChatPanel (presentational)', () => {
 
   it('disables input when loading or initializing', () => {
     const { rerender } = render(<ProChatPanel {...defaultProps} />);
-    expect(screen.getByPlaceholderText(/sorunuzu/i)).not.toBeDisabled();
+    expect(screen.getByPlaceholderText(/chatPlaceholder/i)).not.toBeDisabled();
 
     rerender(<ProChatPanel {...defaultProps} loading={true} />);
-    expect(screen.getByPlaceholderText(/sorunuzu/i)).toBeDisabled();
+    expect(screen.getByPlaceholderText(/chatPlaceholder/i)).toBeDisabled();
 
     rerender(
       <ProChatPanel {...defaultProps} loading={false} initializing={true} />
     );
-    expect(screen.getByPlaceholderText(/sorunuzu/i)).toBeDisabled();
+    expect(screen.getByPlaceholderText(/chatPlaceholder/i)).toBeDisabled();
   });
 
   it('renders prompt suggestion chips and sends text on click', () => {
@@ -195,7 +197,7 @@ describe('ProChatPanel (presentational)', () => {
   it('opens hidden file input when attach PDF button is clicked', () => {
     const clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click');
     render(<ProChatPanel {...defaultProps} />);
-    fireEvent.click(screen.getByLabelText(/PDF Ekle/i));
+    fireEvent.click(screen.getByLabelText(/^chatPdfAria$/i));
     expect(clickSpy).toHaveBeenCalled();
     clickSpy.mockRestore();
   });
@@ -203,7 +205,7 @@ describe('ProChatPanel (presentational)', () => {
   it('calls onVoiceToggle when voice button is clicked', () => {
     const onVoiceToggle = vi.fn();
     render(<ProChatPanel {...defaultProps} onVoiceToggle={onVoiceToggle} />);
-    fireEvent.click(screen.getByLabelText(/Sesli Yaz/i));
+    fireEvent.click(screen.getByLabelText(/^chatVoiceAria$/i));
     expect(onVoiceToggle).toHaveBeenCalled();
   });
 
@@ -215,7 +217,7 @@ describe('ProChatPanel (presentational)', () => {
         onVoiceToggle={vi.fn()}
       />
     );
-    expect(screen.getByPlaceholderText(/Dinleniyor/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/chatListening/i)).toBeInTheDocument();
   });
 
   it('uses auto scroll behavior when multiple messages arrive at once', async () => {
@@ -303,7 +305,7 @@ describe('ProChatPanel (presentational)', () => {
         getData: () => '',
       } as unknown as DataTransfer,
     });
-    expect(screen.getByText(/PDF'i Buraya Bırakın/i)).toBeInTheDocument();
+    expect(screen.getByText(/chatDropActive/i)).toBeInTheDocument();
     fireEvent.drop(panel, {
       dataTransfer: {
         files: [pdf],
@@ -395,9 +397,9 @@ describe('ProChatPanel (presentational)', () => {
         getData: () => '',
       } as unknown as DataTransfer,
     });
-    expect(screen.getByText(/PDF'i Buraya Bırakın/i)).toBeInTheDocument();
+    expect(screen.getByText(/chatDropActive/i)).toBeInTheDocument();
     fireEvent.dragLeave(panel);
-    expect(screen.queryByText(/PDF'i Buraya Bırakın/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/chatDropActive/i)).not.toBeInTheDocument();
   });
 
   it('calls onClose when mobile backdrop is clicked', () => {

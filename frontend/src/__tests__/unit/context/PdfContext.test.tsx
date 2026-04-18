@@ -567,7 +567,9 @@ describe('PdfContext', () => {
       });
 
       expect(
-        result.current.chatMessages.some((m) => m.content.includes('Merhaba'))
+        result.current.chatMessages.some((m) =>
+          m.content.includes('WELCOME_PDF:doc')
+        )
       ).toBe(true);
     });
 

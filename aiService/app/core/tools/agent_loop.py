@@ -1,4 +1,5 @@
 """Parse <tool_call> JSON from LLM text; dispatch registry; second-turn answer."""
+
 from __future__ import annotations
 
 import json
@@ -29,13 +30,17 @@ def parse_tool_calls(text: str) -> list[dict[str, Any]]:
     return out
 
 
-def _normalize_tool_output(raw: str | ToolRunResult) -> tuple[str, list[dict[str, Any]]]:
+def _normalize_tool_output(
+    raw: str | ToolRunResult,
+) -> tuple[str, list[dict[str, Any]]]:
     if isinstance(raw, ToolRunResult):
         return raw.message, list(raw.client_actions)
     return (raw or "").strip(), []
 
 
-def _dispatch_one(call: dict[str, Any], tool_context: Optional[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+def _dispatch_one(
+    call: dict[str, Any], tool_context: Optional[dict[str, Any]]
+) -> tuple[str, list[dict[str, Any]]]:
     name = call.get("name")
     if not name or not isinstance(name, str):
         return "Hata: tool_call içinde geçerli 'name' yok.", []
@@ -72,7 +77,7 @@ def run_with_tools(
     """
     One tool round max: first LLM -> optional tool -> second LLM for natural answer.
 
-    cloud_generate: (text_content: str, prompt_instruction: str, mode: str) -> str
+    cloud_generate: Callable taking (text_content, prompt_instruction, mode, *, language: str) -> str
     local_generate: (user_message: str, instruction: str, history: list | None) -> str
 
     Returns (answer, client_actions) from the tool round (if any).
@@ -81,13 +86,12 @@ def run_with_tools(
 
     if llm_provider == "cloud":
         first_input = f"{cloud_prompt}\n\n{tool_block}"
-        instr = "Follow the context and tool rules above." if language == "en" else "Yukarıdaki bağlam ve araç kurallarına uy."
-        raw = cloud_generate(
-            first_input,
-            instr,
-            mode,
-            language=language
+        instr = (
+            "Follow the context and tool rules above."
+            if language == "en"
+            else "Yukarıdaki bağlam ve araç kurallarına uy."
         )
+        raw = cloud_generate(first_input, instr, mode, language=language)
     else:
         inst = f"{local_instruction}\n\n{tool_block}"
         raw = local_generate(local_user_message, inst, local_history)
@@ -100,16 +104,20 @@ def run_with_tools(
     if llm_provider == "cloud":
         instr_final = (
             "Based on the tool result above, write a clear final answer for the user in English. Do not use <tool_call>; just write the final text."
-            if language == "en" else
-            "Yukarıdaki araç sonucunu kullanarak kullanıcıya Türkçe, net nihai cevabı yaz. <tool_call> kullanma; sadece kullanıcıya yönelik metin yaz."
+            if language == "en"
+            else "Yukarıdaki araç sonucunu kullanarak kullanıcıya Türkçe, net nihai cevabı yaz. <tool_call> kullanma; sadece kullanıcıya yönelik metin yaz."
         )
-        task_label = "Generate final user answer." if language == "en" else "Nihai kullanıcı cevabını üret."
-        
+        task_label = (
+            "Generate final user answer."
+            if language == "en"
+            else "Nihai kullanıcı cevabını üret."
+        )
+
         final = cloud_generate(
             f"{cloud_prompt}\n\n[PREVIOUS_OUTPUT]\n{raw}\n\n[TOOL_RESULT]\n{tool_result}\n\n{instr_final}",
             task_label,
             mode,
-            language=language
+            language=language,
         ).strip()
         return final, client_actions
 

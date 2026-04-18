@@ -2,8 +2,8 @@ import { test, expect } from '@playwright/test';
 import { login } from '../support/helpers';
 import path from 'path';
 
-const TEST_EMAIL = 'test1@gmail.com';
-const TEST_PASSWORD = 'Test1234.';
+const TEST_EMAIL = process.env.E2E_TEST_EMAIL || 'test1@gmail.com';
+const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD || 'Test1234.';
 
 test.describe('PDF Merge E2E', () => {
   test('user can merge two PDFs and download result', async ({ page }) => {
@@ -13,7 +13,9 @@ test.describe('PDF Merge E2E', () => {
     await page.waitForLoadState('domcontentloaded');
 
     await expect(
-      page.locator('text=/mergePageTitle|Birleştir|Merge|PDF Birleştirici/i').first()
+      page
+        .locator('text=/mergePageTitle|Birleştir|Merge|PDF Birleştirici/i')
+        .first()
     ).toBeVisible({ timeout: 10000 });
 
     const pdfPath = path.join(__dirname, '../fixtures/sample.pdf');
@@ -29,12 +31,17 @@ test.describe('PDF Merge E2E', () => {
     const filesList = page.locator('ul.container-card li');
     await expect(filesList).toHaveCount(2, { timeout: 5000 });
 
-    const mergeButton = page.locator('button').filter({ hasText: /mergeButton|Birleştir|Merge PDFs/i }).first();
+    const mergeButton = page
+      .locator('button')
+      .filter({ hasText: /mergeButton|Birleştir|Merge PDFs/i })
+      .first();
     await expect(mergeButton).toBeVisible({ timeout: 5000 });
     await expect(mergeButton).toBeEnabled({ timeout: 2000 });
     await mergeButton.click();
 
-    const downloadButton = page.getByRole('button', { name: /İndir|Download/i });
+    const downloadButton = page.getByRole('button', {
+      name: /İndir|Download/i,
+    });
     await expect(downloadButton).toBeVisible({ timeout: 60000 });
 
     const downloadPromise = page.waitForEvent('download');

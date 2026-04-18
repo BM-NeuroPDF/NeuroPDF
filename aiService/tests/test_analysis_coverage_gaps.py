@@ -43,6 +43,47 @@ class TestSummarizeSyncLocalBranch:
         assert r.json()["summary"] == "loc özet"
 
 
+class TestSummarizeSyncEnglishPromptBranches:
+    """analysis.summarize_synchronous: cloud/local + language=en prompt paths."""
+
+    @patch("app.routers.analysis.summarize_text", return_value="en cloud")
+    @patch(
+        "app.routers.analysis.pdf_service.extract_text_from_pdf_bytes",
+        return_value="raw",
+    )
+    def test_summarize_sync_cloud_language_en(self, _ext, _sum, client):
+        pdf = io.BytesIO(b"%PDF-1.4")
+        r = client.post(
+            "/api/v1/ai/summarize-sync?llm_provider=cloud&mode=flash&language=en",
+            files={"file": ("b.pdf", pdf, "application/pdf")},
+            headers=HEADERS,
+        )
+        assert r.status_code == 200
+        assert r.json()["summary"] == "en cloud"
+        args, kwargs = _sum.call_args
+        assert kwargs.get("language") == "en"
+        pinst = kwargs.get("prompt_instruction", "")
+        assert "Summarize this PDF document in English" in pinst
+
+    @patch("app.routers.analysis.summarize_text", return_value="en local")
+    @patch(
+        "app.routers.analysis.pdf_service.extract_text_from_pdf_bytes",
+        return_value="raw",
+    )
+    def test_summarize_sync_local_language_en(self, _ext, _sum, client):
+        pdf = io.BytesIO(b"%PDF-1.4")
+        r = client.post(
+            "/api/v1/ai/summarize-sync?llm_provider=local&mode=flash&language=en",
+            files={"file": ("c.pdf", pdf, "application/pdf")},
+            headers=HEADERS,
+        )
+        assert r.status_code == 200
+        assert r.json()["summary"] == "en local"
+        _args, kwargs = _sum.call_args
+        pinst = kwargs.get("prompt_instruction", "")
+        assert "Specify the main topics and important points" in pinst
+
+
 class TestSummarizeAsync:
     @patch("app.routers.analysis.pdf_tasks.async_summarize_pdf")
     def test_async_enqueues(self, mock_delay, client):

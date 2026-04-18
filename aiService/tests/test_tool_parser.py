@@ -34,7 +34,7 @@ def test_parse_multiple_tags():
 
 
 def test_run_with_tools_no_tool_returns_raw():
-    def cloud_gen(t, i, m):
+    def cloud_gen(t, i, m, language="tr", **_kwargs):
         return "Düz Türkçe cevap."
 
     text, actions = run_with_tools(
@@ -55,7 +55,7 @@ def test_run_with_tools_no_tool_returns_raw():
 def test_run_with_tools_second_turn_cloud_extract_local():
     calls = {"n": 0}
 
-    def cloud_gen(t, i, m):
+    def cloud_gen(t, i, m, language="tr", **_kwargs):
         calls["n"] += 1
         if calls["n"] == 1:
             return '<tool_call>{"name": "extract_pages", "args": {"start_page": 1, "end_page": 2}}</tool_call>'

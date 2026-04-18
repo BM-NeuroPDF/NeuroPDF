@@ -94,3 +94,65 @@ def test_async_summarize_error_callback_fails_silent(mock_client_cls, *_):
             storage_path="/c.pdf",
             callback_url="http://cb/",
         )
+
+
+@patch("app.tasks.pdf_tasks.summarize_text", return_value="en cloud task")
+@patch(
+    "app.tasks.pdf_tasks.pdf_service.extract_text_from_pdf_path",
+    return_value="body",
+)
+@patch("app.tasks.pdf_tasks.httpx.Client")
+def test_async_summarize_cloud_language_en(mock_client_cls, _extract, mock_sum):
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status = MagicMock()
+    mock_client = MagicMock()
+    mock_client.__enter__.return_value = mock_client
+    mock_client.__exit__.return_value = None
+    mock_client.post.return_value = mock_resp
+    mock_client_cls.return_value = mock_client
+
+    from app.tasks.pdf_tasks import async_summarize_pdf
+
+    async_summarize_pdf.run(
+        pdf_id=5,
+        storage_path="/e.pdf",
+        callback_url="http://cb/en",
+        llm_provider="cloud",
+        mode="pro",
+        language="en",
+    )
+    pos, kw = mock_sum.call_args
+    assert kw.get("language") == "en"
+    prompt_instruction = pos[1] if len(pos) > 1 else kw.get("prompt_instruction", "")
+    assert "Summarize this PDF document in English" in prompt_instruction
+
+
+@patch("app.tasks.pdf_tasks.summarize_text", return_value="en local task")
+@patch(
+    "app.tasks.pdf_tasks.pdf_service.extract_text_from_pdf_path",
+    return_value="body",
+)
+@patch("app.tasks.pdf_tasks.httpx.Client")
+def test_async_summarize_local_language_en(mock_client_cls, _extract, mock_sum):
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status = MagicMock()
+    mock_client = MagicMock()
+    mock_client.__enter__.return_value = mock_client
+    mock_client.__exit__.return_value = None
+    mock_client.post.return_value = mock_resp
+    mock_client_cls.return_value = mock_client
+
+    from app.tasks.pdf_tasks import async_summarize_pdf
+
+    async_summarize_pdf.run(
+        pdf_id=6,
+        storage_path="/f.pdf",
+        callback_url="http://cb/en2",
+        llm_provider="local",
+        mode="flash",
+        language="en",
+    )
+    pos, kw = mock_sum.call_args
+    assert kw.get("language") == "en"
+    prompt_instruction = pos[1] if len(pos) > 1 else kw.get("prompt_instruction", "")
+    assert "Analyze the following text in detail" in prompt_instruction

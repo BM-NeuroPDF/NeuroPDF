@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from '@testing-library/react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import ProGlobalChat from '../ProGlobalChat';
@@ -73,6 +79,16 @@ describe('ProGlobalChat', () => {
     loadChatSessions: vi.fn(),
   };
 
+  async function waitForRoleFetch() {
+    await waitFor(() => {
+      expect(sendRequest).toHaveBeenCalledWith('/files/user/stats', 'GET');
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal(
@@ -99,10 +115,10 @@ describe('ProGlobalChat', () => {
 
     render(<ProGlobalChat />);
 
-    await waitFor(() => {
-      const button = screen.getByRole('button', { name: /ai asistanı/i });
-      expect(button).toBeInTheDocument();
-    });
+    await waitForRoleFetch();
+    expect(
+      screen.getByRole('button', { name: /navDocuments/i })
+    ).toBeInTheDocument();
   });
 
   it('shows FAB for non-Pro user and opens Pro required modal on click', async () => {
@@ -110,19 +126,15 @@ describe('ProGlobalChat', () => {
 
     render(<ProGlobalChat />);
 
-    await waitFor(() => {
-      const button = screen.queryByRole('button', {
-        name: /ai chat|ai asistanı/i,
-      });
-      expect(button).toBeInTheDocument();
-    });
+    await waitForRoleFetch();
+    const button = screen.getByRole('button', { name: /navDocuments/i });
+    expect(button).toBeInTheDocument();
 
-    const button = screen.getByRole('button');
     fireEvent.click(button);
 
     await waitFor(() => {
-      expect(screen.getByText(/Pro Üyelik Gerekli/i)).toBeInTheDocument();
-      expect(screen.getByText(/Fiyatlandırmaya Git/i)).toBeInTheDocument();
+      expect(screen.getByText('chatProRequiredTitle')).toBeInTheDocument();
+      expect(screen.getByText('chatGoToPricing')).toBeInTheDocument();
     });
   });
 
@@ -148,10 +160,8 @@ describe('ProGlobalChat', () => {
 
     const { rerender } = render(<ProGlobalChat />);
 
-    await waitFor(() => {
-      const button = screen.getByRole('button');
-      fireEvent.click(button);
-    });
+    await waitForRoleFetch();
+    fireEvent.click(screen.getByRole('button', { name: /navDocuments/i }));
 
     // Simulate context updating panel open state (real PdfProvider would do this)
     (usePdf as any).mockReturnValue({ ...mockUsePdf, proChatPanelOpen: true });
@@ -159,7 +169,7 @@ describe('ProGlobalChat', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByPlaceholderText(/chatPlaceholder|sorunuzu|pdf hakkında/i)
+        screen.getByPlaceholderText(/chatPlaceholder/i)
       ).toBeInTheDocument();
     });
   });
@@ -171,14 +181,9 @@ describe('ProGlobalChat', () => {
 
     const { rerender } = render(<ProGlobalChat />);
 
-    // Wait for role fetch to be called and then for promise to resolve + React to re-render
-    await waitFor(() => {
-      expect(sendRequest).toHaveBeenCalledWith('/files/user/stats', 'GET');
-    });
-    await Promise.resolve();
-    await Promise.resolve();
+    await waitForRoleFetch();
 
-    const button = screen.getByRole('button', { name: /ai asistanı/i });
+    const button = screen.getByRole('button', { name: /navDocuments/i });
     fireEvent.click(button);
     (usePdf as any).mockReturnValue({ ...mockUsePdf, proChatPanelOpen: true });
     rerender(<ProGlobalChat />);
@@ -203,9 +208,8 @@ describe('ProGlobalChat', () => {
 
     const { rerender } = render(<ProGlobalChat />);
 
-    await waitFor(() => {
-      fireEvent.click(screen.getByRole('button'));
-    });
+    await waitForRoleFetch();
+    fireEvent.click(screen.getByRole('button', { name: /navDocuments/i }));
     (usePdf as any).mockReturnValue({
       ...mockUsePdf,
       proChatPanelOpen: true,
@@ -216,13 +220,11 @@ describe('ProGlobalChat', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByPlaceholderText(/chatPlaceholder|sorunuzu|pdf hakkında/i)
+        screen.getByPlaceholderText(/chatPlaceholder/i)
       ).toBeInTheDocument();
     });
 
-    const input = screen.getByPlaceholderText(
-      /chatPlaceholder|sorunuzu|pdf hakkında/i
-    );
+    const input = screen.getByPlaceholderText(/chatPlaceholder/i);
     fireEvent.change(input, { target: { value: 'Test message' } });
 
     const form = input.closest('form');
@@ -249,23 +251,22 @@ describe('ProGlobalChat', () => {
 
     const { rerender } = render(<ProGlobalChat />);
 
-    await waitFor(() => {
-      fireEvent.click(screen.getByRole('button'));
-    });
+    await waitForRoleFetch();
+    fireEvent.click(screen.getByRole('button', { name: /navDocuments/i }));
     (usePdf as any).mockReturnValue({
       ...mockUsePdf,
       proChatPanelOpen: true,
       generalChatMessages: [
         {
           role: 'assistant',
-          content: '🚫 Sohbet başlatılamadı. Lütfen tekrar deneyin.',
+          content: 'chatInitError',
         },
       ],
     });
     rerender(<ProGlobalChat />);
 
     await waitFor(() => {
-      expect(screen.getByText(/sohbet başlatılamadı/i)).toBeInTheDocument();
+      expect(screen.getByText('chatInitError')).toBeInTheDocument();
     });
   });
 
