@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import path from 'path';
 
 const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:8000';
 
@@ -23,13 +24,12 @@ const maxUploadMb = readMbEnv(
 const maxUploadBytes = Math.floor(maxUploadMb * 1024 * 1024);
 
 const nextConfig: NextConfig = {
-  // 1. Server Actions limiti (Next.js 15'te artık ana dizinde tanımlanıyor)
-  serverActions: {
-    bodySizeLimit: `${maxUploadMb}mb`,
-  },
+  outputFileTracingRoot: path.join(__dirname),
 
-  // 🎯 2. ASIL ÇÖZÜM: Proxy/Middleware limiti 'experimental' objesi içinde olmalı!
   experimental: {
+    serverActions: {
+      bodySizeLimit: `${maxUploadMb}mb`,
+    },
     middlewareClientMaxBodySize: maxUploadBytes,
   },
 

@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useState, useRef, useEffect } from "react";
-import { useLanguage } from "@/context/LanguageContext";
+import { useState, useRef, useEffect } from 'react';
+import { useLanguage } from '@/context/LanguageContext';
 
 export default function LanguageSwitcher() {
   const { language, setLanguage } = useLanguage();
@@ -10,12 +10,15 @@ export default function LanguageSwitcher() {
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const handleSelect = (lang: 'tr' | 'en') => {
@@ -25,7 +28,6 @@ export default function LanguageSwitcher() {
 
   return (
     <div className="relative" ref={dropdownRef}>
-
       {/* --- ANA BUTON --- */}
       <button
         onClick={() => setIsOpen(!isOpen)}
@@ -33,11 +35,11 @@ export default function LanguageSwitcher() {
       >
         <span className="text-sm font-bold flex items-center gap-2">
           <img
-            src={language === "tr" ? "/flags/tr.svg" : "/flags/gb.svg"}
+            src={language === 'tr' ? '/flags/tr.svg' : '/flags/gb.svg'}
             alt="flag"
             className="w-5 h-4"
           />
-          {language === "tr" ? "TR" : "ENG"}
+          {language === 'tr' ? 'TR' : 'ENG'}
         </span>
 
         <svg
@@ -60,21 +62,21 @@ export default function LanguageSwitcher() {
           className="absolute right-0 mt-2 w-32 rounded-xl shadow-xl border overflow-hidden z-[5000] animate-in fade-in zoom-in-95 duration-100"
           style={{
             backgroundColor: 'var(--background)',
-            borderColor: 'var(--navbar-border)'
+            borderColor: 'var(--navbar-border)',
           }}
         >
           <div className="p-1 flex flex-col gap-0.5">
-
             {/* TR */}
             <button
               onClick={() => handleSelect('tr')}
-              className={`flex items-center justify-between w-full px-3 py-2 text-sm rounded-lg transition-colors ${language === 'tr'
-                ? 'btn-primary shadow-none'
-                : 'text-[var(--foreground)] hover:bg-[var(--container-bg)]'
-                }`}
+              className={`flex items-center justify-between w-full px-3 py-2 text-sm rounded-lg transition-colors ${
+                language === 'tr'
+                  ? 'btn-primary shadow-none'
+                  : 'text-[var(--foreground)] hover:bg-[var(--container-bg)]'
+              }`}
             >
               <span className="flex items-center gap-2">
-                <img src="/flags/tr.svg" className="w-5 h-4" />
+                <img src="/flags/tr.svg" alt="" className="w-5 h-4" />
                 TR
               </span>
               {language === 'tr' && <span>✓</span>}
@@ -83,18 +85,18 @@ export default function LanguageSwitcher() {
             {/* ENG */}
             <button
               onClick={() => handleSelect('en')}
-              className={`flex items-center justify-between w-full px-3 py-2 text-sm rounded-lg transition-colors ${language === 'en'
-                ? 'btn-primary shadow-none'
-                : 'text-[var(--foreground)] hover:bg-[var(--container-bg)]'
-                }`}
+              className={`flex items-center justify-between w-full px-3 py-2 text-sm rounded-lg transition-colors ${
+                language === 'en'
+                  ? 'btn-primary shadow-none'
+                  : 'text-[var(--foreground)] hover:bg-[var(--container-bg)]'
+              }`}
             >
               <span className="flex items-center gap-2">
-                <img src="/flags/gb.svg" className="w-5 h-4" />
+                <img src="/flags/gb.svg" alt="" className="w-5 h-4" />
                 ENG
               </span>
               {language === 'en' && <span>✓</span>}
             </button>
-
           </div>
         </div>
       )}
