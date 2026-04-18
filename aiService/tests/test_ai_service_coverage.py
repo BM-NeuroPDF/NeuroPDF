@@ -12,6 +12,43 @@ import app.services.ai_service as ai
 
 
 class TestRequireCloudAndLocalHelpers:
+    def test_load_gemini_models_if_configured_skips_when_key_empty(self, monkeypatch):
+        monkeypatch.setattr(ai.settings, "GEMINI_API_KEY", "")
+        ai.flash_model = None
+        ai.pro_model = None
+        with patch.object(ai.genai, "configure") as mock_cfg:
+            ai._load_gemini_models_if_configured()
+            mock_cfg.assert_not_called()
+            assert ai.flash_model is None
+            assert ai.pro_model is None
+
+    def test_load_gemini_models_if_configured_calls_genai_when_key_set(
+        self, monkeypatch
+    ):
+        orig_flash, orig_pro = ai.flash_model, ai.pro_model
+        try:
+            monkeypatch.setattr(ai.settings, "GEMINI_API_KEY", "ci-test-gemini-key")
+            mock_flash = MagicMock()
+            mock_pro = MagicMock()
+            with (
+                patch.object(ai.genai, "configure") as mock_cfg,
+                patch.object(
+                    ai.genai,
+                    "GenerativeModel",
+                    side_effect=[mock_flash, mock_pro],
+                ),
+            ):
+                ai.flash_model = None
+                ai.pro_model = None
+                ai._load_gemini_models_if_configured()
+                mock_cfg.assert_called_once_with(api_key="ci-test-gemini-key")
+                assert ai.flash_model is mock_flash
+                assert ai.pro_model is mock_pro
+                assert ai.genai.GenerativeModel.call_count == 2
+        finally:
+            ai.flash_model = orig_flash
+            ai.pro_model = orig_pro
+
     def test_local_llm_configured_reads_env(self, monkeypatch):
         monkeypatch.setenv("LOCAL_LLM_URL", "http://localhost:11434/v1")
         assert ai._local_llm_configured() is True

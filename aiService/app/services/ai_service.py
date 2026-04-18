@@ -13,11 +13,19 @@ from ..config import settings
 flash_model = None
 pro_model = None
 
-# API Key varsa modelleri yükle
-if (settings.GEMINI_API_KEY or "").strip():
-    genai.configure(api_key=settings.GEMINI_API_KEY)
+
+def _load_gemini_models_if_configured() -> None:
+    """API key varsa Gemini modellerini yükle (import + testler için tek giriş noktası)."""
+    global flash_model, pro_model
+    key = (settings.GEMINI_API_KEY or "").strip()
+    if not key:
+        return
+    genai.configure(api_key=key)
     flash_model = genai.GenerativeModel("models/gemini-flash-latest")
     pro_model = genai.GenerativeModel("models/gemini-pro-latest")
+
+
+_load_gemini_models_if_configured()
 
 
 def _local_llm_configured() -> bool:
@@ -135,7 +143,10 @@ def _generate_with_retry(model, prompt: str, attempts: int = 5):
 
 
 def gemini_generate(
-    text_content: str, prompt_instruction: str, mode: str = "flash", language: str = "tr"
+    text_content: str,
+    prompt_instruction: str,
+    mode: str = "flash",
+    language: str = "tr",
 ) -> str:
     """
     Tek ve birleştirilmiş ana fonksiyon.
@@ -197,7 +208,9 @@ def gemini_generate(
         raise HTTPException(status_code=500, detail=f"Gemini servisinde hata: {str(e)}")
 
 
-def call_gemini_for_task(text_content: str, prompt_instruction: str, language: str = "tr") -> str:
+def call_gemini_for_task(
+    text_content: str, prompt_instruction: str, language: str = "tr"
+) -> str:
     """
     Celery (Arka Plan) görevleri için kullanılır.
     Otomatik olarak Pro dener, olmazsa Flash'a düşer (Fallback).
