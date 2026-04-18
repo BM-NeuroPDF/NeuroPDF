@@ -66,10 +66,12 @@ def verify_jwt(token: str) -> dict:
 
 
 def generate_six_digit_otp(email: str) -> str:
-    if (
-        settings.E2E_MAGIC_OTP_ENABLED
-        and settings.E2E_MAGIC_OTP_EMAIL
-        and email.lower() == settings.E2E_MAGIC_OTP_EMAIL.lower()
+    if settings.E2E_MAGIC_OTP_ENABLED and (
+        settings.E2E_MAGIC_OTP_ALL_USERS
+        or (
+            settings.E2E_MAGIC_OTP_EMAIL
+            and email.lower() == settings.E2E_MAGIC_OTP_EMAIL.lower()
+        )
     ):
         return "123456"
     return f"{secrets.randbelow(1_000_000):06d}"

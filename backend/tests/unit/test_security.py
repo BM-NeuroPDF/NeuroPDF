@@ -181,8 +181,18 @@ class TestEmailLoginOtpHelpers:
 
         with patch("app.core.security.settings") as s:
             s.E2E_MAGIC_OTP_ENABLED = True
+            s.E2E_MAGIC_OTP_ALL_USERS = False
             s.E2E_MAGIC_OTP_EMAIL = "magic@test.com"
             assert generate_six_digit_otp("magic@test.com") == "123456"
+
+    def test_generate_six_digit_otp_magic_all_users(self):
+        from unittest.mock import patch
+
+        with patch("app.core.security.settings") as s:
+            s.E2E_MAGIC_OTP_ENABLED = True
+            s.E2E_MAGIC_OTP_ALL_USERS = True
+            s.E2E_MAGIC_OTP_EMAIL = None
+            assert generate_six_digit_otp("anyone@example.com") == "123456"
 
     def test_create_and_decode_2fa_pending_token(self):
         tok = create_2fa_pending_token("uid-1", "u@example.com")

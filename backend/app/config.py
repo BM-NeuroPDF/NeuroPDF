@@ -71,11 +71,15 @@ class Settings(BaseSettings):
     OTP_EMAIL_TTL_SECONDS: int = 180
     VERIFY_2FA_MAX_FAILS: int = 3
     VERIFY_2FA_LOCKOUT_SECONDS: int = 180
-    # Opt-in only: fixed OTP for a single email (local/E2E against dev backend).
+    # Opt-in only: fixed OTP for local/E2E (never enable in production).
     E2E_MAGIC_OTP_ENABLED: bool = (
         os.getenv("E2E_MAGIC_OTP_ENABLED", "").lower() == "true"
     )
     E2E_MAGIC_OTP_EMAIL: Optional[str] = os.getenv("E2E_MAGIC_OTP_EMAIL")
+    # CI: allow 123456 for every email when E2E_MAGIC_OTP_ENABLED=true (multi-user specs).
+    E2E_MAGIC_OTP_ALL_USERS: bool = (
+        os.getenv("E2E_MAGIC_OTP_ALL_USERS", "").lower() == "true"
+    )
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

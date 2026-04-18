@@ -41,7 +41,7 @@ export default defineConfig({
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL: process.env.CI
-      ? 'http://localhost:3000'
+      ? 'http://127.0.0.1:3000'
       : 'https://localhost:3000',
     /* Local dev uses mkcert/self-signed cert on HTTPS. */
     ignoreHTTPSErrors: !process.env.CI,
@@ -136,7 +136,7 @@ export default defineConfig({
   webServer: process.env.CI
     ? {
         command: 'npm run start',
-        url: 'http://localhost:3000',
+        url: 'http://127.0.0.1:3000',
         reuseExistingServer: false,
         timeout: 120_000,
       }
