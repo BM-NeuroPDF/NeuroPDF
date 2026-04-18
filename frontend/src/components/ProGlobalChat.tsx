@@ -12,6 +12,7 @@ import { usePdf } from '@/context/PdfContext';
 import Image from 'next/image';
 import NeuroLogoIcon from '@/assets/icons/NeuroPDF-Chat.svg';
 import ProChatPanel from './ProChatPanel';
+import { translations } from '@/utils/translations';
 
 export default function ProGlobalChat() {
   const { data: session, status } = useSession();
@@ -44,17 +45,15 @@ export default function ProGlobalChat() {
   const handleExtractPagesLocal = useCallback(
     async (startPage: number | undefined, endPage: number | undefined) => {
       if (startPage == null || endPage == null) {
-        toast.error('Geçersiz sayfa aralığı.');
+        toast.error(t("toastInvalidRange"));
         return;
       }
       if (!pdfFile) {
-        toast.error(
-          'Tarayıcıda kesim için açık bir PDF gerekir. Lütfen bir dosya yükleyin.'
-        );
+        toast.error(t("toastPdfRequired"));
         return;
       }
       if (startPage < 1 || endPage < 1 || endPage < startPage) {
-        toast.error('Sayfa numaraları geçersiz.');
+        toast.error(t("toastPagesInvalid"));
         return;
       }
       try {
@@ -62,7 +61,7 @@ export default function ProGlobalChat() {
         const src = await PDFDocument.load(buffer);
         const pageCount = src.getPageCount();
         if (startPage > pageCount || endPage > pageCount) {
-          toast.error(`PDF yalnızca ${pageCount} sayfa içeriyor.`);
+          toast.error(t("toastPdfLimit").replace("{count}", pageCount.toString()));
           return;
         }
         const dest = await PDFDocument.create();
@@ -79,10 +78,10 @@ export default function ProGlobalChat() {
           type: 'application/pdf',
         });
         await savePdf(outFile);
-        toast.success('Sayfalar başarıyla ayrıldı ve ekrana yüklendi.');
+        toast.success(t("toastExtractSuccess"));
       } catch (e) {
         console.error('EXTRACT_PAGES_LOCAL:', e);
-        toast.error('PDF kesilemedi. Lütfen tekrar deneyin.');
+        toast.error(t("toastExtractError"));
       }
     },
     [pdfFile, savePdf]
@@ -90,9 +89,7 @@ export default function ProGlobalChat() {
 
   const handleMergePdfsLocal = useCallback(async () => {
     if (pdfList.length < 2) {
-      toast.error(
-        'Birleştirmek için en az iki PDF gerekir. Lütfen yan panele birden fazla dosya ekleyin.'
-      );
+      toast.error(t("toastMergeMinFiles"));
       return;
     }
     try {
@@ -113,30 +110,26 @@ export default function ProGlobalChat() {
         }
       );
       await savePdf(outFile);
-      toast.success('Tüm PDF dosyaları başarıyla birleştirildi');
+      toast.success(t("toastMergeSuccess"));
     } catch (e) {
       console.error('MERGE_PDFS_LOCAL:', e);
-      toast.error(
-        'PDF birleştirilemedi. Lütfen dosyaları kontrol edip tekrar deneyin.'
-      );
+      toast.error(t("toastMergeError"));
     }
   }, [pdfList, savePdf]);
 
   const handleClearAllPdfs = useCallback(() => {
     clearPdf();
-    toast.info('Ekrandaki tüm dosyalar temizlendi.');
-  }, [clearPdf]);
+    toast.info(t("toastClearSuccess"));
+  }, [clearPdf, t]);
 
   const handleSwapPagesLocal = useCallback(
     async (pageA: number, pageB: number) => {
       if (!pdfFile) {
-        toast.error(
-          'Tarayıcıda sıralama için açık bir PDF gerekir. Lütfen bir dosya yükleyin.'
-        );
+        toast.error(t("toastPdfRequired"));
         return;
       }
       if (pageA < 1 || pageB < 1 || pageA === pageB) {
-        toast.error('Geçersiz sayfa numaraları.');
+        toast.error(t("toastPagesInvalid"));
         return;
       }
       try {
@@ -144,7 +137,7 @@ export default function ProGlobalChat() {
         const src = await PDFDocument.load(buffer);
         const pageCount = src.getPageCount();
         if (pageA > pageCount || pageB > pageCount) {
-          toast.error(`PDF yalnızca ${pageCount} sayfa içeriyor.`);
+          toast.error(t("toastPdfLimit").replace("{count}", pageCount.toString()));
           return;
         }
         const order = Array.from({ length: pageCount }, (_, i) => i + 1);
@@ -163,10 +156,10 @@ export default function ProGlobalChat() {
           type: 'application/pdf',
         });
         await savePdf(outFile);
-        toast.success('Sayfalar yer değiştirildi; PDF güncellendi.');
+        toast.success(t("toastSwapSuccess"));
       } catch (e) {
         console.error('SWAP_PAGES_LOCAL:', e);
-        toast.error('Sayfa yer değiştirme başarısız.');
+        toast.error(t("toastSwapError"));
       }
     },
     [pdfFile, savePdf]
@@ -265,6 +258,42 @@ export default function ProGlobalChat() {
     }
   }, [proChatOpen, setProChatOpen, setProChatPanelOpen]);
 
+  // DİNAMİK HOŞGELDİN MESAJI GÜNCELLEME (Welcome Message Sync)
+  useEffect(() => {
+    // PDF Chat: Eğer mesaj listesinde sadece "hoşgeldin" sinyali veya mevcut welcome mesajı varsa güncelle
+    if (pdfChatMessages.length === 1 && pdfChatMessages[0].role === 'assistant' && pdfFile) {
+      const currentContent = pdfChatMessages[0].content;
+      const expectedOldTr = translations.tr.chatWelcomePdf.replace("{name}", pdfFile.name);
+      const expectedOldEn = translations.en.chatWelcomePdf.replace("{name}", pdfFile.name);
+      const isSignal = currentContent.startsWith("WELCOME_PDF:");
+      
+      if (isSignal || currentContent === expectedOldTr || currentContent === expectedOldEn) {
+        setPdfChatMessages([
+          {
+            role: 'assistant',
+            content: t("chatWelcomePdf").replace("{name}", pdfFile.name),
+          },
+        ]);
+      }
+    }
+
+    // Genel Chat: Benzer mantık
+    if (generalChatMessages.length === 1 && generalChatMessages[0].role === 'assistant') {
+      const currentContent = generalChatMessages[0].content;
+      const expectedOldTr = translations.tr.chatWelcomeGeneral;
+      const expectedOldEn = translations.en.chatWelcomeGeneral;
+      
+      if (currentContent === expectedOldTr || currentContent === expectedOldEn) {
+        setGeneralChatMessages([
+          {
+            role: 'assistant',
+            content: t("chatWelcomeGeneral"),
+          },
+        ]);
+      }
+    }
+  }, [language, pdfFile, t, setPdfChatMessages, setGeneralChatMessages]);
+
   // Dinamik PDF izleyici: pdfFile değiştiğinde Pro ise ve PDF oturumu yoksa arka planda chat session başlat
   useEffect(() => {
     if (!pdfFile || !isProUser || pdfSessionId) return;
@@ -280,10 +309,12 @@ export default function ProGlobalChat() {
             pdf_text: ' ',
             filename: pdfFile.name,
             pdf_id: existingDocumentId,
+            language: language,
           });
         } else {
           const formData = new FormData();
           formData.append('file', pdfFile);
+          formData.append('language', language);
           chatRes = await sendRequest(
             '/files/chat/start',
             'POST',
@@ -302,7 +333,7 @@ export default function ProGlobalChat() {
           setPdfChatMessages([
             {
               role: 'assistant',
-              content: `👋 Merhaba! **"${pdfFile.name}"** dosyasını analiz ettim. Bana bu belgeyle ilgili her şeyi sorabilirsin.`,
+              content: t("chatWelcomePdf").replace("{name}", pdfFile.name),
             },
           ]);
         }
@@ -456,38 +487,41 @@ export default function ProGlobalChat() {
     recog.onresult = (event: any) => {
       let finalTranscript = '';
       let interimTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
+      
+      // We iterate through all results to reconstruct the full cumulative transcript.
+      // This is generally more robust than managing a partial ref for most modern implementations.
+      for (let i = 0; i < event.results.length; ++i) {
+        const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
+          finalTranscript += transcript;
         } else {
-          interimTranscript += event.results[i][0].transcript;
+          interimTranscript += transcript;
         }
       }
 
-      if (finalTranscript) {
-        console.log('SpeechRecognition.onresult (final):', finalTranscript);
-        committedTranscriptRef.current =
-          `${committedTranscriptRef.current} ${finalTranscript}`.trim();
+      console.log('🎤 SpeechRecognition: Final=[', finalTranscript, '] Interim=[', interimTranscript, ']');
+      
+      // Combine what was in the input box before recording started (saved in ref)
+      // with the new cumulative transcript from the speech recognition.
+      const prefix = committedTranscriptRef.current ? `${committedTranscriptRef.current} ` : '';
+      const merged = `${prefix}${finalTranscript}${interimTranscript}`.trim();
+      
+      if (merged) {
+        setInput(merged);
       }
-
-      if (interimTranscript) {
-        console.log('… interim transcript:', interimTranscript);
-      }
-
-      const merged =
-        `${committedTranscriptRef.current} ${interimTranscript}`.trim();
-      if (merged) setInput(merged);
     };
 
     recog.onerror = (event: any) => {
       console.error('❌ Ses Tanıma Hatası:', event.error);
+      if (event.error === 'aborted') return; // Ignore manual aborts
+      
       const errorMsg =
         event.error === 'no-speech'
-          ? 'Ses algılanamadı, mikrofonu kontrol edin.'
+          ? t("toastMicErrorNoSpeech")
           : event.error === 'not-allowed'
-            ? 'Mikrofon izni reddedildi.'
+            ? t("toastMicErrorNotAllowed")
             : event.error === 'network'
-              ? 'Ses tanıma sunucusuna güvenli bağlantı kurulamadı. Chrome kullandığınızdan veya internet bağlantınızdan emin olun.'
+              ? t("toastMicErrorNetwork")
               : `Hata: ${event.error}`;
       toast.error(errorMsg);
       setIsRecording(false);
@@ -498,14 +532,12 @@ export default function ProGlobalChat() {
     };
 
     recog.onend = () => {
-      console.log('SpeechRecognition.onend: Session ended cycle.');
+      console.log('SpeechRecognition.onend: Session ended.');
+      // If we are still supposed to be recording but it ended prematurely (silent timeout), restart.
       if (!isManuallyStopped.current) {
         try {
-          console.log('🔄 Bağlantı koptu, otomatik yeniden başlatılıyor...');
-          const restartLang = language === 'tr' ? 'tr-TR' : 'en-US';
-          recog.lang = restartLang || 'tr-TR';
-          recog.start();
-          setIsRecording(true);
+          console.log('🔄 Otomatik yeniden başlatılıyor...');
+          recognitionRef.current?.start();
           return;
         } catch (e) {
           console.error('Auto-restart failed:', e);
@@ -521,15 +553,11 @@ export default function ProGlobalChat() {
       try {
         if (recognitionRef.current) {
           isManuallyStopped.current = true;
-          recognitionRef.current.stop();
           recognitionRef.current.onstart = null;
-          recognitionRef.current.onaudiostart = null;
-          recognitionRef.current.onspeechstart = null;
-          recognitionRef.current.onspeechend = null;
-          recognitionRef.current.onnomatch = null;
           recognitionRef.current.onresult = null;
           recognitionRef.current.onerror = null;
           recognitionRef.current.onend = null;
+          recognitionRef.current.stop();
         }
       } catch (e) {
         console.error('Cleanup error:', e);
@@ -573,33 +601,46 @@ export default function ProGlobalChat() {
     }
 
     if (isRecording) {
-      console.log('Attempting to stop recording manually...');
+      console.log('🛑 Manual stop requested.');
       isManuallyStopped.current = true;
       recognition.stop();
       setIsRecording(false);
     } else {
+      console.log('🎤 Manual start requested.');
       try {
         const hasPermission = await ensureMicrophoneAccess();
         if (!hasPermission) return;
 
+        // Reset state for new session - Start FRESH as requested.
         isManuallyStopped.current = false;
-        committedTranscriptRef.current = input.trim();
+        committedTranscriptRef.current = "";
+        setInput("");
+        
         const currentLang = language === 'tr' ? 'tr-TR' : 'en-US';
-        recognition.lang = currentLang || 'tr-TR';
-        console.log('🌐 SpeechRecognition language set:', recognition.lang);
-        console.log('Attempting to start recording (Single-Shot)...');
+        recognition.lang = currentLang;
+        
+        // If it was already running in the background for some reason, stop it first.
+        // We set isManuallyStopped to true TEMPORARILY to avoid the onend auto-restart.
+        isManuallyStopped.current = true;
         recognition.stop();
+        
         setTimeout(() => {
-          // Start öncesi dili her seferinde garanti et.
-          recognition.lang = currentLang || 'tr-TR';
-          recognition.start();
-          setIsRecording(true);
-        }, 100);
+          isManuallyStopped.current = false;
+          // Ensure language is set right before start
+          recognition.lang = language === 'tr' ? 'tr-TR' : 'en-US';
+          console.log('🌐 SpeechRecognition starting with language:', recognition.lang);
+          
+          try {
+            recognition.start();
+            setIsRecording(true);
+          } catch (e) {
+            console.warn('Recognition start failed (likely already running):', e);
+            // If it's already running, we just ensure isRecording is true.
+            setIsRecording(true);
+          }
+        }, 150);
       } catch (e: any) {
-        console.error('Recognition start error:', e);
-        if (String(e?.message || '').includes('not-allowed')) {
-          alert('Mikrofon izni reddedildi. Sayfayı yenileyip tekrar deneyin.');
-        }
+        console.error('Recognition toggle error:', e);
         setIsRecording(false);
       }
     }
@@ -626,14 +667,14 @@ export default function ProGlobalChat() {
       const res = await sendRequest('/files/chat/general/start', 'POST', {
         llm_provider: 'cloud',
         mode: 'flash',
+        language: language,
       });
-      if (!res.session_id) throw new Error('Oturum açılamadı.');
+      if (!res.session_id) throw new Error(t("chatInitError"));
       setGeneralSessionId(res.session_id);
       setGeneralChatMessages([
         {
           role: 'assistant',
-          content:
-            '👋 Merhaba! Ben NeuroPDF AI asistanıyım. Size nasıl yardımcı olabilirim? PDF işlemleri, dosya yönetimi veya genel sorularınız için buradayım.',
+          content: t("chatWelcomeGeneral"),
         },
       ]);
     } catch (e) {
@@ -641,7 +682,7 @@ export default function ProGlobalChat() {
       setGeneralChatMessages([
         {
           role: 'assistant',
-          content: '🚫 Sohbet başlatılamadı. Lütfen tekrar deneyin.',
+          content: t("chatInitError"),
         },
       ]);
     } finally {
@@ -671,17 +712,17 @@ export default function ProGlobalChat() {
     if (n === 0) return [];
     if (n === 1) {
       return [
-        { text: 'Bu belgenin özetini çıkar', icon: '📝' },
-        { text: 'Bu belgeyi İngilizceye çevir', icon: '🌐' },
-        { text: 'Bu belgenin sayfalarını ayır', icon: '✂️' },
-        { text: 'Ekranı temizle', icon: '🧹' },
+        { text: t("chatSuggestionSummary"), icon: '📝' },
+        { text: t("chatSuggestionTranslate"), icon: '🌐' },
+        { text: t("chatSuggestionExtract"), icon: '✂️' },
+        { text: t("chatSuggestionClear"), icon: '🧹' },
       ];
     }
     return [
-      { text: 'Bu dosyaları birleştir', icon: '✨' },
-      { text: 'Ekranı temizle', icon: '🧹' },
+      { text: t("chatSuggestionMerge"), icon: '✨' },
+      { text: t("chatSuggestionClear"), icon: '🧹' },
     ];
-  }, [pdfList.length]);
+  }, [pdfList.length, t]);
 
   const handleSend = async (messageOverride?: string) => {
     const userMsg = (messageOverride ?? input).trim();
@@ -712,6 +753,7 @@ export default function ProGlobalChat() {
       const res = await sendRequest(endpoint, 'POST', {
         session_id: activeSessionId,
         message: userMsg,
+        language: language, // Mevcut dili gönder (TR/EN)
       });
       if (isPdfChat) {
         setPdfChatMessages((prev) => [
@@ -750,8 +792,7 @@ export default function ProGlobalChat() {
         errorMessage.includes('Quota exceeded') ||
         errorMessage.includes('Gemini API')
       ) {
-        const errorMsg =
-          '⚠️ Gemini API kotası aşıldı. Local LLM kullanmak için profil sayfasından ayarları değiştirin.';
+        const errorMsg = t("chatErrorQuotaExceeded");
         if (isPdfChat) {
           setPdfChatMessages((prev) => [
             ...prev,
@@ -773,8 +814,7 @@ export default function ProGlobalChat() {
         errorMessage.includes('session')
       ) {
         if (isPdfChat) {
-          const errorMsg =
-            "⚠️ PDF chat oturumu sona erdi. Lütfen PDF'i tekrar yükleyin.";
+          const errorMsg = t("chatErrorSessionExpired");
           setPdfChatMessages((prev) => [
             ...prev,
             { role: 'assistant', content: errorMsg },
@@ -784,6 +824,7 @@ export default function ProGlobalChat() {
             const res = await sendRequest('/files/chat/general/start', 'POST', {
               llm_provider: 'cloud',
               mode: 'flash',
+              language: language,
             });
             if (res.session_id) {
               setGeneralSessionId(res.session_id);
@@ -793,6 +834,7 @@ export default function ProGlobalChat() {
                 {
                   session_id: res.session_id,
                   message: userMsg,
+                  language: language,
                 }
               );
               setGeneralChatMessages((prev) => [
@@ -810,7 +852,7 @@ export default function ProGlobalChat() {
               playNotify();
               setTimeout(playNotify, 600);
             } else {
-              throw new Error('Yeni session başlatılamadı');
+              throw new Error(t("chatInitError"));
             }
           } catch (retryError) {
             console.error('Session yenileme hatası:', retryError);
@@ -818,13 +860,13 @@ export default function ProGlobalChat() {
               ...prev,
               {
                 role: 'assistant',
-                content: '⚠️ Oturum yenilenemedi. Lütfen sayfayı yenileyin.',
+                content: t("chatErrorSessionRefresh"),
               },
             ]);
           }
         }
       } else {
-        const errorMsg = '⚠️ Bağlantı hatası. Lütfen tekrar deneyin.';
+        const errorMsg = t("chatErrorConnection");
         if (isPdfChat) {
           setPdfChatMessages((prev) => [
             ...prev,
@@ -866,7 +908,7 @@ export default function ProGlobalChat() {
                     WebkitBoxOrient: 'vertical',
                   }}
                 >
-                  {t('chatWelcomeGlobal') || 'Merhaba! Neuro AI buradayım.'}
+                  {t('chatWelcomeGlobal')}
                 </span>
               </div>
               {/* Kuyruk (Tail) */}
@@ -882,7 +924,7 @@ export default function ProGlobalChat() {
               whileTap={{ scale: 0.9 }}
               onClick={handleFabClick}
               className="p-2 rounded-full group relative flex items-center justify-center bg-transparent hover:bg-[var(--container-bg)]/50 transition-colors border-0 shadow-none"
-              aria-label="AI Asistanı"
+              aria-label={t("navDocuments")}
             >
               <div className="relative z-10">
                 <Image
@@ -923,11 +965,10 @@ export default function ProGlobalChat() {
                 className="font-bold text-lg mb-2"
                 style={{ color: 'var(--foreground)' }}
               >
-                Pro Üyelik Gerekli
+                {t("chatProRequiredTitle")}
               </h3>
               <p className="text-sm opacity-80 mb-6">
-                AI sohbet özelliği Pro üyeliği gerektirir. Devam etmek için
-                fiyatlandırma sayfasına gidebilirsiniz.
+                {t("chatProRequiredDesc")}
               </p>
               <div className="flex gap-3">
                 <button
@@ -939,7 +980,7 @@ export default function ProGlobalChat() {
                     color: 'var(--foreground)',
                   }}
                 >
-                  Kapat
+                  {t("chatClose")}
                 </button>
                 <button
                   type="button"
@@ -949,7 +990,7 @@ export default function ProGlobalChat() {
                   }}
                   className="flex-1 py-2.5 px-4 rounded-xl font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
                 >
-                  Fiyatlandırmaya Git
+                  {t("chatGoToPricing")}
                 </button>
               </div>
             </motion.div>
@@ -977,19 +1018,16 @@ export default function ProGlobalChat() {
           headerSubtitle={
             isPdfChat
               ? pdfFile?.name
-                ? `Analiz: ${pdfFile.name}`
-                : 'PDF AI Asistanı'
-              : 'Genel AI Asistanı'
+                ? t("chatHeaderAnalysis").replace("{name}", pdfFile.name)
+                : t("chatHeaderPdf")
+              : t("chatHeaderGeneral")
           }
           avatarSrc={avatarSrc}
           userName={session?.user?.name ?? 'U'}
-          placeholder={t('chatPlaceholder') || 'Sorunuzu yazın...'}
-          disclaimer={
-            t('chatDisclaimer') ||
-            'NeuroPDF yapay zekası bazen hata yapabilir. Lütfen bilgileri kontrol edin.'
-          }
-          initializingLabel="Başlatılıyor..."
-          typingLabel={t('aiTyping') || 'Neuro yanıt yazıyor...'}
+          placeholder={t('chatPlaceholder')}
+          disclaimer={t('chatDisclaimer')}
+          initializingLabel={t("chatInitializing")}
+          typingLabel={t('aiTyping')}
           isRecording={isRecording}
           onVoiceToggle={handleVoiceToggle}
         />

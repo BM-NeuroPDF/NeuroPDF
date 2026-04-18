@@ -135,7 +135,7 @@ def _generate_with_retry(model, prompt: str, attempts: int = 5):
 
 
 def gemini_generate(
-    text_content: str, prompt_instruction: str, mode: str = "flash"
+    text_content: str, prompt_instruction: str, mode: str = "flash", language: str = "tr"
 ) -> str:
     """
     Tek ve birleştirilmiş ana fonksiyon.
@@ -156,7 +156,8 @@ def gemini_generate(
         text_content = text_content[:MAX_TEXT_LENGTH]
 
     # Prompt'u oluştur
-    full_prompt = f"{prompt_instruction}\n\nMETİN:\n---\n{text_content}\n---"
+    text_label = "TEXT" if language == "en" else "METİN"
+    full_prompt = f"{prompt_instruction}\n\n{text_label}:\n---\n{text_content}\n---"
 
     # Modeli seç
     # Eğer PRO istenmişse ve hata alınırsa FLASH'a düş (Fallback)
@@ -196,7 +197,7 @@ def gemini_generate(
         raise HTTPException(status_code=500, detail=f"Gemini servisinde hata: {str(e)}")
 
 
-def call_gemini_for_task(text_content: str, prompt_instruction: str) -> str:
+def call_gemini_for_task(text_content: str, prompt_instruction: str, language: str = "tr") -> str:
     """
     Celery (Arka Plan) görevleri için kullanılır.
     Otomatik olarak Pro dener, olmazsa Flash'a düşer (Fallback).
@@ -215,7 +216,8 @@ def call_gemini_for_task(text_content: str, prompt_instruction: str) -> str:
     if len(text_content) > MAX_TEXT_LENGTH:
         text_content = text_content[:MAX_TEXT_LENGTH]
 
-    full_prompt = f"{prompt_instruction}\n\nMETİN:\n---\n{text_content}\n---"
+    text_label = "TEXT" if language == "en" else "METİN"
+    full_prompt = f"{prompt_instruction}\n\n{text_label}:\n---\n{text_content}\n---"
 
     # 1. Deneme: PRO Modeli
     try:
@@ -255,6 +257,7 @@ def create_pdf_chat_session(
     mode: str = "flash",
     pdf_id: str | None = None,
     user_id: str | None = None,
+    language: str = "tr",
 ) -> str:
     """Yeni bir sohbet oturumu başlatır ve ID döner."""
     _cleanup_sessions()
@@ -268,6 +271,7 @@ def create_pdf_chat_session(
         "mode": mode,
         "pdf_id": pdf_id,
         "user_id": user_id,
+        "language": language,
     }
     return session_id
 
@@ -281,6 +285,7 @@ def restore_pdf_chat_session(
     mode: str = "flash",
     pdf_id: str | None = None,
     user_id: str | None = None,
+    language: str = "tr",
 ) -> str:
     """
     Süresi dolmuş veya kaybolmuş oturumu bellekte yeniden kurar; TTL created_at ile sıfırlanır.
@@ -307,6 +312,7 @@ def restore_pdf_chat_session(
         "mode": mode,
         "pdf_id": pdf_id,
         "user_id": user_id,
+        "language": language,
     }
     return session_id
 

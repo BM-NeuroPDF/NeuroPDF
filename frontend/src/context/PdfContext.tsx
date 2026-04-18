@@ -257,7 +257,7 @@ export function PdfProvider({ children }: { children: ReactNode }) {
           chatUi = [
             {
               role: 'assistant',
-              content: `👋 Merhaba! **"${fn}"** dosyasını analiz ettim. Bana bu belgeyle ilgili her şeyi sorabilirsin.`,
+              content: `WELCOME_PDF:${fn}`, // Use a signal format that ProGlobalChat will parse
             },
           ];
         }

@@ -67,6 +67,7 @@ def run_with_tools(
     tool_context: Optional[dict[str, Any]] = None,
     cloud_generate,
     local_generate,
+    language: str = "tr",
 ) -> tuple[str, list[dict[str, Any]]]:
     """
     One tool round max: first LLM -> optional tool -> second LLM for natural answer.
@@ -80,10 +81,12 @@ def run_with_tools(
 
     if llm_provider == "cloud":
         first_input = f"{cloud_prompt}\n\n{tool_block}"
+        instr = "Follow the context and tool rules above." if language == "en" else "Yukarıdaki bağlam ve araç kurallarına uy."
         raw = cloud_generate(
             first_input,
-            "Yukarıdaki bağlam ve araç kurallarına uy.",
+            instr,
             mode,
+            language=language
         )
     else:
         inst = f"{local_instruction}\n\n{tool_block}"
@@ -94,35 +97,43 @@ def run_with_tools(
         return (raw or "").strip(), []
 
     tool_result, client_actions = _dispatch_one(calls[0], tool_context)
-
     if llm_provider == "cloud":
-        follow = f"""{cloud_prompt}
-
-[ÖNCEKİ_MODEL_ÇIKTISI]
-{raw}
-
-[ARAÇ_SONUCU]
-{tool_result}
-
-Yukarıdaki araç sonucunu kullanarak kullanıcıya Türkçe, net nihai cevabı yaz.
-<tool_call> kullanma; sadece kullanıcıya yönelik metin yaz."""
+        instr_final = (
+            "Based on the tool result above, write a clear final answer for the user in English. Do not use <tool_call>; just write the final text."
+            if language == "en" else
+            "Yukarıdaki araç sonucunu kullanarak kullanıcıya Türkçe, net nihai cevabı yaz. <tool_call> kullanma; sadece kullanıcıya yönelik metin yaz."
+        )
+        task_label = "Generate final user answer." if language == "en" else "Nihai kullanıcı cevabını üret."
+        
         final = cloud_generate(
-            follow,
-            "Nihai kullanıcı cevabını üret.",
+            f"{cloud_prompt}\n\n[PREVIOUS_OUTPUT]\n{raw}\n\n[TOOL_RESULT]\n{tool_result}\n\n{instr_final}",
+            task_label,
             mode,
+            language=language
         ).strip()
         return final, client_actions
 
-    follow_user = (
-        f"Orijinal kullanıcı mesajı: {local_user_message}\n\n"
-        f"Modelin ilk ham çıktısı: {raw}\n\n"
-        f"Araç sonucu: {tool_result}\n\n"
-        "Araç sonucuna göre kullanıcıya Türkçe nihai cevabı yaz. "
-        "<tool_call> kullanma."
-    )
+    if language == "en":
+        follow_user = (
+            f"Original user message: {local_user_message}\n\n"
+            f"Model's first raw output: {raw}\n\n"
+            f"Tool result: {tool_result}\n\n"
+            "Based on the tool result, write the final answer for the user in English. Do not use <tool_call>."
+        )
+        second_instr = "You are NeuroPDF assistant. Only provide the final user answer."
+    else:
+        follow_user = (
+            f"Orijinal kullanıcı mesajı: {local_user_message}\n\n"
+            f"Modelin ilk ham çıktısı: {raw}\n\n"
+            f"Araç sonucu: {tool_result}\n\n"
+            "Araç sonucuna göre kullanıcıya Türkçe nihai cevabı yaz. "
+            "<tool_call> kullanma."
+        )
+        second_instr = "Sen NeuroPDF asistanısın. Sadece nihai kullanıcı cevabını ver."
+
     second = local_generate(
         follow_user,
-        "Sen NeuroPDF asistanısın. Sadece nihai kullanıcı cevabını ver.",
+        second_instr,
         local_history,
     )
     return (second or "").strip(), client_actions

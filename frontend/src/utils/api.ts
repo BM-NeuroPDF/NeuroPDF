@@ -50,6 +50,8 @@ export const sendRequest = async (
     if (endpoint === '/files/chat/start') return '/api/proxy/chat/start';
     if (endpoint === '/files/chat/general/start')
       return '/api/proxy/chat/general/start';
+    if (endpoint === '/files/chat/general/message')
+      return '/api/proxy/chat/general/message';
     if (endpoint === '/files/chat/sessions') return '/api/proxy/chat/sessions';
     if (endpoint.startsWith('/files/chat/sessions/')) {
       return endpoint.replace(
@@ -105,7 +107,9 @@ export const sendRequest = async (
   }
 
   try {
-    const response = await fetch(`${baseUrl}${normalizedEndpoint}`, config);
+    // Proxy rotası kullanılıyorsa baseUrl'i zorla boşalt (relative fetch)
+    const effectiveBaseUrl = normalizedEndpoint.startsWith('/api/proxy') ? '' : baseUrl;
+    const response = await fetch(`${effectiveBaseUrl}${normalizedEndpoint}`, config);
 
     if (!response.ok) {
       // ✅ Token expire kontrolü (401 Unauthorized)

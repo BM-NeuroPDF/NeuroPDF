@@ -2,6 +2,9 @@
   "name": "neuropdf",
   "version": "1.0.0",
   "private": true,
+  "workspaces": [
+    "frontend"
+  ],
   "description": "NeuroPDF monorepo — root tooling (Husky, lint-staged)",
   "scripts": {
     "prepare": "husky",

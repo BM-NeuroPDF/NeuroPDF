@@ -70,19 +70,13 @@ export default function ProfilePage() {
     if (!user) return;
     const uid = user.id || 'me';
     const token = (session as any)?.accessToken;
-    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
     try {
-      const res = await fetch(`${base}/api/v1/user/${uid}/avatar`, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      const blob = await sendRequest(`/api/v1/user/${uid}/avatar`, 'GET') as Blob;
+      setAvatarSrc((prev) => {
+        if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(blob);
       });
-      if (res.ok) {
-        const blob = await res.blob();
-        setAvatarSrc((prev) => {
-          if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
-          return URL.createObjectURL(blob);
-        });
-        return;
-      }
+      return;
     } catch (e) {
       console.warn('Avatar getirme hatası:', e);
     }
@@ -131,18 +125,12 @@ export default function ProfilePage() {
       const userId = user?.id || 'me';
       const token = (session as any)?.accessToken;
 
-      const res = await fetch(
-        `http://localhost:8000/api/v1/user/${userId}/avatar`,
-        {
-          method: 'POST',
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: formData,
-        }
+      await sendRequest(
+        `/api/v1/user/${userId}/avatar`,
+        'POST',
+        formData,
+        true // isFileUpload
       );
-
-      if (!res.ok) throw new Error('Upload failed');
 
       alert(t('imageUploadSuccess') || 'Profil resmi güncellendi!');
       setShowImageModal(false);
@@ -193,20 +181,12 @@ export default function ProfilePage() {
         formData.append('prompt', aiPrompt);
 
         // Fetch kullanıyoruz çünkü sendRequest JSON varsayıyor olabilir
-        const rawRes = await fetch(
-          `http://localhost:8000/api/v1/user/${userId}/avatar/edit`,
-          {
-            method: 'POST',
-            headers: {
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-              // Content-Type otomatik ayarlanır (boundary ile)
-            },
-            body: formData,
-          }
+        resData = await sendRequest(
+          `/api/v1/user/${userId}/avatar/edit`,
+          'POST',
+          formData,
+          true // isFileUpload
         );
-
-        if (!rawRes.ok) throw new Error('Edit failed');
-        resData = await rawRes.json();
       }
       // ✅ DURUM 2: Referans Resim YOKSA -> /generate endpointine JSON gönder
       else {

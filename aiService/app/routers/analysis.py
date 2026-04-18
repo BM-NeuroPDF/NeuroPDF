@@ -21,6 +21,7 @@ async def summarize_synchronous(
     file: UploadFile = File(...),
     llm_provider: LLMProvider = Query("cloud"),
     mode: CloudMode = Query("flash"),
+    language: str = Query("tr"),
     _: bool = Depends(verify_api_key),
 ):
     try:
@@ -28,26 +29,50 @@ async def summarize_synchronous(
         text = pdf_service.extract_text_from_pdf_bytes(pdf_bytes)
 
         if llm_provider == "cloud":
-            prompt = (
-                "Bu PDF belgesini Türkçe olarak, anlaşılır ve ilgi çekici bir şekilde özetle. "
-                "Lütfen yanıtını tıpkı modern bir yapay zeka asistanı gibi profesyonel ama samimi bir tonda, "
-                "aralara uygun emojiler (📄✨) serpiştirerek yapılandır. "
-                "Aşağıdaki formatı kullanmaya özen göster:\n"
-                "1. 🎯 **Ana Fikir**: Belgenin temel amacını 1-2 cümleyle özetle.\n"
-                "2. 💡 **Önemli Noktalar**: Öne çıkan argümanları ve detayları okunabilir kısa maddeler halinde listele.\n"
-                "3. 📊 **Sonuç/Kısa Değerlendirme**: Belgenin ulaştığı sonucu veya genel çıkarımı yaz.\n\n"
-                "Yanıtın sıkıcı ve uzun bir metin yığını (wall of text) olmasın; "
-                "paragraflar kısa, başlıklar belirgin ve okuması çok keyifli olsun."
-            )
+            if language == "en":
+                prompt = (
+                    "Summarize this PDF document in English in a clear and engaging way. "
+                    "Please structure your response like a modern AI assistant with a professional yet friendly tone, "
+                    "sprinkling in appropriate emojis (📄✨). "
+                    "Try to use the following format:\n"
+                    "1. 🎯 **Main Idea**: Summarize the primary purpose of the document in 1-2 sentences.\n"
+                    "2. 💡 **Key Points**: List the prominent arguments and details in readable short bullet points.\n"
+                    "3. 📊 **Conclusion/Quick Evaluation**: Write the conclusion reached by the document or the general takeaway.\n\n"
+                    "Your response should not be a boring and long wall of text; "
+                    "paragraphs should be short, headings distinct, and it should be very pleasant to read."
+                )
+            else:
+                prompt = (
+                    "Bu PDF belgesini Türkçe olarak, anlaşılır ve ilgi çekici bir şekilde özetle. "
+                    "Lütfen yanıtını tıpkı modern bir yapay zeka asistanı gibi profesyonel ama samimi bir tonda, "
+                    "aralara uygun emojiler (📄✨) serpiştirerek yapılandır. "
+                    "Aşağıdaki formatı kullanmaya özen göster:\n"
+                    "1. 🎯 **Ana Fikir**: Belgenin temel amacını 1-2 cümleyle özetle.\n"
+                    "2. 💡 **Önemli Noktalar**: Öne çıkan argümanları ve detayları okunabilir kısa maddeler halinde listele.\n"
+                    "3. 📊 **Sonuç/Kısa Değerlendirme**: Belgenin ulaştığı sonucu veya genel çıkarımı yaz.\n\n"
+                    "Yanıtın sıkıcı ve uzun bir metin yığını (wall of text) olmasın; "
+                    "paragraflar kısa, başlıklar belirgin ve okuması çok keyifli olsun."
+                )
         else:
-            prompt = (
-                "Bu PDF belgesini Türkçe olarak özetle. "
-                "Ana konuları ve önemli noktaları madde madde belirt."
-            )
+            if language == "en":
+                prompt = (
+                    "Summarize this PDF document in English. "
+                    "Specify the main topics and important points item by item."
+                )
+            else:
+                prompt = (
+                    "Bu PDF belgesini Türkçe olarak özetle. "
+                    "Ana konuları ve önemli noktaları madde madde belirt."
+                )
 
         # Blocking LLM çağrısını thread pool'da çalıştır (event loop'u bloklamaz)
         summary = await asyncio.to_thread(
-            summarize_text, text, prompt, llm_provider=llm_provider, mode=mode
+            summarize_text,
+            text=text,
+            prompt_instruction=prompt,
+            llm_provider=llm_provider,
+            mode=mode,
+            language=language,
         )
 
         return {
@@ -68,8 +93,9 @@ class AsyncTaskRequest(BaseModel):
     pdf_id: int
     storage_path: str
     callback_url: str
-    llm_provider: str = "cloud"
-    mode: str = "pro"
+    llm_provider: LLMProvider = "cloud"
+    mode: CloudMode = "flash"
+    language: str = "tr"
 
 
 @router.post("/summarize-async")
@@ -83,6 +109,7 @@ async def summarize_asynchronous(
         callback_url=task_request.callback_url,
         llm_provider=task_request.llm_provider,
         mode=task_request.mode,
+        language=task_request.language,
     )
     return {
         "status": "processing",
@@ -101,6 +128,7 @@ async def start_chat(
     file: UploadFile = File(...),
     llm_provider: LLMProvider = Query("cloud"),
     mode: CloudMode = Query("flash"),
+    language: str = Query("tr"),
     _: bool = Depends(verify_api_key),
 ):
     pdf_bytes = await file.read()
@@ -112,6 +140,7 @@ async def start_chat(
         filename=file.filename,
         llm_provider=llm_provider,
         mode=mode,
+        language=language,
     )
     return {"session_id": session_id}
 
@@ -123,6 +152,7 @@ class StartChatFromTextRequest(BaseModel):
     mode: CloudMode = "flash"
     pdf_id: str | None = None
     user_id: str | None = None
+    language: str = "tr"
 
 
 @router.post("/chat/start-from-text", response_model=StartChatResponse)
@@ -138,6 +168,7 @@ async def start_chat_from_text(
         mode=req.mode,
         pdf_id=req.pdf_id,
         user_id=req.user_id,
+        language=req.language,
     )
     return {"session_id": session_id}
 
@@ -147,10 +178,11 @@ class RestorePdfChatRequest(BaseModel):
     pdf_text: str
     filename: str = "document.pdf"
     history: list = Field(default_factory=list)
-    llm_provider: str = "cloud"
-    mode: str = "flash"
+    llm_provider: LLMProvider = "cloud"
+    mode: CloudMode = "flash"
     pdf_id: str | None = None
     user_id: str | None = None
+    language: str = "tr"
 
 
 @router.post("/chat/restore-session", response_model=StartChatResponse)
@@ -169,6 +201,7 @@ async def restore_pdf_chat_session_endpoint(
             mode=req.mode,
             pdf_id=req.pdf_id,
             user_id=req.user_id,
+            language=req.language,
         )
         return {"session_id": req.session_id}
     except Exception as e:
@@ -180,6 +213,7 @@ async def restore_pdf_chat_session_endpoint(
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+    language: str = "tr"
     llm_provider: str | None = None
     mode: str | None = None
 
@@ -230,8 +264,9 @@ async def chat_about_pdf(
             user_message=req.message,
             llm_provider=llm_provider,
             mode=mode,
-            history=history[-10:] if history else None,  # Son 10 mesajı geçir (context window için)
+            history=history[-10:] if history else None,
             tool_context=tool_ctx,
+            language=req.language, # Dili geçir
         )
 
         history.append({"role": "user", "content": req.message})
@@ -296,6 +331,7 @@ async def start_general_chat(
 class GeneralChatRequest(BaseModel):
     session_id: str
     message: str
+    language: str = "tr"
     llm_provider: str | None = None
     mode: str | None = None
 
@@ -330,8 +366,9 @@ async def general_chat(
             user_message=req.message,
             llm_provider=llm_provider,
             mode=mode,
-            history=history[-10:] if history else None,  # Son 10 mesajı geçir (context window için)
+            history=history[-10:] if history else None,
             tool_context=None,
+            language=req.language, # Dili geçir
         )
 
         history.append({"role": "user", "content": req.message})

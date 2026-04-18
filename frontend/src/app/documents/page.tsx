@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { FileText, MessageCircle, PencilLine, RefreshCw } from 'lucide-react';
+import { Eye, FileText, Loader2, MessageCircle, PencilLine, RefreshCw } from 'lucide-react';
 import useSWR from 'swr';
 import {
   fetchStoredPdfBlob,
@@ -11,6 +11,7 @@ import {
   type UserDocumentListItem,
 } from '@/utils/api';
 import { usePdf } from '@/context/PdfContext';
+import PdfPreviewModal from '@/components/PdfPreviewModal';
 
 function formatDate(value: string | null): string {
   if (!value) return '-';
@@ -39,6 +40,11 @@ export default function DocumentsPage() {
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState<string | null>(null);
+  const [previewData, setPreviewData] = useState<{
+    file: Blob;
+    title: string;
+  } | null>(null);
 
   const { data, error, isLoading, mutate } = useSWR<{
     files: UserDocumentListItem[];
@@ -95,6 +101,26 @@ export default function DocumentsPage() {
       setActionError(message);
     } finally {
       setOpeningId(null);
+    }
+  };
+
+  const handleOpenPreview = async (doc: UserDocumentListItem) => {
+    setIsPreviewLoading(doc.id);
+    try {
+      setActionError(null);
+      const blob = await fetchStoredPdfBlob(doc.id);
+      setPreviewData({
+        file: blob,
+        title: doc.filename || 'Adsız Belge',
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Önizleme yüklenemedi. Lütfen tekrar deneyin.';
+      setActionError(message);
+    } finally {
+      setIsPreviewLoading(null);
     }
   };
 
@@ -176,8 +202,23 @@ export default function DocumentsPage() {
               return (
                 <article
                   key={doc.id}
-                  className="docs-surface rounded-2xl p-5 transition-all hover:shadow-md"
+                  className="docs-surface rounded-2xl p-5 transition-all hover:shadow-md relative group"
                 >
+                  <div className="absolute top-4 right-4 z-10">
+                    <button
+                      title="Önizleme"
+                      type="button"
+                      onClick={() => void handleOpenPreview(doc)}
+                      disabled={isPreviewLoading === doc.id}
+                      className="p-2 rounded-xl border border-[var(--container-border)] bg-[var(--container-bg)]/80 backdrop-blur-sm text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/40 transition-all shadow-sm disabled:opacity-50"
+                    >
+                      {isPreviewLoading === doc.id ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Eye className="w-5 h-5" />
+                      )}
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => void openDocument(doc, 'edit')}
@@ -226,6 +267,14 @@ export default function DocumentsPage() {
               );
             })}
           </div>
+        )}
+        {previewData && (
+          <PdfPreviewModal
+            isOpen={!!previewData}
+            onClose={() => setPreviewData(null)}
+            file={previewData.file}
+            title={previewData.title}
+          />
         )}
       </section>
     </main>

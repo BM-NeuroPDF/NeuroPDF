@@ -69,10 +69,10 @@ export default function ProChatPanel({
   headerSubtitle,
   avatarSrc,
   userName = "U",
-  placeholder = "Sorunuzu yazın...",
-  disclaimer = "NeuroPDF yapay zekası bazen hata yapabilir. Lütfen bilgileri kontrol edin.",
-  initializingLabel = "Başlatılıyor...",
-  typingLabel = "Neuro yanıt yazıyor...",
+  placeholder,
+  disclaimer,
+  initializingLabel,
+  typingLabel,
   isRecording = false,
   onVoiceToggle,
   promptSuggestions = [],
@@ -82,10 +82,28 @@ export default function ProChatPanel({
   const prevMessageCountRef = useRef(0);
   const panelJustOpenedRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const { showError } = usePopup();
   const { t } = useLanguage();
   const { pdfFile } = usePdf();
   const [isDragging, setIsDragging] = useState(false);
+
+  // Default localized values if not provided via props
+  const activePlaceholder = placeholder || t("chatPlaceholder");
+  const activeDisclaimer = disclaimer || t("chatDisclaimer");
+  const activeInitializingLabel = initializingLabel || t("chatInitializing");
+  const activeTypingLabel = typingLabel || t("aiTyping");
+
+  // Sesli kayıt sırasında veya metin girişi yapıldığında input alanını en sağa kaydır (imleci sona taşı)
+  useEffect(() => {
+    if (isRecording && inputRef.current) {
+      const el = inputRef.current;
+      // Metin girişi sonrası scroll behavior - modern tarayıcılar için
+      el.scrollLeft = el.scrollWidth;
+      // İmleci sona sabitle
+      el.selectionStart = el.selectionEnd = el.value.length;
+    }
+  }, [input, isRecording]);
 
   useEffect(() => {
     if (isOpen) {
@@ -224,7 +242,7 @@ export default function ProChatPanel({
                       </svg>
                     </div>
                     <p className="font-bold text-indigo-600 dark:text-indigo-400">
-                      PDF'i Buraya Bırakın
+                      {t("chatDropActive")}
                     </p>
                   </div>
                 </motion.div>
@@ -313,7 +331,7 @@ export default function ProChatPanel({
                       className="w-8 h-8 border-2 border-[var(--button-bg)] border-t-transparent rounded-full"
                     />
                     <p className="text-sm mt-4 font-bold">
-                      {initializingLabel}
+                      {activeInitializingLabel}
                     </p>
                   </div>
                 )}
@@ -380,7 +398,7 @@ export default function ProChatPanel({
                         height={12}
                       />
                     </div>
-                    {typingLabel}
+                    {activeTypingLabel}
                   </div>
                 )}
               </div>
@@ -436,10 +454,11 @@ export default function ProChatPanel({
               >
                   <div className="relative flex-1 group/input">
                     <input
+                      ref={inputRef}
                       type="text"
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
-                      placeholder={isRecording ? "Dinleniyor..." : placeholder}
+                      placeholder={isRecording ? t("chatListening") : activePlaceholder}
                       disabled={loading || initializing}
                       className={`chat-input-field w-full pr-24 ${isRecording ? "ring-2 ring-red-500/50" : ""}`}
                     />
@@ -452,8 +471,8 @@ export default function ProChatPanel({
                             ? "text-red-500 bg-red-50 dark:bg-red-900/20 opacity-100"
                             : "text-[var(--foreground)] opacity-40 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/5"
                           }`}
-                        aria-label="Sesli Yaz"
-                        title="Sesli Girdi"
+                        aria-label={t("chatVoiceAria")}
+                        title={t("chatVoiceInput")}
                       >
                         {isRecording && (
                           <motion.span
@@ -485,8 +504,8 @@ export default function ProChatPanel({
                         onClick={() => fileInputRef.current?.click()}
                         disabled={loading || initializing}
                         className="p-2.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-all text-[var(--foreground)] opacity-40 hover:opacity-100 flex items-center justify-center"
-                        aria-label="PDF Ekle"
-                        title="PDF Dosyası Yükle"
+                        aria-label={t("chatPdfAria")}
+                        title={t("chatAttachPdf")}
                       >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
@@ -529,7 +548,7 @@ export default function ProChatPanel({
                 </form>
 
               <p className="text-[10px] text-center mt-3 opacity-40 leading-tight">
-                {disclaimer}
+                {activeDisclaimer}
               </p>
             </div>
           </motion.div>

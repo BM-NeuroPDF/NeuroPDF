@@ -9,6 +9,7 @@ from fastapi import (
     Header,
     Body,
     BackgroundTasks,
+    Query,
 )
 from fastapi.responses import StreamingResponse
 from typing import List, Optional
@@ -338,6 +339,7 @@ async def summarize_file(
     current_user: Optional[dict] = Depends(get_current_user_optional),
     supabase: Client = Depends(get_supabase),
     db: Session = Depends(get_db),
+    language: str = Query("tr"),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     print("\n--- SUMMARIZE İSTEĞİ ---")
@@ -431,7 +433,11 @@ async def summarize_file(
             timeout=timeout_duration, follow_redirects=True
         ) as client:
             headers = get_ai_service_headers()
-            params = {"llm_provider": provider_string, "pdf_hash": pdf_hash}
+            params = {
+                "llm_provider": provider_string, 
+                "pdf_hash": pdf_hash,
+                "language": language
+            }
             response = await client.post(
                 ai_service_url, files=files, params=params, headers=headers
             )
@@ -494,6 +500,7 @@ async def summarize_file(
 async def summarize_for_guest(
     file: UploadFile = File(...),
     x_guest_id: Optional[str] = Header(None, alias="X-Guest-ID"),
+    language: str = Query("tr"),
 ):
     """Misafir kullanıcılar için ANLIK özetleme."""
     if file.content_type != "application/pdf":
@@ -511,7 +518,7 @@ async def summarize_for_guest(
         async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
             files = {"file": (file.filename, file_content, "application/pdf")}
             headers = get_ai_service_headers()
-            params = {"llm_provider": llm_provider}
+            params = {"llm_provider": llm_provider, "language": language}
             response = await client.post(
                 ai_service_url, files=files, params=params, headers=headers
             )
@@ -537,6 +544,7 @@ async def trigger_summarize_task(
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_supabase),
     db: Session = Depends(get_db),
+    language: str = Query("tr"),
 ):
     """Asenkron özetleme görevi başlatır."""
     print("\n--- SUMMARIZE-START İSTEĞİ ---")
@@ -567,6 +575,7 @@ async def trigger_summarize_task(
             "storage_path": file_data["storage_path"],
             "callback_url": callback_url,
             "llm_provider": llm_provider,
+            "language": language,
         }
 
         ai_service_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/summarize-async"
@@ -1082,6 +1091,7 @@ async def start_chat_session(
     file: UploadFile = File(...),  # 👈 Direkt dosyayı alıyoruz
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
+    language: str = Form("tr"),
 ):
     """
     PDF'i veritabanına kaydeder, metnini çıkarır ve AI Service sohbet oturumunu
@@ -1131,6 +1141,7 @@ async def start_chat_session(
                 "mode": mode,
                 "pdf_id": pdf_row.id,
                 "user_id": user_id,
+                "language": language,
             }
             headers = get_ai_service_headers()
             print(
@@ -1193,6 +1204,7 @@ async def send_chat_message(
     """
     session_id = body.get("session_id")
     message = body.get("message")
+    language = body.get("language", "tr")
 
     if not session_id or not message:
         raise HTTPException(status_code=400, detail="Session ID ve mesaj gereklidir.")
@@ -1200,7 +1212,7 @@ async def send_chat_message(
     try:
         # AI Service'e ilet (/chat)
         async with httpx.AsyncClient(timeout=240.0) as client:
-            payload = {"session_id": session_id, "message": message}
+            payload = {"session_id": session_id, "message": message, "language": language}
             target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat"
             headers = get_ai_service_headers()
             response = await client.post(target_url, json=payload, headers=headers)
@@ -1585,6 +1597,7 @@ async def send_general_chat_message(
 
     session_id = body.get("session_id")
     message = body.get("message")
+    language = body.get("language", "tr")
 
     if not session_id or not message:
         raise HTTPException(status_code=400, detail="Session ID ve mesaj gereklidir.")
@@ -1592,7 +1605,7 @@ async def send_general_chat_message(
     try:
         # AI Service'e ilet
         async with httpx.AsyncClient(timeout=240.0) as client:
-            payload = {"session_id": session_id, "message": message}
+            payload = {"session_id": session_id, "message": message, "language": language}
             target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/general"
             headers = get_ai_service_headers()
             response = await client.post(target_url, json=payload, headers=headers)

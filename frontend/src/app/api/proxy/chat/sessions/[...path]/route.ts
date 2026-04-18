@@ -23,10 +23,10 @@ function targetUrl(path: string[]) {
 
 export async function GET(
   req: Request,
-  context: { params: { path: string[] } }
+  context: { params: Promise<{ path: string[] }> }
 ) {
   try {
-    const { path } = context.params;
+    const { path } = await context.params;
     const backendResponse = await fetch(targetUrl(path), {
       method: 'GET',
       headers: buildProxyHeaders(req.headers),
@@ -52,10 +52,10 @@ export async function GET(
 
 export async function POST(
   req: Request,
-  context: { params: { path: string[] } }
+  context: { params: Promise<{ path: string[] }> }
 ) {
   try {
-    const { path } = context.params;
+    const { path } = await context.params;
     const rawBody = await req.text();
     const backendResponse = await fetch(targetUrl(path), {
       method: 'POST',

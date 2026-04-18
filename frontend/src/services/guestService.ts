@@ -1,7 +1,16 @@
-// src/services/guestService.ts
-// ✅ DÜZELTME: createSession metodu POST olmalı
+const resolveApiBaseUrl = (): string => {
+  const envBase = (process.env.NEXT_PUBLIC_API_URL ?? '').trim();
+  const isHttpsBrowser =
+    typeof window !== 'undefined' && window.location.protocol === 'https:';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  // HTTPS sayfada http backend çağrısını same-origin rewrite'e düşür.
+  if (isHttpsBrowser && envBase.startsWith('http://')) {
+    return '';
+  }
+  return envBase || 'http://localhost:8000';
+};
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 interface GuestSession {
   guest_id: string;
