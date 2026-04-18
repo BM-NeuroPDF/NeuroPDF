@@ -48,6 +48,7 @@ load-tests/results.ndjson
 NeuroPDF_Final_Report.md
 
 # === IDE / Config Folders ===
+.cursorrules
 .cursor/
 .vscode/
 .idea/
@@ -58,3 +59,4 @@ Thumbs.db
 
 
 backend/uploads/
+backend/static/avatars/

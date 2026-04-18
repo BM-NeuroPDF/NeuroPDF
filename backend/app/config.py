@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     USE_SUPABASE: bool = os.getenv("USE_SUPABASE", "false").lower() == "true"
     SUPABASE_DATABASE_URL: Optional[str] = os.getenv("SUPABASE_DATABASE_URL")
     LOCAL_DATABASE_URL: Optional[str] = os.getenv("LOCAL_DATABASE_URL")
+    # USE_SUPABASE=false: avatar PNG'leri diskte saklanır (boşsa backend/static/avatars)
+    LOCAL_AVATAR_STORAGE_ROOT: str = os.getenv("LOCAL_AVATAR_STORAGE_ROOT", "")
 
     # --- Redis Configuration ---
     REDIS_URL: Optional[str] = os.getenv("REDIS_URL")
@@ -60,6 +62,20 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_PER_MINUTE: int = 60
     RATE_LIMIT_AUTH_PER_MINUTE: int = 10
+
+    # --- Email (SMTP, e.g. Gmail) & 2FA ---
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    OTP_EMAIL_TTL_SECONDS: int = 180
+    VERIFY_2FA_MAX_FAILS: int = 3
+    VERIFY_2FA_LOCKOUT_SECONDS: int = 180
+    # Opt-in only: fixed OTP for a single email (local/E2E against dev backend).
+    E2E_MAGIC_OTP_ENABLED: bool = (
+        os.getenv("E2E_MAGIC_OTP_ENABLED", "").lower() == "true"
+    )
+    E2E_MAGIC_OTP_EMAIL: Optional[str] = os.getenv("E2E_MAGIC_OTP_EMAIL")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

@@ -206,6 +206,7 @@ class TestSecurityLoggerRequest:
 class TestDbRemaining:
     def test_get_supabase_raises_after_both_fail(self):
         with (
+            patch.object(db_module.settings, "USE_SUPABASE", True),
             patch.object(db_module, "SUPABASE_URL", "u"),
             patch.object(db_module, "SUPABASE_KEY", "k"),
             patch.object(db_module, "create_client", side_effect=Exception("fail")),
@@ -216,6 +217,7 @@ class TestDbRemaining:
     @patch.dict("os.environ", {"ENVIRONMENT": "production"})
     def test_get_supabase_production_verify_ssl(self):
         with (
+            patch.object(db_module.settings, "USE_SUPABASE", True),
             patch.object(db_module, "SUPABASE_URL", "https://x.supabase.co"),
             patch.object(db_module, "SUPABASE_KEY", "k"),
             patch.object(db_module, "create_client") as cc,

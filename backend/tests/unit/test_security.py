@@ -8,6 +8,10 @@ from app.core.security import (
     hash_password,
     verify_password,
     create_jwt,
+    generate_six_digit_otp,
+    create_2fa_pending_token,
+    decode_2fa_pending_token,
+    TWO_FA_PENDING_TYP,
 )
 
 
@@ -163,3 +167,50 @@ class TestJWT:
         assert "email" in decoded
         assert "exp" in decoded  # Expiration should be added automatically
         assert "iat" in decoded  # Issued at should be added automatically
+
+
+@pytest.mark.unit
+class TestEmailLoginOtpHelpers:
+    def test_generate_six_digit_otp_format(self):
+        code = generate_six_digit_otp("anyone@example.com")
+        assert len(code) == 6
+        assert code.isdigit()
+
+    def test_generate_six_digit_otp_magic_email(self):
+        from unittest.mock import patch
+
+        with patch("app.core.security.settings") as s:
+            s.E2E_MAGIC_OTP_ENABLED = True
+            s.E2E_MAGIC_OTP_EMAIL = "magic@test.com"
+            assert generate_six_digit_otp("magic@test.com") == "123456"
+
+    def test_create_and_decode_2fa_pending_token(self):
+        tok = create_2fa_pending_token("uid-1", "u@example.com")
+        payload = decode_2fa_pending_token(tok)
+        assert payload["sub"] == "uid-1"
+        assert payload["email"] == "u@example.com"
+        assert payload["typ"] == TWO_FA_PENDING_TYP
+
+    def test_decode_2fa_pending_token_invalid(self):
+        with pytest.raises(ValueError):
+            decode_2fa_pending_token("not-a-jwt")
+
+    def test_decode_2fa_pending_token_wrong_typ(self):
+        import jwt
+        from datetime import datetime, timedelta, timezone
+        from app.config import settings
+
+        now = datetime.now(timezone.utc)
+        bad = jwt.encode(
+            {
+                "sub": "x",
+                "email": "a@b.com",
+                "typ": "other",
+                "exp": now + timedelta(minutes=5),
+                "iat": now,
+            },
+            settings.JWT_SECRET,
+            algorithm="HS256",
+        )
+        with pytest.raises(ValueError):
+            decode_2fa_pending_token(bad)

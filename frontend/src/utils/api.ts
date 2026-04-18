@@ -3,18 +3,26 @@ import { getSession, signOut } from 'next-auth/react';
 const TEMP_DB_ERROR_MESSAGE =
   'Veritabanı bağlantısı geçici olarak sağlanamadı. Lütfen birkaç saniye sonra tekrar deneyin.';
 
-const resolveBaseUrl = (): string => {
+/**
+ * Browser API base (no trailing slash). Empty string = same-origin so Next.js
+ * rewrites (`/auth`, `/files`, …) proxy to the backend (avoids CORS on https://localhost:3000).
+ */
+export const resolveApiBaseUrl = (): string => {
   const envBase = (process.env.NEXT_PUBLIC_API_URL ?? '').trim();
   const isHttpsBrowser =
     typeof window !== 'undefined' && window.location.protocol === 'https:';
 
-  // HTTPS'te http backend'e doğrudan gitmek mixed-content üretir.
-  // Bu durumda same-origin rewrite kullanmak için relative URL döndürürüz.
-  if (isHttpsBrowser && envBase.startsWith('http://')) {
-    return '';
+  if (isHttpsBrowser) {
+    if (!envBase || envBase.startsWith('http://')) {
+      return '';
+    }
+    return envBase.replace(/\/$/, '');
   }
-  return envBase || 'http://localhost:8000';
+
+  return (envBase || 'http://localhost:8000').replace(/\/$/, '');
 };
+
+const resolveBaseUrl = (): string => resolveApiBaseUrl();
 
 /**
  * Token expire durumunda kullanıcıyı login sayfasına yönlendir
@@ -106,10 +114,22 @@ export const sendRequest = async (
     config.body = isFileUpload ? body : JSON.stringify(body);
   }
 
+  console.log(`🔵 API Request: ${method} ${normalizedEndpoint}`, {
+    method: config.method,
+    headers: config.headers,
+    bodyType: isFileUpload ? 'FormData' : 'JSON',
+    hasBody: !!config.body,
+  });
+
   try {
     // Proxy rotası kullanılıyorsa baseUrl'i zorla boşalt (relative fetch)
-    const effectiveBaseUrl = normalizedEndpoint.startsWith('/api/proxy') ? '' : baseUrl;
-    const response = await fetch(`${effectiveBaseUrl}${normalizedEndpoint}`, config);
+    const effectiveBaseUrl = normalizedEndpoint.startsWith('/api/proxy')
+      ? ''
+      : baseUrl;
+    const response = await fetch(
+      `${effectiveBaseUrl}${normalizedEndpoint}`,
+      config
+    );
 
     if (!response.ok) {
       // ✅ Token expire kontrolü (401 Unauthorized)

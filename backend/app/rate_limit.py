@@ -50,3 +50,46 @@ def check_rate_limit(request: Request, key: str, limit: int, window: int = 60) -
         logger = logging.getLogger(__name__)
         logger.warning(f"Rate limit check failed: {e}")
         return True
+
+
+def _verify_2fa_fail_key(request: Request) -> str:
+    client_ip = request.client.host if request.client else "unknown"
+    return f"auth:verify2fa:fail:{client_ip}"
+
+
+def is_2fa_verify_locked(request: Request) -> bool:
+    """True when this client IP has reached max failed OTP attempts in the lockout window."""
+    if not settings.RATE_LIMIT_ENABLED or redis_client is None:
+        return False
+    try:
+        raw = redis_client.get(_verify_2fa_fail_key(request))
+        if raw is None:
+            return False
+        return int(raw) >= settings.VERIFY_2FA_MAX_FAILS
+    except Exception:
+        return False
+
+
+def record_2fa_verify_failure(request: Request) -> None:
+    if not settings.RATE_LIMIT_ENABLED or redis_client is None:
+        return
+    try:
+        key = _verify_2fa_fail_key(request)
+        n = redis_client.incr(key)
+        if n == 1:
+            redis_client.expire(key, settings.VERIFY_2FA_LOCKOUT_SECONDS)
+    except Exception as e:
+        import logging
+
+        logging.getLogger(__name__).warning("2FA failure counter update failed: %s", e)
+
+
+def clear_2fa_verify_failures(request: Request) -> None:
+    if not settings.RATE_LIMIT_ENABLED or redis_client is None:
+        return
+    try:
+        redis_client.delete(_verify_2fa_fail_key(request))
+    except Exception as e:
+        import logging
+
+        logging.getLogger(__name__).warning("2FA failure counter clear failed: %s", e)

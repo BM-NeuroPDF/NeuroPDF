@@ -1,8 +1,13 @@
 import jwt
 import re
 import bcrypt
+import secrets
 from datetime import datetime, timedelta, timezone
+from typing import Any
+
 from ..config import settings
+
+TWO_FA_PENDING_TYP = "2fa_pending"
 
 
 def hash_password(password: str) -> str:
@@ -58,3 +63,42 @@ def verify_jwt(token: str) -> dict:
         return jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
     except Exception as exc:
         raise ValueError("Invalid JWT token") from exc
+
+
+def generate_six_digit_otp(email: str) -> str:
+    if (
+        settings.E2E_MAGIC_OTP_ENABLED
+        and settings.E2E_MAGIC_OTP_EMAIL
+        and email.lower() == settings.E2E_MAGIC_OTP_EMAIL.lower()
+    ):
+        return "123456"
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def create_2fa_pending_token(user_id: str, email: str) -> str:
+    now = datetime.now(timezone.utc)
+    ttl = max(60, int(settings.OTP_EMAIL_TTL_SECONDS))
+    claims: dict[str, Any] = {
+        "sub": str(user_id),
+        "email": email,
+        "typ": TWO_FA_PENDING_TYP,
+        "exp": now + timedelta(seconds=ttl),
+        "iat": now,
+        "iss": "fastapi-2fa-pending",
+    }
+    return jwt.encode(claims, settings.JWT_SECRET, algorithm="HS256")
+
+
+def decode_2fa_pending_token(token: str) -> dict[str, Any]:
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET,
+            algorithms=["HS256"],
+            options={"require": ["exp", "sub"]},
+        )
+    except Exception as exc:
+        raise ValueError("Invalid pending token") from exc
+    if payload.get("typ") != TWO_FA_PENDING_TYP:
+        raise ValueError("Invalid pending token")
+    return payload

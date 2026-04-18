@@ -1,6 +1,8 @@
 import os
 import logging
 import httpx
+from typing import cast
+
 from fastapi import HTTPException
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -22,11 +24,31 @@ SUPABASE_URL = settings.SUPABASE_URL
 SUPABASE_KEY = settings.SUPABASE_KEY
 
 
+class _SupabaseDisabledClient:
+    """
+    Local stack (USE_SUPABASE=false): routes still declare Depends(get_supabase).
+    Returning this placeholder avoids RuntimeError when SUPABASE_* env vars are unset.
+    Any real Supabase.table() call must be guarded by settings.USE_SUPABASE.
+    """
+
+    def table(self, *_args, **_kwargs):
+        raise HTTPException(
+            status_code=503,
+            detail="Supabase REST API is disabled (USE_SUPABASE=false).",
+        )
+
+
+_SUPABASE_DISABLED_CLIENT = _SupabaseDisabledClient()
+
+
 def get_supabase() -> Client:
     """
     Supabase REST istemcisini döndürür.
     SSL hatalarını aşmak için HTTP istemcisi özel olarak yapılandırılmıştır.
     """
+    if not settings.USE_SUPABASE:
+        return cast(Client, _SUPABASE_DISABLED_CLIENT)
+
     if not SUPABASE_URL or not SUPABASE_KEY:
         raise RuntimeError(
             "Supabase client not configured. SUPABASE_URL / SUPABASE_KEY missing."

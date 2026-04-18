@@ -9,6 +9,7 @@ import logging
 from PIL import Image
 import io
 
+from app.config import settings
 from app.db import get_db
 from app.deps import get_current_user
 from app.services.avatar_service import (
@@ -21,6 +22,7 @@ from app.services.avatar_service import (
     save_temp_avatar,
     get_temp_avatar,
     edit_avatar_with_prompt,
+    load_avatar_bytes_from_storage,
 )
 
 from app.models import UserAvatar
@@ -127,8 +129,8 @@ async def get_avatar(
         except Exception as e:
             logger.warning(f"Failed to get avatar from DB: {e}", exc_info=True)
 
-    # 3. DB'den bulunamadıysa Supabase REST API'den çekmeyi dene
-    if not active_avatar_url:
+    # 3. DB'den bulunamadıysa Supabase REST API'den çekmeyi dene (yalnızca USE_SUPABASE=true)
+    if not active_avatar_url and settings.USE_SUPABASE:
         try:
             from app.db import get_supabase
 
@@ -240,86 +242,37 @@ async def get_avatar(
             )
             raise HTTPException(status_code=404, detail="Active avatar not set")
 
-    # 5. Supabase Storage'dan indir
-    from app.db import get_supabase
-
-    supabase = get_supabase()
-
+    # 5. Supabase Storage veya yerel diskten oku
     try:
-        logger.info(
-            f"Downloading active avatar for {target_user_id}: {active_avatar_url}"
-        )
-
-        # 'avatars' bucket'ından dosyayı indir
-        avatar_data = supabase.storage.from_("avatars").download(active_avatar_url)
-
-        # Supabase hata dönerse (dict dönebilir)
-        if isinstance(avatar_data, dict):
-            error_msg = avatar_data.get("error") or avatar_data.get(
-                "message", "Unknown error"
-            )
-            error_str = str(error_msg).lower()
-            logger.error(f"Storage error: {avatar_data}")
-
-            # Bucket not found hatası için özel mesaj
-            if (
-                "bucket not found" in error_str
-                or "not_found" in error_str
-                and "bucket" in error_str
-            ):
-                logger.warning("Avatars bucket not found in Supabase Storage")
-                raise HTTPException(
-                    status_code=404,
-                    detail="Avatar storage bucket not configured. Please create 'avatars' bucket in Supabase Storage.",
-                )
-
-            # Object not found - dosya yok ama bucket var
-            if "object not found" in error_str or (
-                "not_found" in error_str and "object" in error_str
-            ):
-                logger.warning(
-                    f"Avatar file not found in storage: {active_avatar_url}, generating default avatar"
-                )
-                # Storage'da dosya yoksa default avatar oluştur ve döndür
-                try:
-                    if db is not None:
-                        from app.models import User
-
-                        user = db.query(User).filter(User.id == target_user_id).first()
-                        if user:
-                            username = user.username or user.email or "User"
-                            avatar_bytes = generate_avatar_from_name(username)
-                            logger.info(
-                                f"✅ Generated default avatar for {target_user_id} (storage file missing)"
-                            )
-                            from fastapi.responses import Response
-
-                            return Response(
-                                content=avatar_bytes, media_type="image/png"
-                            )
-                except Exception as e:
-                    logger.error(
-                        f"Failed to generate default avatar: {e}", exc_info=True
-                    )
-                # Fallback: Avatar oluşturulamadıysa 404 döndür
-                raise HTTPException(
-                    status_code=404, detail="Avatar file not found in storage"
-                )
-
-            raise HTTPException(
-                status_code=404, detail="Image file not found in storage"
-            )
-
-        # Başarılıysa resmi dön
+        logger.info(f"Loading active avatar for {target_user_id}: {active_avatar_url}")
+        avatar_data = load_avatar_bytes_from_storage(active_avatar_url)
         from fastapi.responses import Response
 
         return Response(content=avatar_data, media_type="image/png")
+
+    except FileNotFoundError:
+        logger.warning(
+            f"Avatar file not found in storage: {active_avatar_url}, generating default avatar"
+        )
+        try:
+            if db is not None:
+                from app.models import User
+
+                user = db.query(User).filter(User.id == target_user_id).first()
+                if user:
+                    username = user.username or user.email or "User"
+                    avatar_bytes = generate_avatar_from_name(username)
+                    from fastapi.responses import Response
+
+                    return Response(content=avatar_bytes, media_type="image/png")
+        except Exception as e:
+            logger.error(f"Failed to generate default avatar: {e}", exc_info=True)
+        raise HTTPException(status_code=404, detail="Avatar file not found in storage")
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Avatar download failed: {e}", exc_info=True)
-        # Hata mesajını daha açıklayıcı yap
         error_str = str(e).lower()
         if "bucket not found" in error_str or (
             "not_found" in error_str and "bucket" in error_str
@@ -331,7 +284,6 @@ async def get_avatar(
         if "object not found" in error_str or (
             "not_found" in error_str and "object" in error_str
         ):
-            # Storage'da dosya yoksa default avatar oluştur ve döndür
             logger.warning(
                 f"Avatar file not found in storage, generating default avatar for {target_user_id}"
             )
@@ -343,9 +295,6 @@ async def get_avatar(
                     if user:
                         username = user.username or user.email or "User"
                         avatar_bytes = generate_avatar_from_name(username)
-                        logger.info(
-                            f"✅ Generated default avatar for {target_user_id} (exception fallback)"
-                        )
                         from fastapi.responses import Response
 
                         return Response(content=avatar_bytes, media_type="image/png")

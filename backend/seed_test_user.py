@@ -57,7 +57,7 @@ def seed_test_user():
         user_insert = {
             "id": new_id,
             "username": TEST_USER_USERNAME,
-            "llm_choice_id": 2,  # Cloud LLM (matching register_user default)
+            "llm_choice_id": 1,  # cloud llm (matches register_user default)
             "role_id": 0,  # Default user (not pro, matching test expectations)
         }
         user_response = supabase.table("users").insert(user_insert).execute()

@@ -68,6 +68,7 @@ class TestGetAvatar:
         # Mock user with settings
         mock_user_obj = MagicMock()
         mock_user_obj.id = "test-user-id"
+        mock_user_obj.username = "Test User"
         mock_settings = MagicMock()
         mock_settings.active_avatar_url = "user123/avatar.png"
         mock_user_obj.settings = mock_settings

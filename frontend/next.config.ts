@@ -2,7 +2,37 @@ import type { NextConfig } from 'next';
 
 const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:8000';
 
+function readMbEnv(keys: string[], fallbackMb: number): number {
+  for (const key of keys) {
+    const raw = process.env[key];
+    if (!raw || raw.trim() === '') continue;
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return fallbackMb;
+}
+
+const maxUploadMb = readMbEnv(
+  [
+    'NEXT_PUBLIC_MAX_FILE_SIZE_USER_MB',
+    'MAX_FILE_SIZE_USER_MB',
+    'FRONTEND_MAX_UPLOAD_MB',
+  ],
+  50
+);
+const maxUploadBytes = Math.floor(maxUploadMb * 1024 * 1024);
+
 const nextConfig: NextConfig = {
+  // 1. Server Actions limiti (Next.js 15'te artık ana dizinde tanımlanıyor)
+  serverActions: {
+    bodySizeLimit: `${maxUploadMb}mb`,
+  },
+
+  // 🎯 2. ASIL ÇÖZÜM: Proxy/Middleware limiti 'experimental' objesi içinde olmalı!
+  experimental: {
+    middlewareClientMaxBodySize: maxUploadBytes,
+  },
+
   async rewrites() {
     return [
       {

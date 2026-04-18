@@ -31,7 +31,17 @@ async function ensureUserSeeded(page: Page, user: E2ETestUser): Promise<void> {
     });
   }
 
-  if (loginRes.ok()) return;
+  if (loginRes.ok()) {
+    try {
+      const body = await loginRes.json();
+      if (body?.status === 'requires_2fa' || body?.access_token) {
+        return;
+      }
+    } catch {
+      return;
+    }
+    return;
+  }
   if (loginRes.status() !== 401) {
     const body = await loginRes.text().catch(() => '');
     throw new Error(
@@ -84,6 +94,14 @@ async function ensureUserSeeded(page: Page, user: E2ETestUser): Promise<void> {
     throw new Error(
       `E2E seeded user login failed for ${user.email}. status=${verifyLogin.status()} body=${body}`
     );
+  }
+  try {
+    const j = await verifyLogin.json();
+    if (j?.status === 'requires_2fa') {
+      return;
+    }
+  } catch {
+    /* ok */
   }
 }
 
@@ -181,6 +199,22 @@ export async function login(
   // Butona tıkla ve form submit'i bekle
   await page.click('button[type="submit"]');
 
+  const otpSlot = page.locator('[data-slot="input-otp-slot"]').first();
+  const otpStepVisible = await otpSlot
+    .waitFor({ state: 'visible', timeout: 12000 })
+    .then(() => true)
+    .catch(() => false);
+  if (otpStepVisible) {
+    const code = process.env.E2E_OTP_CODE || '123456';
+    const otpField = page.locator('input[inputmode="numeric"]').first();
+    await otpField.fill(code);
+    await page
+      .getByRole('button', {
+        name: /Doğrula ve giriş yap|Verify and sign in/i,
+      })
+      .click();
+  }
+
   // Race condition kalkanı: login sonrası yönlendirme veya auth UI kesinleşsin.
   await Promise.race([
     page.waitForURL(
@@ -219,7 +253,7 @@ export async function login(
         .locator(selector)
         .filter({
           hasText:
-            /CredentialsSignin|Invalid credentials|Geçersiz|Giriş yapılamadı|Login failed|error|hata|failed|başarısız/i,
+            /CredentialsSignin|Invalid credentials|Geçersiz|Giriş yapılamadı|Login failed|Kod geçersiz|Invalid or expired code|error|hata|failed|başarısız/i,
         })
         .first();
 

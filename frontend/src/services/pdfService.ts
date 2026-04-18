@@ -1,18 +1,7 @@
 // src/services/pdfService.ts
 
 import { guestService } from './guestService';
-
-const resolveApiBaseUrl = (): string => {
-  const envBase = (process.env.NEXT_PUBLIC_API_URL ?? '').trim();
-  const isHttpsBrowser =
-    typeof window !== 'undefined' && window.location.protocol === 'https:';
-
-  // HTTPS sayfada http backend çağrısını same-origin rewrite'e düşür.
-  if (isHttpsBrowser && envBase.startsWith('http://')) {
-    return '';
-  }
-  return envBase || 'http://localhost:8000';
-};
+import { resolveApiBaseUrl } from '@/utils/api';
 
 interface UploadResponse {
   filename: string;

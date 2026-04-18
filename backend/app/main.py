@@ -78,6 +78,9 @@ cors_origins = [
     "http://localhost:3000",
     "http://localhost:3001",
     "http://localhost:3002",
+    "https://localhost:3000",
+    "https://localhost:3001",
+    "https://localhost:3002",
 ]
 app.add_middleware(
     CORSMiddleware,
@@ -152,15 +155,25 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Detailed health check"""
-    from app.db import get_supabase
+    from sqlalchemy import text
+
+    from app.config import settings
+    from app.db import engine, get_supabase
+
+    if not settings.USE_SUPABASE:
+        try:
+            if engine is None:
+                return {"api": "ok", "database": "error: engine not initialized"}
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            return {"api": "ok", "database": "local_postgres_connected"}
+        except Exception as e:
+            return {"api": "ok", "database": f"error: {str(e)}"}
 
     try:
         supabase_client = get_supabase()
-        if supabase_client is None:
-            db_status = "error: Supabase client not initialized"
-        else:
-            supabase_client.table("users").select("id").limit(1).execute()
-            db_status = "connected"
+        supabase_client.table("users").select("id").limit(1).execute()
+        db_status = "connected"
     except Exception as e:
         db_status = f"error: {str(e)}"
 

@@ -3,8 +3,14 @@ Unit tests for rate limiting functionality
 """
 
 from unittest.mock import Mock, patch, MagicMock
+
 from fastapi import Request
-from app.rate_limit import check_rate_limit
+from app.rate_limit import (
+    check_rate_limit,
+    is_2fa_verify_locked,
+    record_2fa_verify_failure,
+    clear_2fa_verify_failures,
+)
 
 
 class TestRateLimit:
@@ -91,3 +97,139 @@ class TestRateLimit:
 
             assert result is False
             mock_redis.incr.assert_not_called()
+
+
+class TestTwoFaVerifyRateLimit:
+    def test_is_locked_disabled(self):
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "1.2.3.4"
+        with (
+            patch("app.rate_limit.settings") as s,
+            patch("app.rate_limit.redis_client", None),
+        ):
+            s.RATE_LIMIT_ENABLED = True
+            assert is_2fa_verify_locked(request) is False
+
+    def test_is_locked_when_count_high(self):
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "1.2.3.4"
+        mock_redis = MagicMock()
+        mock_redis.get.return_value = "3"
+        with (
+            patch("app.rate_limit.settings") as s,
+            patch("app.rate_limit.redis_client", mock_redis),
+        ):
+            s.RATE_LIMIT_ENABLED = True
+            s.VERIFY_2FA_MAX_FAILS = 3
+            assert is_2fa_verify_locked(request) is True
+
+    def test_not_locked_when_fail_key_missing(self):
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "1.2.3.4"
+        mock_redis = MagicMock()
+        mock_redis.get.return_value = None
+        with (
+            patch("app.rate_limit.settings") as s,
+            patch("app.rate_limit.redis_client", mock_redis),
+        ):
+            s.RATE_LIMIT_ENABLED = True
+            s.VERIFY_2FA_MAX_FAILS = 3
+            assert is_2fa_verify_locked(request) is False
+
+    def test_not_locked_when_count_below_max(self):
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "1.2.3.4"
+        mock_redis = MagicMock()
+        mock_redis.get.return_value = "2"
+        with (
+            patch("app.rate_limit.settings") as s,
+            patch("app.rate_limit.redis_client", mock_redis),
+        ):
+            s.RATE_LIMIT_ENABLED = True
+            s.VERIFY_2FA_MAX_FAILS = 3
+            assert is_2fa_verify_locked(request) is False
+
+    def test_is_locked_redis_get_raises(self):
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "1.2.3.4"
+        mock_redis = MagicMock()
+        mock_redis.get.side_effect = RuntimeError("redis down")
+        with (
+            patch("app.rate_limit.settings") as s,
+            patch("app.rate_limit.redis_client", mock_redis),
+        ):
+            s.RATE_LIMIT_ENABLED = True
+            assert is_2fa_verify_locked(request) is False
+
+    def test_record_failure_when_rate_limit_disabled(self):
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "9.9.9.9"
+        mock_redis = MagicMock()
+        with (
+            patch("app.rate_limit.settings") as s,
+            patch("app.rate_limit.redis_client", mock_redis),
+        ):
+            s.RATE_LIMIT_ENABLED = False
+            record_2fa_verify_failure(request)
+            mock_redis.incr.assert_not_called()
+
+    def test_record_failure_when_no_redis(self):
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "9.9.9.9"
+        with (
+            patch("app.rate_limit.settings") as s,
+            patch("app.rate_limit.redis_client", None),
+        ):
+            s.RATE_LIMIT_ENABLED = True
+            record_2fa_verify_failure(request)
+
+    def test_record_failure_sets_ttl_on_first(self):
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "9.9.9.9"
+        mock_redis = MagicMock()
+        mock_redis.incr.return_value = 1
+        with (
+            patch("app.rate_limit.settings") as s,
+            patch("app.rate_limit.redis_client", mock_redis),
+        ):
+            s.RATE_LIMIT_ENABLED = True
+            s.VERIFY_2FA_LOCKOUT_SECONDS = 180
+            record_2fa_verify_failure(request)
+            mock_redis.expire.assert_called_once()
+
+    def test_record_failure_redis_raises(self):
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "9.9.9.9"
+        mock_redis = MagicMock()
+        mock_redis.incr.side_effect = RuntimeError("down")
+        with (
+            patch("app.rate_limit.settings") as s,
+            patch("app.rate_limit.redis_client", mock_redis),
+        ):
+            s.RATE_LIMIT_ENABLED = True
+            record_2fa_verify_failure(request)
+
+    def test_clear_failures_no_redis(self):
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "9.9.9.9"
+        with patch("app.rate_limit.redis_client", None):
+            clear_2fa_verify_failures(request)
+
+    def test_clear_failures_redis_delete_raises(self):
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "9.9.9.9"
+        mock_redis = MagicMock()
+        mock_redis.delete.side_effect = OSError("down")
+        with patch("app.rate_limit.redis_client", mock_redis):
+            clear_2fa_verify_failures(request)

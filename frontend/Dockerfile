@@ -41,7 +41,7 @@ WORKDIR /app
 # 4. Bağımlılıkları kur
 # Sadece package.json'ı kopyala ki her kod değişiminde npm install tekrar çalışmasın
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm ci
 
 # 5. Playwright browser'larını yükle
 RUN npx playwright install chromium firefox webkit || true

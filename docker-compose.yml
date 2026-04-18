@@ -38,7 +38,10 @@ services:
     container_name: backend
     build:
       context: ./backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    # Apply Alembic migrations to the compose Postgres service, then start API.
+    command: >
+      sh -c "alembic upgrade head &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000"
     volumes:
       - ./backend:/app
       - shared_uploads:/app/uploads
@@ -47,6 +50,9 @@ services:
     environment:
       AI_SERVICE_URL: "http://aiservice:8001"
       REDIS_URL: "redis://redis_cache:6379"
+      # Override host-only .env so the container always targets the db service.
+      USE_SUPABASE: "false"
+      LOCAL_DATABASE_URL: postgresql+psycopg2://myuser:mypassword@db:5432/neuropdf_local?sslmode=disable
     env_file:
       - ./backend/.env
     depends_on:
@@ -115,7 +121,9 @@ services:
     container_name: frontend
     build:
       context: ./frontend
-    command: npm run dev
+    # Bind mount + named node_modules volume can leave packages missing after
+    # lockfile changes; sync before dev so new deps (e.g. input-otp) resolve.
+    command: sh -c "npm install --no-fund --no-audit && npm run dev"
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules

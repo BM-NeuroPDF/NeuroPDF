@@ -1,16 +1,4 @@
-const resolveApiBaseUrl = (): string => {
-  const envBase = (process.env.NEXT_PUBLIC_API_URL ?? '').trim();
-  const isHttpsBrowser =
-    typeof window !== 'undefined' && window.location.protocol === 'https:';
-
-  // HTTPS sayfada http backend çağrısını same-origin rewrite'e düşür.
-  if (isHttpsBrowser && envBase.startsWith('http://')) {
-    return '';
-  }
-  return envBase || 'http://localhost:8000';
-};
-
-const API_BASE_URL = resolveApiBaseUrl();
+import { resolveApiBaseUrl } from '@/utils/api';
 
 interface GuestSession {
   guest_id: string;
@@ -35,9 +23,9 @@ class GuestService {
    */
   initializeGuestId(): void {
     if (typeof window === 'undefined') return;
-    
+
     this.guestId = localStorage.getItem('guest_id');
-    
+
     if (this.guestId) {
       console.log('✅ Existing guest session found:', this.guestId);
     }
@@ -49,27 +37,31 @@ class GuestService {
   async createSession(): Promise<GuestSession> {
     try {
       console.log('🔄 Creating new guest session...');
-      
-      const response = await fetch(`${API_BASE_URL}/guest/session`, {
-        method: 'POST',  // ✅ POST olmalı!
+
+      const response = await fetch(`${resolveApiBaseUrl()}/guest/session`, {
+        method: 'POST', // ✅ POST olmalı!
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ Session creation failed:', response.status, errorText);
+        console.error(
+          '❌ Session creation failed:',
+          response.status,
+          errorText
+        );
         throw new Error('Failed to create guest session');
       }
 
       const data: GuestSession = await response.json();
       this.guestId = data.guest_id;
-      
+
       if (typeof window !== 'undefined') {
         localStorage.setItem('guest_id', this.guestId);
       }
-      
+
       console.log('✅ New guest session created:', this.guestId);
       console.log('📊 Initial usage:', data);
       return data;
@@ -96,14 +88,14 @@ class GuestService {
   async checkUsage(): Promise<UsageCheck> {
     try {
       const guestId = await this.getGuestId();
-      
+
       console.log('🔍 Checking usage for guest:', guestId);
-      
-      const response = await fetch(`${API_BASE_URL}/guest/check-usage`, {
-        method: 'GET',  // ✅ GET doğru
+
+      const response = await fetch(`${resolveApiBaseUrl()}/guest/check-usage`, {
+        method: 'GET', // ✅ GET doğru
         headers: {
-          'X-Guest-ID': guestId
-        }
+          'X-Guest-ID': guestId,
+        },
       });
 
       if (!response.ok) {
@@ -127,15 +119,15 @@ class GuestService {
   async incrementUsage(): Promise<UsageCheck> {
     try {
       const guestId = await this.getGuestId();
-      
+
       console.log('➕ Incrementing usage for guest:', guestId);
-      
-      const response = await fetch(`${API_BASE_URL}/guest/use`, {
-        method: 'POST',  // ✅ POST doğru
+
+      const response = await fetch(`${resolveApiBaseUrl()}/guest/use`, {
+        method: 'POST', // ✅ POST doğru
         headers: {
           'X-Guest-ID': guestId,
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
 
       if (!response.ok) {
@@ -146,7 +138,9 @@ class GuestService {
 
       const result = await response.json();
       console.log('✅ Usage incremented:', result);
-      console.log(`📊 Status: ${result.usage_count}/${result.usage_count + result.remaining_usage} used`);
+      console.log(
+        `📊 Status: ${result.usage_count}/${result.usage_count + result.remaining_usage} used`
+      );
       return result;
     } catch (error) {
       console.error('❌ Error incrementing usage:', error);
@@ -163,17 +157,17 @@ class GuestService {
 
       console.log('🗑️ Clearing guest session:', this.guestId);
 
-      await fetch(`${API_BASE_URL}/guest/session`, {
+      await fetch(`${resolveApiBaseUrl()}/guest/session`, {
         method: 'DELETE',
         headers: {
-          'X-Guest-ID': this.guestId
-        }
+          'X-Guest-ID': this.guestId,
+        },
       });
 
       if (typeof window !== 'undefined') {
         localStorage.removeItem('guest_id');
       }
-      
+
       this.guestId = null;
       console.log('✅ Guest session cleared');
     } catch (error) {
@@ -186,11 +180,13 @@ class GuestService {
    */
   isLoggedIn(): boolean {
     if (typeof window === 'undefined') return false;
-    
+
     // NextAuth session bilgisini kontrol et
     // Bu bilgi client component'lerde useSession() ile alınmalı
-    console.warn('⚠️ guestService.isLoggedIn() deprecated. Use useSession() from next-auth/react instead.');
-    
+    console.warn(
+      '⚠️ guestService.isLoggedIn() deprecated. Use useSession() from next-auth/react instead.'
+    );
+
     return false;
   }
 

@@ -49,7 +49,8 @@ export const translations = {
     loginButtonLoading: 'Giriş yapılıyor...',
     registerButton: 'Kayıt Ol',
     registerButtonLoading: 'Kayıt Yapılıyor...',
-    registerSuccess: 'Kayıt başarılı! Giriş sayfasına yönlendiriliyorsunuz...',
+    registerSuccess:
+      'Kayıt başarılı! Giriş sayfasına yönlendiriliyorsunuz. E-posta ile kod sadece girişte gönderilir (şifre doğruysa 2. adımda).',
     registerError: 'Kayıt başarısız oldu. Lütfen bilgileri kontrol edin.',
     loginLink: 'Giriş Yap',
     loginError: 'Giriş yapılamadı. Bilgilerinizi kontrol edin.',
@@ -65,6 +66,13 @@ export const translations = {
     guestLoginError: 'Misafir oturumu oluşturulamadı.',
     sessionChecking: 'Oturum bilgisi kontrol ediliyor...',
     loginSuccess: 'Giriş Başarılı',
+    loginOtpTitle: 'E-posta doğrulama kodu',
+    loginOtpDescription:
+      'E-postanıza gönderilen 6 haneli kodu girin (birkaç dakika içinde geçerlidir).',
+    loginOtpVerify: 'Doğrula ve giriş yap',
+    loginOtpLoading: 'Doğrulanıyor...',
+    loginOtpBack: 'Şifre adımına dön',
+    loginOtpInvalid: 'Kod geçersiz veya süresi dolmuş. Tekrar deneyin.',
 
     // Pricing Page
     pricingTitle: 'Size Uygun Planı Seçin',
@@ -299,20 +307,26 @@ export const translations = {
 
     // --- PRO CHAT & GLOBAL CHAT ---
     chatInitializing: 'Başlatılıyor...',
-    chatWelcomePdf: '👋 Merhaba! **"{name}"** dosyasını analiz ettim. Bana bu belgeyle ilgili her şeyi sorabilirsin.',
-    chatWelcomeGeneral: '👋 Merhaba! Ben NeuroPDF AI asistanıyım. Size nasıl yardımcı olabilirim? PDF işlemleri, dosya yönetimi veya genel sorularınız için buradayım.',
-    chatDropActive: 'PDF\'i Buraya Bırakın',
+    chatWelcomePdf:
+      '👋 Merhaba! **"{name}"** dosyasını analiz ettim. Bana bu belgeyle ilgili her şeyi sorabilirsin.',
+    chatWelcomeGeneral:
+      '👋 Merhaba! Ben NeuroPDF AI asistanıyım. Size nasıl yardımcı olabilirim? PDF işlemleri, dosya yönetimi veya genel sorularınız için buradayım.',
+    chatDropActive: "PDF'i Buraya Bırakın",
     chatListening: 'Dinleniyor...',
     chatVoiceInput: 'Sesli Giriş',
     chatAttachPdf: 'PDF Dosyası Yükle',
     chatVoiceAria: 'Sesli Yaz',
     chatPdfAria: 'PDF Ekle',
-    chatErrorSessionExpired: '⚠️ PDF chat oturumu sona erdi. Lütfen PDF\'i tekrar yükleyin.',
-    chatErrorQuotaExceeded: '⚠️ Gemini API kotası aşıldı. Local LLM kullanmak için profil sayfasından ayarları değiştirin.',
+    chatErrorSessionExpired:
+      "⚠️ PDF chat oturumu sona erdi. Lütfen PDF'i tekrar yükleyin.",
+    chatErrorQuotaExceeded:
+      '⚠️ Gemini API kotası aşıldı. Local LLM kullanmak için profil sayfasından ayarları değiştirin.',
     chatErrorConnection: '⚠️ Bağlantı hatası. Lütfen tekrar deneyin.',
-    chatErrorSessionRefresh: '⚠️ Oturum yenilenemedi. Lütfen sayfayı yenileyin.',
+    chatErrorSessionRefresh:
+      '⚠️ Oturum yenilenemedi. Lütfen sayfayı yenileyin.',
     chatProRequiredTitle: 'Pro Üyelik Gerekli',
-    chatProRequiredDesc: 'AI sohbet özelliği Pro üyeliği gerektirir. Devam etmek için fiyatlandırma sayfasına gidebilirsiniz.',
+    chatProRequiredDesc:
+      'AI sohbet özelliği Pro üyeliği gerektirir. Devam etmek için fiyatlandırma sayfasına gidebilirsiniz.',
     chatClose: 'Kapat',
     chatGoToPricing: 'Fiyatlandırmaya Git',
     chatHeaderPdf: 'PDF AI Asistanı',
@@ -326,20 +340,24 @@ export const translations = {
 
     // --- TOASTS ---
     toastInvalidRange: 'Geçersiz sayfa aralığı.',
-    toastPdfRequired: 'Tarayıcıda kesim için açık bir PDF gerekir. Lütfen bir dosya yükleyin.',
+    toastPdfRequired:
+      'Tarayıcıda kesim için açık bir PDF gerekir. Lütfen bir dosya yükleyin.',
     toastPagesInvalid: 'Sayfa numaraları geçersiz.',
     toastPdfLimit: 'PDF yalnızca {count} sayfa içeriyor.',
     toastExtractSuccess: 'Sayfalar başarıyla ayrıldı ve ekrana yüklendi.',
     toastExtractError: 'PDF kesilemedi. Lütfen tekrar deneyin.',
-    toastMergeMinFiles: 'Birleştirmek için en az iki PDF gerekir. Lütfen yan panele birden fazla dosya ekleyin.',
+    toastMergeMinFiles:
+      'Birleştirmek için en az iki PDF gerekir. Lütfen yan panele birden fazla dosya ekleyin.',
     toastMergeSuccess: 'Tüm PDF dosyaları başarıyla birleştirildi',
-    toastMergeError: 'PDF birleştirilemedi. Lütfen dosyaları kontrol edip tekrar deneyin.',
+    toastMergeError:
+      'PDF birleştirilemedi. Lütfen dosyaları kontrol edip tekrar deneyin.',
     toastClearSuccess: 'Ekrandaki tüm dosyalar temizlendi.',
     toastSwapSuccess: 'Sayfalar yer değiştirildi; PDF güncellendi.',
     toastSwapError: 'Sayfa yer değiştirme başarısız.',
     toastMicErrorNoSpeech: 'Ses algılanamadı, mikrofonu kontrol edin.',
     toastMicErrorNotAllowed: 'Mikrofon izni reddedildi.',
-    toastMicErrorNetwork: 'Ses tanıma sunucusuna güvenli bağlantı kurulamadı. Chrome kullandığınızdan veya internet bağlantınızdan emin olun.',
+    toastMicErrorNetwork:
+      'Ses tanıma sunucusuna güvenli bağlantı kurulamadı. Chrome kullandığınızdan veya internet bağlantınızdan emin olun.',
   },
   en: {
     // --- NAVIGATION ---
@@ -389,7 +407,8 @@ export const translations = {
     loginButtonLoading: 'Signing in...',
     registerButton: 'Sign Up',
     registerButtonLoading: 'Signing up...',
-    registerSuccess: 'Registration successful! Redirecting to login...',
+    registerSuccess:
+      'Registration successful! Redirecting to login. The email code is only sent when you sign in (step 2, after your password is accepted).',
     registerError: 'Registration failed. Please check your details.',
     loginLink: 'Sign In',
     loginError: 'Login failed. Please check your credentials.',
@@ -404,6 +423,13 @@ export const translations = {
     guestLoginError: 'Guest session creation failed.',
     sessionChecking: 'Checking session info...',
     loginSuccess: 'Logged in successfully!',
+    loginOtpTitle: 'Email verification code',
+    loginOtpDescription:
+      'Enter the 6-digit code sent to your email (valid for a few minutes).',
+    loginOtpVerify: 'Verify and sign in',
+    loginOtpLoading: 'Verifying...',
+    loginOtpBack: 'Back to password',
+    loginOtpInvalid: 'Invalid or expired code. Please try again.',
 
     // Pricing Page
     pricingTitle: 'Choose Your Plan',
@@ -635,20 +661,26 @@ export const translations = {
 
     // --- PRO CHAT & GLOBAL CHAT ---
     chatInitializing: 'Initializing...',
-    chatWelcomePdf: '👋 Hello! I have analyzed **"{name}"**. You can ask me anything about this document.',
-    chatWelcomeGeneral: '👋 Hello! I am NeuroPDF AI assistant. How can I help you? I am here for PDF operations, file management, or general questions.',
+    chatWelcomePdf:
+      '👋 Hello! I have analyzed **"{name}"**. You can ask me anything about this document.',
+    chatWelcomeGeneral:
+      '👋 Hello! I am NeuroPDF AI assistant. How can I help you? I am here for PDF operations, file management, or general questions.',
     chatDropActive: 'Drop PDF Here',
     chatListening: 'Listening...',
     chatVoiceInput: 'Voice Input',
     chatAttachPdf: 'Upload PDF File',
     chatVoiceAria: 'Voice Input',
     chatPdfAria: 'Add PDF',
-    chatErrorSessionExpired: '⚠️ PDF chat session expired. Please upload the PDF again.',
-    chatErrorQuotaExceeded: '⚠️ Gemini API quota exceeded. Change settings in profile page to use Local LLM.',
+    chatErrorSessionExpired:
+      '⚠️ PDF chat session expired. Please upload the PDF again.',
+    chatErrorQuotaExceeded:
+      '⚠️ Gemini API quota exceeded. Change settings in profile page to use Local LLM.',
     chatErrorConnection: '⚠️ Connection error. Please try again.',
-    chatErrorSessionRefresh: '⚠️ Session could not be refreshed. Please refresh the page.',
+    chatErrorSessionRefresh:
+      '⚠️ Session could not be refreshed. Please refresh the page.',
     chatProRequiredTitle: 'Pro Membership Required',
-    chatProRequiredDesc: 'AI chat feature requires Pro membership. You can go to the pricing page to continue.',
+    chatProRequiredDesc:
+      'AI chat feature requires Pro membership. You can go to the pricing page to continue.',
     chatClose: 'Close',
     chatGoToPricing: 'Go to Pricing',
     chatHeaderPdf: 'PDF AI Assistant',
@@ -662,19 +694,23 @@ export const translations = {
 
     // --- TOASTS ---
     toastInvalidRange: 'Invalid page range.',
-    toastPdfRequired: 'A PDF must be open in the browser for cutting. Please upload a file.',
+    toastPdfRequired:
+      'A PDF must be open in the browser for cutting. Please upload a file.',
     toastPagesInvalid: 'Page numbers are invalid.',
     toastPdfLimit: 'PDF only contains {count} pages.',
     toastExtractSuccess: 'Pages extracted successfully and loaded to screen.',
     toastExtractError: 'Could not cut PDF. Please try again.',
-    toastMergeMinFiles: 'At least two PDFs are required to merge. Please add multiple files to the side panel.',
+    toastMergeMinFiles:
+      'At least two PDFs are required to merge. Please add multiple files to the side panel.',
     toastMergeSuccess: 'All PDF files merged successfully',
-    toastMergeError: 'Could not merge PDF. Please check the files and try again.',
+    toastMergeError:
+      'Could not merge PDF. Please check the files and try again.',
     toastClearSuccess: 'All files on the screen have been cleared.',
     toastSwapSuccess: 'Pages swapped; PDF updated.',
     toastSwapError: 'Page swap failed.',
     toastMicErrorNoSpeech: 'No sound detected, check your microphone.',
     toastMicErrorNotAllowed: 'Microphone permission denied.',
-    toastMicErrorNetwork: 'Could not establish secure connection to speech recognition server. Ensure you are using Chrome or check your internet connection.',
+    toastMicErrorNetwork:
+      'Could not establish secure connection to speech recognition server. Ensure you are using Chrome or check your internet connection.',
   },
 };

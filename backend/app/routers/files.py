@@ -10,7 +10,9 @@ from fastapi import (
     Body,
     BackgroundTasks,
     Query,
+    Request,
 )
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from typing import List, Optional
 from pypdf import PdfReader, PdfWriter
@@ -23,14 +25,13 @@ import re
 import os
 
 # jwt import removed - using get_current_user dependency instead
-from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, PendingRollbackError
 
 # --- Config & DB ---
 from ..config import settings
-from ..db import get_supabase, Client, get_db
+from ..db import get_supabase, Client, get_db, SessionLocal
 from ..storage import (
     save_pdf_to_db,
     get_pdf_from_db,
@@ -50,10 +51,18 @@ from ..chat_session_storage import (
 # ✅ DÜZELTİLDİ: auth.py'den import edildi ve eski fonksiyon kaldırıldı
 from ..deps import get_current_user, get_current_user_optional
 from ..models import UserStatsResponse, User
+from ..repositories.stats_repo import StatsRepository
+from ..repositories.user_repo import UserRepository
+from ..rate_limit import check_rate_limit
 import logging
 
 logger = logging.getLogger(__name__)
 DB_UNAVAILABLE_DETAIL = "Database connection temporarily unavailable. Please try again."
+SECURE_SERVER_ERROR_DETAIL = (
+    "Sunucu tarafında beklenmeyen bir hata oluştu. Lütfen daha sonra tekrar deneyin."
+)
+stats_repo = StatsRepository()
+user_repo = UserRepository()
 
 
 def _raise_db_unavailable(exc: Exception) -> None:
@@ -140,23 +149,6 @@ def get_ai_service_headers() -> dict:
     return headers
 
 
-def get_user_llm_provider(db: Session, user_id: str) -> str:
-    """
-    Kullanıcının DB'deki LLM tercihine göre provider string'i döndürür.
-    llm_choice_id: 1 = "local", 2 = "cloud"
-    Eğer kullanıcı bulunamazsa default "local" döner.
-    """
-    try:
-        user = db.query(User).filter(User.id == user_id).first()
-        if user:
-            # llm_choice_id: 1 = local llm, 2 = cloud llm
-            return "local" if getattr(user, "llm_choice_id", 1) == 1 else "cloud"
-        return "local"
-    except Exception as e:
-        logger.warning(f"Failed to get user LLM choice for {user_id}: {e}")
-        return "local"
-
-
 # ==========================================
 # USER SETTINGS (LLM CHOICE) - EKSİK OLAN KISIM
 # ==========================================
@@ -184,16 +176,16 @@ async def get_llm_choice(
             logger.warning(
                 "Database connection unavailable, returning default LLM choice"
             )
-            return {"provider": "local", "choice_id": 1}
+            return {"provider": "local", "choice_id": 0}
 
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             # Kullanıcı bulunamazsa default değeri döndür
-            return {"provider": "local", "choice_id": 1}
+            return {"provider": "local", "choice_id": 0}
 
-        # llm_choice_id: 1 = local, 2 = cloud
-        choice_id = getattr(user, "llm_choice_id", 1)
-        provider = "cloud" if choice_id == 2 else "local"
+        # llm_choice_id: 0 = local llm, 1 = cloud llm (llm_choices seed migration)
+        choice_id = getattr(user, "llm_choice_id", 0)
+        provider = "cloud" if choice_id == 1 else "local"
 
         return {"provider": provider, "choice_id": choice_id}
 
@@ -202,7 +194,7 @@ async def get_llm_choice(
     except Exception as e:
         logger.error(f"LLM choice get error: {e}", exc_info=True)
         # Hata durumunda default değeri döndür
-        return {"provider": "local", "choice_id": 1}
+        return {"provider": "local", "choice_id": 0}
 
 
 @router.post("/user/update-llm")
@@ -213,8 +205,8 @@ async def update_llm_choice(
 ):
     """
     Kullanıcının varsayılan LLM tercihini günceller.
-    provider: 'local' -> 1
-    provider: 'cloud' -> 2
+    provider: 'local' -> 0
+    provider: 'cloud' -> 1
     """
     try:
         user_id = current_user.get("sub")
@@ -227,8 +219,8 @@ async def update_llm_choice(
                 detail="Veritabanı bağlantısı şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.",
             )
 
-        # Provider string'ini ID'ye çevir (DB şemanıza göre: 1=Local, 2=Cloud)
-        choice_id = 2 if req.provider == "cloud" else 1
+        # Provider string'ini ID'ye çevir (llm_choices: 0=local, 1=cloud)
+        choice_id = 1 if req.provider == "cloud" else 0
 
         # Kullanıcıyı bul ve güncelle
         user = db.query(User).filter(User.id == user_id).first()
@@ -252,59 +244,41 @@ async def update_llm_choice(
 # --- GÜNCELLENMİŞ VE LOGLAYAN HELPER FONKSİYONU ---
 
 
-async def increment_user_usage(user_id: str, supabase: Client, operation_type: str):
+async def increment_user_usage_task(user_id: str, operation_type: str) -> None:
     """
-    Kullanıcının işlem istatistiğini artırır.
-    UPSERT yerine açık UPDATE/INSERT mantığı kullanır.
+    İstatistik güncellemesi: USE_SUPABASE=true iken REST, değilken yeni DB oturumu.
+    BackgroundTasks ile çağrıldığında güvenli (istek oturumu kapanmadan önce commit).
     """
-    logger.debug(
-        f"ISTATISTIK GÜNCELLEME - User ID: {user_id}, İşlem Tipi: {operation_type}"
-    )
-
-    # Misafir kontrolü
     if not user_id or str(user_id).startswith("guest"):
-        logger.debug("Misafir kullanıcı, istatistik tutulmuyor.")
         return
-
-    target_column = "summary_count" if operation_type == "summary" else "tools_count"
-    now_iso = datetime.now(timezone.utc).isoformat()
-
+    if settings.USE_SUPABASE:
+        sup = get_supabase()
+        await stats_repo.increment_usage(
+            user_id=user_id,
+            operation_type=operation_type,
+            db=None,
+            supabase=sup,
+        )
+        return
+    if SessionLocal is None:
+        logger.error("increment_user_usage_task: SessionLocal is not configured")
+        return
+    db = SessionLocal()
     try:
-        # 1. ADIM: Kullanıcının istatistik kaydı var mı?
-        res = supabase.table("user_stats").select("*").eq("user_id", user_id).execute()
+        await stats_repo.increment_usage(
+            user_id=user_id,
+            operation_type=operation_type,
+            db=db,
+            supabase=None,
+        )
+    finally:
+        db.close()
 
-        # Kayıt bulunduysa -> GÜNCELLE (UPDATE)
-        if res.data and len(res.data) > 0:
-            current_data = res.data[0]
-            current_val = current_data.get(target_column, 0)
-            new_val = current_val + 1
 
-            logger.debug(
-                f"User stats update - {target_column}: {current_val} -> {new_val}"
-            )
-
-            update_data = {target_column: new_val, "last_activity": now_iso}
-
-            # Sadece ilgili satırı güncelle
-            supabase.table("user_stats").update(update_data).eq(
-                "user_id", user_id
-            ).execute()
-            logger.debug(f"User stats updated successfully for user: {user_id}")
-
-        # Kayıt yoksa -> OLUŞTUR (INSERT)
-        else:
-            logger.debug(f"Creating new user stats record for user: {user_id}")
-            new_data = {
-                "user_id": user_id,
-                "summary_count": 1 if target_column == "summary_count" else 0,
-                "tools_count": 1 if target_column == "tools_count" else 0,
-                "last_activity": now_iso,
-            }
-            supabase.table("user_stats").insert(new_data).execute()
-            logger.debug(f"New user stats record created for user: {user_id}")
-
-    except Exception as e:
-        logger.error(f"İstatistik güncellenemedi: {e}", exc_info=True)
+_LOCAL_ASYNC_SUMMARIZE_MSG = (
+    "Async document flow requires USE_SUPABASE=true and the Supabase `documents` table. "
+    "In local mode use POST /files/summarize (synchronous)."
+)
 
 
 def parse_page_ranges(range_str: str, max_pages: int) -> list[int]:
@@ -330,14 +304,115 @@ def parse_page_ranges(range_str: str, max_pages: int) -> list[int]:
     return sorted(list(page_indices))
 
 
+def _extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
+    try:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        texts: list[str] = []
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                texts.append(page_text)
+        return "\n".join(texts)
+    except Exception as e:
+        logger.warning("PDF text extract failed: %s", e, exc_info=True)
+        return ""
+
+
+def _extract_text_from_pdf_stream(file_obj) -> str:
+    file_obj.seek(0)
+    reader = PdfReader(file_obj)
+    texts: list[str] = []
+    for page in reader.pages:
+        page_text = page.extract_text()
+        if page_text:
+            texts.append(page_text)
+    return "\n".join(texts)
+
+
+def _extract_pages_to_buffer(file_obj, page_range: str) -> io.BytesIO:
+    file_obj.seek(0)
+    reader = PdfReader(file_obj)
+    max_pages = len(reader.pages)
+    indices = parse_page_ranges(page_range, max_pages)
+    if not indices:
+        raise HTTPException(status_code=400, detail="Geçersiz sayfa aralığı.")
+
+    writer = PdfWriter()
+    for idx in indices:
+        writer.add_page(reader.pages[idx])
+
+    out = io.BytesIO()
+    writer.write(out)
+    out.seek(0)
+    return out
+
+
+def _merge_pdfs_to_buffer(file_objects: List) -> io.BytesIO:
+    writer = PdfWriter()
+    for file_obj in file_objects:
+        file_obj.seek(0)
+        reader = PdfReader(file_obj)
+        for page in reader.pages:
+            writer.add_page(page)
+
+    out = io.BytesIO()
+    writer.write(out)
+    out.seek(0)
+    return out
+
+
+def _reorder_pdf_to_buffer(file_obj, page_numbers: str) -> io.BytesIO:
+    file_obj.seek(0)
+    reader = PdfReader(file_obj)
+    if len(reader.pages) == 0:
+        raise HTTPException(
+            status_code=400, detail="PDF dosyası geçersiz veya sayfa içermiyor."
+        )
+
+    try:
+        order = [int(x.strip()) - 1 for x in page_numbers.split(",") if x.strip()]
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400, detail="Sayfa numaraları geçersiz format."
+        ) from exc
+
+    if not order:
+        raise HTTPException(status_code=400, detail="Sayfa numaraları boş.")
+    if any(p < 0 or p >= len(reader.pages) for p in order):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Hatalı sayfa numarası. PDF'de {len(reader.pages)} sayfa var.",
+        )
+
+    writer = PdfWriter()
+    for page_idx in order:
+        writer.add_page(reader.pages[page_idx])
+
+    out = io.BytesIO()
+    writer.write(out)
+    out.seek(0)
+    return out
+
+
+def _safe_page_count_sync(pdf_bytes: bytes) -> int | None:
+    try:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        return len(reader.pages)
+    except Exception:
+        return None
+
+
+def _build_reportlab_document(doc: SimpleDocTemplate, story: list) -> None:
+    doc.build(story)
+
+
 # ==========================================
 # SUMMARIZE GENEL
 # ==========================================
 @router.post("/summarize")
 async def summarize_file(
     file: UploadFile = File(...),
-    current_user: Optional[dict] = Depends(get_current_user_optional),
-    supabase: Client = Depends(get_supabase),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
     language: str = Query("tr"),
     background_tasks: BackgroundTasks = BackgroundTasks(),
@@ -349,15 +424,12 @@ async def summarize_file(
             status_code=400, detail="Sadece PDF dosyaları kabul edilir."
         )
 
-    # USER ID ÇÖZÜMLEME
-    user_id = current_user.get("sub") if current_user else None
-    if user_id:
-        print(f"✅ Token Çözüldü. User ID: {user_id}")
-    else:
-        print("👤 Misafir Kullanıcı")
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Oturum gerekli.")
+    print(f"✅ Token Çözüldü. User ID: {user_id}")
 
-    is_guest = user_id is None
-    await validate_file_size(file, is_guest=is_guest)
+    await validate_file_size(file, is_guest=False)
 
     try:
         file_content = await file.read()
@@ -371,16 +443,12 @@ async def summarize_file(
         # ==========================================
         # LLM SEÇİMİ
         # ==========================================
-        if is_guest:
-            llm_choice_id = 1  # local default
+        if db is None:
+            # DB bağlantısı yoksa default değerleri kullan
+            llm_choice_id = 0
             provider_string = "local"
         else:
-            if db is None:
-                # DB bağlantısı yoksa default değerleri kullan
-                llm_choice_id = 1
-                provider_string = "local"
-            else:
-                llm_choice_id, provider_string = get_user_llm_choice(db, user_id)
+            llm_choice_id, provider_string = get_user_llm_choice(db, user_id)
 
         # ==========================================
         # CACHE KONTROLÜ (Hash'i tekrar hesaplamadan kullan)
@@ -394,18 +462,13 @@ async def summarize_file(
         if cached_summary:
             # Cache'den özet geldiğinde PDF text'ini extract et
             try:
-                from io import BytesIO
-
-                reader = PdfReader(BytesIO(file_content))
-                pdf_text = "\n".join(
-                    [
-                        page.extract_text()
-                        for page in reader.pages
-                        if page.extract_text()
-                    ]
+                pdf_text = await run_in_threadpool(
+                    _extract_text_from_pdf_bytes, file_content
                 )
             except Exception as e:
-                print(f"⚠️ PDF text extraction failed: {e}")
+                logger.warning(
+                    "Cached summary PDF text extraction failed: %s", e, exc_info=True
+                )
                 pdf_text = None
 
             return {
@@ -434,9 +497,9 @@ async def summarize_file(
         ) as client:
             headers = get_ai_service_headers()
             params = {
-                "llm_provider": provider_string, 
+                "llm_provider": provider_string,
                 "pdf_hash": pdf_hash,
-                "language": language
+                "language": language,
             }
             response = await client.post(
                 ai_service_url, files=files, params=params, headers=headers
@@ -453,11 +516,8 @@ async def summarize_file(
             # ✅ OPTİMİZASYON: Kullanıcı istatistikleri ve cache kaydetme arka planda yapılsın
             # Response'u hemen döndür, kullanıcıyı bekletme
 
-            if not is_guest:
-                # Kullanıcı istatistiklerini arka planda güncelle (non-blocking)
-                background_tasks.add_task(
-                    increment_user_usage, user_id, supabase, "summary"
-                )
+            # Kullanıcı istatistiklerini arka planda güncelle (non-blocking)
+            background_tasks.add_task(increment_user_usage_task, user_id, "summary")
 
             # Cache'i arka planda kaydet (non-blocking)
             # Not: DB session'ı background task'ta kullanmak için yeni session oluşturulmalı
@@ -487,8 +547,8 @@ async def summarize_file(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Özetleme Hatası: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Sunucu hatası: {str(e)}")
+        logger.error("Summarize endpoint failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 # ==========================================
@@ -498,11 +558,17 @@ async def summarize_file(
 
 @router.post("/summarize-guest")
 async def summarize_for_guest(
+    request: Request,
     file: UploadFile = File(...),
     x_guest_id: Optional[str] = Header(None, alias="X-Guest-ID"),
     language: str = Query("tr"),
 ):
     """Misafir kullanıcılar için ANLIK özetleme."""
+    if not check_rate_limit(
+        request, "files:summarize-guest", settings.RATE_LIMIT_PER_MINUTE, 60
+    ):
+        raise HTTPException(status_code=429, detail="Too many requests")
+
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Sadece PDF dosyaları kabul edilir")
 
@@ -535,7 +601,7 @@ async def summarize_for_guest(
 
     except Exception as e:
         logger.error(f"Özetleme hatası: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Sunucu hatası")
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 @router.post("/summarize-start/{file_id}")
@@ -549,6 +615,9 @@ async def trigger_summarize_task(
     """Asenkron özetleme görevi başlatır."""
     print("\n--- SUMMARIZE-START İSTEĞİ ---")
     try:
+        if not settings.USE_SUPABASE:
+            raise HTTPException(status_code=501, detail=_LOCAL_ASYNC_SUMMARIZE_MSG)
+
         user_id = current_user.get("sub")
         print(f"✅ Token Çözüldü. User ID: {user_id}")
 
@@ -563,7 +632,11 @@ async def trigger_summarize_task(
             raise HTTPException(status_code=403, detail="Erişim yetkiniz yok")
 
         # Kullanıcının LLM tercihini DB'den al
-        llm_provider = get_user_llm_provider(db, user_id)
+        llm_provider = await user_repo.get_llm_provider(
+            user_id=user_id,
+            db=db,
+            supabase=None,
+        )
 
         supabase.table("documents").update({"status": "processing"}).eq(
             "id", file_id
@@ -588,7 +661,7 @@ async def trigger_summarize_task(
             response.raise_for_status()
 
         # İSTATİSTİK (Async olduğu için burada sayıyoruz)
-        await increment_user_usage(user_id, supabase, "summary")
+        await increment_user_usage_task(user_id, "summary")
 
         return {
             "status": "processing",
@@ -596,9 +669,11 @@ async def trigger_summarize_task(
             "file_id": file_id,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"❌ Görev tetikleme hatası: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Summarize task trigger failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 # ==========================================
@@ -617,6 +692,9 @@ class SummaryCallbackData(BaseModel):
 async def handle_ai_callback(
     pdf_id: int, data: SummaryCallbackData, supabase: Client = Depends(get_supabase)
 ):
+    if not settings.USE_SUPABASE:
+        raise HTTPException(status_code=501, detail=_LOCAL_ASYNC_SUMMARIZE_MSG)
+
     if pdf_id != data.pdf_id:
         raise HTTPException(status_code=400, detail="ID mismatch")
 
@@ -631,9 +709,11 @@ async def handle_ai_callback(
         supabase.table("documents").update(update_data).eq("id", pdf_id).execute()
         return {"status": "callback_received"}
 
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"❌ Callback hatası: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("AI callback handling failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 @router.get("/summary/{file_id}")
@@ -642,6 +722,9 @@ async def get_file_summary(
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_supabase),
 ):
+    if not settings.USE_SUPABASE:
+        raise HTTPException(status_code=501, detail=_LOCAL_ASYNC_SUMMARIZE_MSG)
+
     try:
         user_id = current_user.get("sub")
         response = (
@@ -659,7 +742,8 @@ async def get_file_summary(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Get file summary failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 # ==========================================
@@ -685,7 +769,7 @@ async def check_summarize_cache_by_hash(
 ) -> Optional[str]:
     """Hash'ten direkt cache kontrolü yapar (optimize edilmiş versiyon)."""
     # CLOUD → user_id dikkate alınmaz
-    if llm_choice_id == 2:  # cloud
+    if llm_choice_id == 1:  # cloud llm
         query = text("""
             SELECT summary
             FROM summary_cache
@@ -950,7 +1034,7 @@ def get_user_llm_choice(db: Session, user_id: str):
     """)
     result = db.execute(query, {"user_id": user_id}).fetchone()
 
-    llm_choice_id = result[0] if result else 1  # default local
+    llm_choice_id = result[0] if result else 0  # default local llm
 
     # LLM adını çek
     query2 = text("""
@@ -989,7 +1073,11 @@ async def start_chat_from_text(
         user_id = current_user.get("sub")
         if db and user_id:
             try:
-                llm_provider = get_user_llm_provider(db, user_id)
+                llm_provider = await user_repo.get_llm_provider(
+                    user_id=user_id,
+                    db=db,
+                    supabase=None,
+                )
             except Exception as e:
                 print(f"⚠️ LLM provider alınamadı, default kullanılıyor: {e}")
                 llm_provider = "local"
@@ -1020,7 +1108,9 @@ async def start_chat_from_text(
         # İstemci text göndermediyse ve pdf_id verildiyse, metni DB'den üret.
         normalized_pdf_text = (pdf_text or "").strip()
         if not normalized_pdf_text and owned and owned.pdf_data:
-            normalized_pdf_text = _extract_text_from_pdf_bytes(owned.pdf_data).strip()
+            normalized_pdf_text = (
+                await run_in_threadpool(_extract_text_from_pdf_bytes, owned.pdf_data)
+            ).strip()
         if not normalized_pdf_text:
             raise HTTPException(status_code=400, detail="PDF text gereklidir.")
 
@@ -1075,15 +1165,8 @@ async def start_chat_from_text(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-
-        error_trace = traceback.format_exc()
-        print(f"❌ Chat Start From Text Error: {e}")
-        print(f"Traceback: {error_trace}")
         logger.error(f"Chat Start From Text Error: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=str(e) if str(e) else "Chat session başlatılamadı"
-        )
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 @router.post("/chat/start")  # 👈 {file_id} kaldırıldı
@@ -1120,14 +1203,19 @@ async def start_chat_session(
         user_id = current_user.get("sub")
         if not user_id:
             raise HTTPException(status_code=401, detail="Oturum gerekli.")
-        llm_provider = get_user_llm_provider(db, user_id)
+        llm_provider = await user_repo.get_llm_provider(
+            user_id=user_id,
+            db=db,
+            supabase=None,
+        )
         mode = "pro" if llm_provider == "cloud" else "flash"
         print(f"📊 Kullanıcı LLM Tercihi: {llm_provider}")
 
         pdf_row = save_pdf_to_db(db, user_id, file_content, file.filename)
         try:
-            reader = PdfReader(io.BytesIO(file_content))
-            pdf_text = "\n".join((p.extract_text() or "") for p in reader.pages)
+            pdf_text = await run_in_threadpool(
+                _extract_text_from_pdf_bytes, file_content
+            )
         except Exception as e:
             logger.warning(f"Chat start PDF text extract failed: {e}", exc_info=True)
             pdf_text = ""
@@ -1185,8 +1273,8 @@ async def start_chat_session(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Chat Start Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Chat start failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 # ==========================================
@@ -1212,7 +1300,11 @@ async def send_chat_message(
     try:
         # AI Service'e ilet (/chat)
         async with httpx.AsyncClient(timeout=240.0) as client:
-            payload = {"session_id": session_id, "message": message, "language": language}
+            payload = {
+                "session_id": session_id,
+                "message": message,
+                "language": language,
+            }
             target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat"
             headers = get_ai_service_headers()
             response = await client.post(target_url, json=payload, headers=headers)
@@ -1279,31 +1371,13 @@ async def send_chat_message(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-
-        error_trace = traceback.format_exc()
-        error_msg = str(e) if e else "Bilinmeyen hata"
-        print(f"❌ Chat Message Error: {error_msg}")
-        print(f"Traceback: {error_trace}")
-        logger.error(f"Chat Message Error: {error_msg}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=error_msg if error_msg else "Chat mesajı gönderilemedi",
-        )
+        logger.error("Chat message failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 # ==========================================
 # PDF CHAT GEÇMİŞİ (sessions / messages / resume)
 # ==========================================
-
-
-def _extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
-    try:
-        reader = PdfReader(io.BytesIO(pdf_bytes))
-        return "\n".join((p.extract_text() or "") for p in reader.pages)
-    except Exception as e:
-        logger.warning("PDF text extract failed in resume: %s", e, exc_info=True)
-        return ""
 
 
 @router.get("/chat/sessions")
@@ -1380,7 +1454,9 @@ async def resume_pdf_chat_session(
         if session.pdf_id:
             pdf_row = get_pdf_from_db(db, session.pdf_id, user_id)
             if pdf_row:
-                pdf_text = _extract_text_from_pdf_bytes(pdf_row.pdf_data)
+                pdf_text = await run_in_threadpool(
+                    _extract_text_from_pdf_bytes, pdf_row.pdf_data
+                )
         if not pdf_text.strip() and session.context_text:
             pdf_text = session.context_text or ""
         if not pdf_text.strip():
@@ -1422,7 +1498,7 @@ async def resume_pdf_chat_session(
         raise
     except Exception as e:
         logger.error("resume chat session: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
     return {
         "session_id": session.ai_session_id,
@@ -1457,35 +1533,6 @@ async def download_stored_pdf(
 # ==========================================
 
 
-def _check_pro_user(user_id: str, supabase: Client) -> bool:
-    """Kullanıcının Pro olup olmadığını kontrol eder."""
-    try:
-        user_response = (
-            supabase.table("users")
-            .select("user_roles(name)")
-            .eq("id", user_id)
-            .execute()
-        )
-
-        if user_response.data:
-            user_data = user_response.data[0]
-            if user_data.get("user_roles"):
-                roles_data = user_data["user_roles"]
-                if isinstance(roles_data, list) and len(roles_data) > 0:
-                    role_name = roles_data[0].get("name", "").lower()
-                elif isinstance(roles_data, dict):
-                    role_name = roles_data.get("name", "").lower()
-                else:
-                    return False
-
-                # "pro user" veya "pro" kontrolü
-                return "pro" in role_name or role_name == "pro"
-        return False
-    except Exception as e:
-        print(f"⚠️ Pro kullanıcı kontrolü hatası: {e}")
-        return False
-
-
 @router.post("/chat/general/start")
 async def start_general_chat(
     body: dict = Body(...),
@@ -1502,7 +1549,11 @@ async def start_general_chat(
         raise HTTPException(status_code=401, detail="Kullanıcı kimliği bulunamadı.")
 
     # Pro kullanıcı kontrolü
-    if not _check_pro_user(user_id, supabase):
+    if not await user_repo.is_pro_user(
+        user_id=user_id,
+        db=db,
+        supabase=supabase if settings.USE_SUPABASE else None,
+    ):
         raise HTTPException(
             status_code=403,
             detail="Bu özellik sadece Pro kullanıcılar için kullanılabilir.",
@@ -1512,7 +1563,11 @@ async def start_general_chat(
         # Kullanıcının LLM tercihini DB'den al (öncelik DB'deki tercih)
         if db and user_id:
             try:
-                llm_provider = get_user_llm_provider(db, user_id)
+                llm_provider = await user_repo.get_llm_provider(
+                    user_id=user_id,
+                    db=db,
+                    supabase=None,
+                )
             except Exception as e:
                 print(f"⚠️ LLM provider alınamadı, default kullanılıyor: {e}")
                 llm_provider = "local"
@@ -1562,16 +1617,8 @@ async def start_general_chat(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-
-        error_trace = traceback.format_exc()
-        print(f"❌ Genel Chat Start Error: {e}")
-        print(f"Traceback: {error_trace}")
         logger.error(f"Genel Chat Start Error: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=str(e) if str(e) else "Genel chat session başlatılamadı",
-        )
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 @router.post("/chat/general/message")
@@ -1579,6 +1626,7 @@ async def send_general_chat_message(
     body: dict = Body(...),
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_supabase),
+    db: Session = Depends(get_db),
 ):
     """
     Pro kullanıcılar için genel AI chat mesajı gönderir (PDF gerektirmez).
@@ -1589,7 +1637,11 @@ async def send_general_chat_message(
         raise HTTPException(status_code=401, detail="Kullanıcı kimliği bulunamadı.")
 
     # Pro kullanıcı kontrolü
-    if not _check_pro_user(user_id, supabase):
+    if not await user_repo.is_pro_user(
+        user_id=user_id,
+        db=db,
+        supabase=supabase if settings.USE_SUPABASE else None,
+    ):
         raise HTTPException(
             status_code=403,
             detail="Bu özellik sadece Pro kullanıcılar için kullanılabilir.",
@@ -1605,7 +1657,11 @@ async def send_general_chat_message(
     try:
         # AI Service'e ilet
         async with httpx.AsyncClient(timeout=240.0) as client:
-            payload = {"session_id": session_id, "message": message, "language": language}
+            payload = {
+                "session_id": session_id,
+                "message": message,
+                "language": language,
+            }
             target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/general"
             headers = get_ai_service_headers()
             response = await client.post(target_url, json=payload, headers=headers)
@@ -1648,8 +1704,8 @@ async def send_general_chat_message(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Genel Chat Message Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("General chat message failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 # ==========================================
@@ -1937,7 +1993,7 @@ async def markdown_to_pdf(request: MarkdownToPdfRequest):
             )
             story.append(t)
 
-        doc.build(story)
+        await run_in_threadpool(_build_reportlab_document, doc, story)
         buffer.seek(0)
 
         return StreamingResponse(
@@ -1947,8 +2003,8 @@ async def markdown_to_pdf(request: MarkdownToPdfRequest):
         )
 
     except Exception as e:
-        print(f"❌ PDF Hatası: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"PDF hatası: {str(e)}")
+        logger.error("Markdown to PDF failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 class TTSRequest(BaseModel):
@@ -1970,17 +2026,17 @@ def clean_markdown_for_tts(text: str) -> str:
 @router.post("/listen-summary")
 async def listen_summary(
     request: TTSRequest,
-    current_user: Optional[dict] = Depends(get_current_user_optional),
-    supabase: Client = Depends(get_supabase),
+    current_user: dict = Depends(get_current_user),
 ):
     print("\n--- LISTEN (TTS) İSTEĞİ ---")
     if not request.text:
         raise HTTPException(status_code=400, detail="Metin boş olamaz.")
 
     # USER ID ÇÖZÜMLEME
-    user_id = current_user.get("sub") if current_user else None
-    if user_id:
-        print(f"✅ Token Çözüldü. User ID: {user_id}")
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Oturum gerekli.")
+    print(f"✅ Token Çözüldü. User ID: {user_id}")
 
     cleaned_text = clean_markdown_for_tts(request.text)
     ai_tts_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/tts"
@@ -2003,7 +2059,7 @@ async def listen_summary(
             if client:
                 # İSTATİSTİK GÜNCELLEME
                 if user_id:
-                    await increment_user_usage(user_id, supabase, "summary")
+                    await increment_user_usage_task(user_id, "summary")
                 await client.aclose()
 
     return StreamingResponse(iter_audio(), media_type="audio/mpeg")
@@ -2016,11 +2072,17 @@ async def listen_summary(
 
 @router.post("/upload")
 async def upload_pdf(
+    request: Request,
     file: UploadFile = File(...),
     current_user: Optional[dict] = Depends(get_current_user_optional),
     x_guest_id: Optional[str] = Header(None, alias="X-Guest-ID"),
     db: Session = Depends(get_db),
 ):
+    if not check_rate_limit(
+        request, "files:upload", settings.RATE_LIMIT_PER_MINUTE, 60
+    ):
+        raise HTTPException(status_code=429, detail="Too many requests")
+
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Only PDF files allowed")
 
@@ -2051,7 +2113,7 @@ async def upload_pdf(
 
     except Exception as e:
         logger.error(f"Upload error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Upload failed")
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 @router.get("/my-files")
@@ -2063,30 +2125,31 @@ async def get_my_files(
         if not user_id:
             raise HTTPException(status_code=401, detail="User ID not found")
 
-        def _safe_page_count(pdf_bytes: bytes) -> int | None:
-            try:
-                reader = PdfReader(io.BytesIO(pdf_bytes))
-                return len(reader.pages)
-            except Exception:
-                return None
-
         pdfs = list_user_pdfs(db, user_id)
-        files = [
-            {
-                "id": pdf.id,
-                "filename": pdf.filename,
-                "file_size": pdf.file_size,
-                "created_at": pdf.created_at.isoformat() if pdf.created_at else None,
-                "page_count": _safe_page_count(pdf.pdf_data) if pdf.pdf_data else None,
-            }
-            for pdf in pdfs
-        ]
+        files = []
+        for pdf in pdfs:
+            page_count = None
+            if pdf.pdf_data:
+                page_count = await run_in_threadpool(
+                    _safe_page_count_sync, pdf.pdf_data
+                )
+            files.append(
+                {
+                    "id": pdf.id,
+                    "filename": pdf.filename,
+                    "file_size": pdf.file_size,
+                    "created_at": pdf.created_at.isoformat()
+                    if pdf.created_at
+                    else None,
+                    "page_count": page_count,
+                }
+            )
         return {"files": files, "total": len(files)}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Get files error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 @router.delete("/files/{file_id}")
@@ -2115,7 +2178,7 @@ async def delete_file(
         raise
     except Exception as e:
         logger.error(f"Delete file error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 # ==========================================
@@ -2126,8 +2189,7 @@ async def delete_file(
 @router.post("/convert-text")
 async def convert_text_from_pdf(
     file: UploadFile = File(...),
-    current_user: Optional[dict] = Depends(get_current_user_optional),
-    supabase: Client = Depends(get_supabase),
+    current_user: dict = Depends(get_current_user),
 ):
     """PDF'den metin çıkarır."""
     print("\n--- CONVERT-TEXT İSTEĞİ ---")
@@ -2135,22 +2197,20 @@ async def convert_text_from_pdf(
         raise HTTPException(status_code=400, detail="PDF gerekli")
 
     # USER ID ÇÖZÜMLEME
-    user_id = current_user.get("sub") if current_user else None
-    if user_id:
-        print(f"✅ Token Çözüldü. User ID: {user_id}")
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Oturum gerekli.")
+    print(f"✅ Token Çözüldü. User ID: {user_id}")
 
     try:
-        pdf_content = await file.read()
-        reader = PdfReader(io.BytesIO(pdf_content))
-        text = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
+        text = await run_in_threadpool(_extract_text_from_pdf_stream, file.file)
 
         base_filename = (
             file.filename.replace(".pdf", "") if file.filename else "document"
         )
 
         # İSTATİSTİK
-        if user_id:
-            await increment_user_usage(user_id, supabase, "tool")
+        await increment_user_usage_task(user_id, "tool")
 
         return StreamingResponse(
             io.BytesIO(text.encode("utf-8")),
@@ -2160,18 +2220,23 @@ async def convert_text_from_pdf(
             },
         )
     except Exception as e:
-        print(f"Hata: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Convert text failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 @router.post("/extract-pages")
 async def extract_pdf_pages(
+    request: Request,
     file: UploadFile = File(...),
     page_range: str = Form(...),
     current_user: Optional[dict] = Depends(get_current_user_optional),
-    supabase: Client = Depends(get_supabase),
 ):
     """Sayfa ayıklama."""
+    if not check_rate_limit(
+        request, "files:extract-pages", settings.RATE_LIMIT_PER_MINUTE, 60
+    ):
+        raise HTTPException(status_code=429, detail="Too many requests")
+
     logger.debug("EXTRACT-PAGES İSTEĞİ alındı")
 
     # USER ID ÇÖZÜMLEME
@@ -2180,24 +2245,11 @@ async def extract_pdf_pages(
         logger.debug(f"Token çözüldü. User ID: {user_id}")
 
     try:
-        reader = PdfReader(io.BytesIO(await file.read()))
-        max_pages = len(reader.pages)
-        indices = parse_page_ranges(page_range, max_pages)
-
-        if not indices:
-            raise HTTPException(status_code=400, detail="Geçersiz sayfa aralığı.")
-
-        writer = PdfWriter()
-        for i in indices:
-            writer.add_page(reader.pages[i])
-
-        out = io.BytesIO()
-        writer.write(out)
-        out.seek(0)
+        out = await run_in_threadpool(_extract_pages_to_buffer, file.file, page_range)
 
         # İSTATİSTİK
         if user_id:
-            await increment_user_usage(user_id, supabase, "tool")
+            await increment_user_usage_task(user_id, "tool")
 
         return StreamingResponse(
             out,
@@ -2206,16 +2258,21 @@ async def extract_pdf_pages(
         )
     except Exception as e:
         logger.error(f"Extract pages hatası: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Sunucu hatası")
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 @router.post("/merge-pdfs")
 async def merge_pdfs(
+    request: Request,
     files: List[UploadFile] = File(...),
     current_user: Optional[dict] = Depends(get_current_user_optional),
-    supabase: Client = Depends(get_supabase),
 ):
     """PDF Birleştirme."""
+    if not check_rate_limit(
+        request, "files:merge-pdfs", settings.RATE_LIMIT_PER_MINUTE, 60
+    ):
+        raise HTTPException(status_code=429, detail="Too many requests")
+
     print("\n--- MERGE-PDFS İSTEĞİ ---")
     if len(files) < 2:
         raise HTTPException(status_code=400, detail="En az 2 PDF gerekli.")
@@ -2226,19 +2283,12 @@ async def merge_pdfs(
         print(f"✅ Token Çözüldü. User ID: {user_id}")
 
     try:
-        writer = PdfWriter()
-        for f in files:
-            reader = PdfReader(io.BytesIO(await f.read()))
-            for p in reader.pages:
-                writer.add_page(p)
-
-        out = io.BytesIO()
-        writer.write(out)
-        out.seek(0)
+        file_streams = [f.file for f in files]
+        out = await run_in_threadpool(_merge_pdfs_to_buffer, file_streams)
 
         # İSTATİSTİK
         if user_id:
-            await increment_user_usage(user_id, supabase, "tool")
+            await increment_user_usage_task(user_id, "tool")
 
         return StreamingResponse(
             out,
@@ -2246,8 +2296,8 @@ async def merge_pdfs(
             headers={"Content-Disposition": 'attachment; filename="merged.pdf"'},
         )
     except Exception as e:
-        print(f"Hata: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Merge PDFs failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 @router.post("/save-processed")
@@ -2280,62 +2330,32 @@ async def save_processed_pdf(
         raise
     except Exception as e:
         logger.error(f"Save processed error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 @router.post("/reorder")
 async def reorder_pdf(
     file: UploadFile = File(...),
     page_numbers: str = Form(...),
-    current_user: Optional[dict] = Depends(get_current_user_optional),
-    supabase: Client = Depends(get_supabase),
+    current_user: dict = Depends(get_current_user),
 ):
     """Sayfa Sıralama."""
     print("\n--- REORDER-PDF İSTEĞİ ---")
 
     # USER ID ÇÖZÜMLEME
-    user_id = current_user.get("sub") if current_user else None
-    if user_id:
-        print(f"✅ Token Çözüldü. User ID: {user_id}")
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Oturum gerekli.")
+    print(f"✅ Token Çözüldü. User ID: {user_id}")
 
     try:
-        file_content = await file.read()
-        if not file_content or len(file_content) == 0:
+        file.file.seek(0, 2)
+        file_size = file.file.tell()
+        file.file.seek(0)
+        if file_size == 0:
             raise HTTPException(status_code=400, detail="Dosya boş veya okunamadı.")
 
-        reader = PdfReader(io.BytesIO(file_content))
-
-        if len(reader.pages) == 0:
-            raise HTTPException(
-                status_code=400, detail="PDF dosyası geçersiz veya sayfa içermiyor."
-            )
-
-        writer = PdfWriter()
-
-        # Sayfa numaralarını parse et
-        try:
-            order = [int(x.strip()) - 1 for x in page_numbers.split(",") if x.strip()]
-        except ValueError:
-            raise HTTPException(
-                status_code=400, detail="Sayfa numaraları geçersiz format."
-            )
-
-        if not order:
-            raise HTTPException(status_code=400, detail="Sayfa numaraları boş.")
-
-        # Sayfa numaralarını kontrol et
-        if any(p < 0 or p >= len(reader.pages) for p in order):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Hatalı sayfa numarası. PDF'de {len(reader.pages)} sayfa var.",
-            )
-
-        # Sayfaları sıraya göre ekle
-        for i in order:
-            writer.add_page(reader.pages[i])
-
-        out = io.BytesIO()
-        writer.write(out)
+        out = await run_in_threadpool(_reorder_pdf_to_buffer, file.file, page_numbers)
 
         # Dosya boyutunu kontrol et (seek(0, 2) ile dosyanın sonuna git)
         out.seek(0, 2)  # End of file
@@ -2346,8 +2366,7 @@ async def reorder_pdf(
             raise HTTPException(status_code=500, detail="PDF oluşturulamadı.")
 
         # İSTATİSTİK
-        if user_id:
-            await increment_user_usage(user_id, supabase, "tool")
+        await increment_user_usage_task(user_id, "tool")
 
         return StreamingResponse(
             out,
@@ -2357,16 +2376,8 @@ async def reorder_pdf(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-
-        error_trace = traceback.format_exc()
-        error_msg = str(e) if e else "Bilinmeyen hata"
-        print(f"❌ Reorder PDF Error: {error_msg}")
-        print(f"Traceback: {error_trace}")
-        logger.error(f"Reorder PDF Error: {error_msg}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Sayfa sıralama hatası: {error_msg}"
-        )
+        logger.error("Reorder PDF Error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 
 # ==========================================
@@ -2385,83 +2396,16 @@ async def get_user_stats(
         user_id = current_user.get("sub")
         if not user_id:
             raise HTTPException(status_code=401, detail="User ID not found")
-
-        summary_count = 0
-        tools_count = 0
-        role_name_db = "default user"
-
-        if settings.USE_SUPABASE:
-            # 1. İstatistikleri Çek (user_stats tablosu)
-            stats_response = (
-                supabase.table("user_stats")
-                .select("summary_count,tools_count")
-                .eq("user_id", user_id)
-                .execute()
-            )
-
-            if stats_response.data:
-                summary_count = stats_response.data[0].get("summary_count", 0)
-                tools_count = stats_response.data[0].get("tools_count", 0)
-
-            # 2. Rol Bilgisini Çek
-            try:
-                user_response = (
-                    supabase.table("users")
-                    .select("user_roles(name)")
-                    .eq("id", user_id)
-                    .execute()
-                )
-                if user_response.data:
-                    user_data = user_response.data[0]
-                    if user_data.get("user_roles"):
-                        roles_data = user_data["user_roles"]
-                        if isinstance(roles_data, list) and len(roles_data) > 0:
-                            role_name_db = roles_data[0].get("name", "default user")
-                        elif isinstance(roles_data, dict):
-                            role_name_db = roles_data.get("name", "default user")
-            except Exception as role_error:
-                print(f"⚠️ Rol çekilemedi, varsayılan atandı: {role_error}")
-        else:
-            stats_row = (
-                db.execute(
-                    text(
-                        """
-                    SELECT summary_count, tools_count
-                    FROM user_stats
-                    WHERE user_id = :user_id
-                    LIMIT 1
-                    """
-                    ),
-                    {"user_id": user_id},
-                )
-                .mappings()
-                .first()
-            )
-            if stats_row:
-                summary_count = int(stats_row.get("summary_count", 0) or 0)
-                tools_count = int(stats_row.get("tools_count", 0) or 0)
-
-            role_row = (
-                db.execute(
-                    text(
-                        """
-                    SELECT ur.name AS role_name
-                    FROM users u
-                    LEFT JOIN user_roles ur ON ur.id = u.role_id
-                    WHERE u.id = :user_id
-                    LIMIT 1
-                    """
-                    ),
-                    {"user_id": user_id},
-                )
-                .mappings()
-                .first()
-            )
-            if role_row and role_row.get("role_name"):
-                role_name_db = str(role_row["role_name"])
+        user_stats = await stats_repo.get_user_stats(
+            user_id=user_id,
+            db=db,
+            supabase=supabase,
+        )
 
         # Veritabanındaki rol adını frontend'e uygun formata çevir
-        role_name_lower = role_name_db.lower() if role_name_db else ""
+        role_name_lower = (
+            user_stats.role_name_db.lower() if user_stats.role_name_db else ""
+        )
         if "pro" in role_name_lower:
             role_name = "Pro"
         elif "admin" in role_name_lower:
@@ -2470,8 +2414,8 @@ async def get_user_stats(
             role_name = "Standart"
 
         return UserStatsResponse(
-            summary_count=summary_count,
-            tools_count=tools_count,
+            summary_count=user_stats.summary_count,
+            tools_count=user_stats.tools_count,
             role=role_name,  # Admin, Pro veya Standart dönecek
         )
 
@@ -2487,38 +2431,20 @@ async def get_user_stats(
 
 
 @router.get("/global-stats")
-def get_global_stats(supabase: Client = Depends(get_supabase)):
+async def get_global_stats(
+    supabase: Client = Depends(get_supabase), db: Session = Depends(get_db)
+):
     """
     Ana sayfa için tüm kullanıcıların toplam istatistiklerini döner.
     Auth gerektirmez (Public).
     """
     try:
-        # 1. Toplam Kullanıcı Sayısı
-        # count='exact', head=True -> Sadece sayıyı getirir, veriyi çekmez (Hızlıdır)
-        users_response = (
-            supabase.table("users").select("*", count="exact", head=True).execute()
-        )
-        total_users = users_response.count if users_response.count is not None else 0
-
-        # 2. İşlem Sayılarını Topla
-        # Not: Supabase API'de doğrudan "sum" olmadığı için veriyi çekip Python'da topluyoruz.
-        # İleride veri çok büyürse Supabase RPC (SQL Function) kullanmak gerekir.
-        stats_response = (
-            supabase.table("user_stats").select("summary_count, tools_count").execute()
-        )
-
-        total_tools = 0
-        total_ai = 0
-
-        if stats_response.data:
-            for row in stats_response.data:
-                total_tools += row.get("tools_count", 0)
-                total_ai += row.get("summary_count", 0)
+        global_stats = await stats_repo.get_global_stats(db=db, supabase=supabase)
 
         return {
-            "total_users": total_users,
-            "total_processed": total_tools + total_ai,  # Toplam dosya işlemi
-            "total_ai_summaries": total_ai,  # Toplam AI işlemi
+            "total_users": global_stats.total_users,
+            "total_processed": global_stats.total_processed,
+            "total_ai_summaries": global_stats.total_ai_summaries,
         }
 
     except Exception as e:

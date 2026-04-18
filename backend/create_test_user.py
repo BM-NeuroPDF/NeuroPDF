@@ -47,7 +47,7 @@ def create_test_user():
         user_insert = {
             "id": new_id,
             "username": username,
-            "llm_choice_id": 2,  # Default LLM choice
+            "llm_choice_id": 1,  # cloud llm (seed id 1)
             "role_id": 1,  # Default role
         }
         user_response = supabase.table("users").insert(user_insert).execute()

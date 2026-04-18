@@ -335,7 +335,7 @@ describe('ProChatPanel (presentational)', () => {
       'Sadece PDF dosyaları yüklenebilir.'
     );
 
-    const huge = new File([new ArrayBuffer(50 * 1024 * 1024)], 'h.pdf', {
+    const huge = new File([new ArrayBuffer(60 * 1024 * 1024)], 'h.pdf', {
       type: 'application/pdf',
     });
     fireEvent.drop(panel, {
@@ -345,7 +345,11 @@ describe('ProChatPanel (presentational)', () => {
         getData: () => '',
       } as unknown as DataTransfer,
     });
-    expect(showErrorMock).toHaveBeenCalledWith(expect.stringContaining('Maks'));
+    expect(
+      showErrorMock.mock.calls.some(
+        (c) => typeof c[0] === 'string' && /Maks|max/i.test(c[0] as string)
+      )
+    ).toBe(true);
   });
 
   it('validateAndUpload rejects non-pdf and oversized files', () => {
@@ -367,7 +371,7 @@ describe('ProChatPanel (presentational)', () => {
     expect(onFileUpload).not.toHaveBeenCalled();
 
     showErrorMock.mockClear();
-    const huge = new File([new ArrayBuffer(50 * 1024 * 1024)], 'h.pdf', {
+    const huge = new File([new ArrayBuffer(60 * 1024 * 1024)], 'h.pdf', {
       type: 'application/pdf',
     });
     fireEvent.drop(panel, {

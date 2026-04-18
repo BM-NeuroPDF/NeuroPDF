@@ -9,6 +9,8 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.db import get_supabase, get_db
 from app.deps import get_current_user, get_current_user_optional
+from app.repositories.dto import UserStatsDTO, GlobalStatsDTO
+from app.repositories.user_repo import UserRepository
 
 client = TestClient(app)
 
@@ -80,7 +82,7 @@ class TestSummarizeFile:
     ):
         """Test successful PDF summarization"""
         # Setup mocks
-        mock_get_llm_choice.return_value = (2, "cloud")  # llm_choice_id, provider
+        mock_get_llm_choice.return_value = (1, "cloud")  # llm_choice_id, provider
         mock_check_cache.return_value = None  # No cache
 
         # Mock AI Service response
@@ -128,7 +130,7 @@ class TestSummarizeFile:
     ):
         """Test PDF summarization with cached result"""
         # Setup mocks
-        mock_get_llm_choice.return_value = (2, "cloud")
+        mock_get_llm_choice.return_value = (1, "cloud")
 
         # check_summarize_cache_by_hash is async, so we need to make it return a coroutine
         async def mock_cache_return(*args, **kwargs):
@@ -165,7 +167,10 @@ class TestChatEndpoints:
     """Test chat-related endpoints"""
 
     @patch("app.routers.files.httpx.AsyncClient")
-    @patch("app.routers.files.get_user_llm_provider")
+    @patch(
+        "app.repositories.user_repo.UserRepository.get_llm_provider",
+        new_callable=AsyncMock,
+    )
     def test_start_chat_from_text(
         self, mock_get_provider, mock_httpx_client, override_dependencies, mock_db
     ):
@@ -192,7 +197,10 @@ class TestChatEndpoints:
         assert data["session_id"] == "test-session-123"
 
     @patch("app.routers.files.httpx.AsyncClient")
-    @patch("app.routers.files.get_user_llm_provider")
+    @patch(
+        "app.repositories.user_repo.UserRepository.get_llm_provider",
+        new_callable=AsyncMock,
+    )
     def test_start_chat_session(
         self, mock_get_provider, mock_httpx_client, override_dependencies, sample_pdf
     ):
@@ -253,7 +261,10 @@ class TestChatEndpoints:
 class TestGeneralChatEndpoints:
     """Test general chat endpoints (Pro users)"""
 
-    @patch("app.routers.files._check_pro_user")
+    @patch(
+        "app.repositories.user_repo.UserRepository.is_pro_user",
+        new_callable=AsyncMock,
+    )
     @patch("app.routers.files.httpx.AsyncClient")
     def test_start_general_chat_success(
         self, mock_httpx_client, mock_check_pro, override_dependencies, mock_supabase
@@ -279,7 +290,10 @@ class TestGeneralChatEndpoints:
         data = response.json()
         assert "session_id" in data
 
-    @patch("app.routers.files._check_pro_user")
+    @patch(
+        "app.repositories.user_repo.UserRepository.is_pro_user",
+        new_callable=AsyncMock,
+    )
     def test_start_general_chat_not_pro(
         self, mock_check_pro, override_dependencies, mock_supabase
     ):
@@ -293,7 +307,10 @@ class TestGeneralChatEndpoints:
         assert response.status_code == 403
         assert "Pro" in response.json()["detail"]
 
-    @patch("app.routers.files._check_pro_user")
+    @patch(
+        "app.repositories.user_repo.UserRepository.is_pro_user",
+        new_callable=AsyncMock,
+    )
     @patch("app.routers.files.httpx.AsyncClient")
     def test_send_general_chat_message(
         self, mock_httpx_client, mock_check_pro, override_dependencies, mock_supabase
@@ -332,7 +349,7 @@ class TestLLMChoiceEndpoints:
         """Test getting user LLM choice"""
         mock_user = MagicMock()
         mock_user.id = "test-user-id"
-        mock_user.llm_choice_id = 2  # cloud
+        mock_user.llm_choice_id = 1  # cloud llm
 
         mock_db.query.return_value.filter.return_value.first.return_value = mock_user
 
@@ -342,7 +359,7 @@ class TestLLMChoiceEndpoints:
         data = response.json()
         assert "choice_id" in data
         assert "provider" in data
-        assert data["choice_id"] == 2
+        assert data["choice_id"] == 1
         assert data["provider"] == "cloud"
 
     def test_update_llm_choice(self, override_dependencies, mock_db):
@@ -360,6 +377,18 @@ class TestLLMChoiceEndpoints:
         data = response.json()
         assert data["status"] == "success"
         assert data["provider"] == "local"
+        assert data["choice_id"] == 0
+
+    def test_update_llm_choice_cloud(self, override_dependencies, mock_db):
+        mock_user = MagicMock()
+        mock_user.id = "test-user-id"
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_user
+
+        response = client.post("/files/user/update-llm", json={"provider": "cloud"})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["provider"] == "cloud"
         assert data["choice_id"] == 1
 
 
@@ -418,6 +447,208 @@ class TestFileManagementEndpoints:
 
         # Should return 200 or 204
         assert response.status_code in [200, 204]
+
+
+# ==========================================
+# SLICE-1 STATS SHIM TESTS
+# ==========================================
+
+
+class TestStatsRepositoryShimEndpoints:
+    @patch("app.routers.files.stats_repo.get_user_stats", new_callable=AsyncMock)
+    def test_get_user_stats_maps_pro_role_from_dto(
+        self, mock_get_user_stats, override_dependencies
+    ):
+        mock_get_user_stats.return_value = UserStatsDTO(
+            summary_count=5, tools_count=2, role_name_db="pro user"
+        )
+
+        response = client.get("/files/user/stats")
+
+        assert response.status_code == 200
+        assert response.json()["role"] == "Pro"
+        assert response.json()["summary_count"] == 5
+        assert response.json()["tools_count"] == 2
+
+    @patch("app.routers.files.stats_repo.get_user_stats", new_callable=AsyncMock)
+    def test_get_user_stats_maps_admin_role_from_dto(
+        self, mock_get_user_stats, override_dependencies
+    ):
+        mock_get_user_stats.return_value = UserStatsDTO(
+            summary_count=1, tools_count=3, role_name_db="admin"
+        )
+
+        response = client.get("/files/user/stats")
+
+        assert response.status_code == 200
+        assert response.json()["role"] == "Admin"
+
+    @patch("app.routers.files.stats_repo.get_user_stats", new_callable=AsyncMock)
+    def test_get_user_stats_maps_default_role_to_standart(
+        self, mock_get_user_stats, override_dependencies
+    ):
+        mock_get_user_stats.return_value = UserStatsDTO(
+            summary_count=0, tools_count=0, role_name_db="default user"
+        )
+
+        response = client.get("/files/user/stats")
+
+        assert response.status_code == 200
+        assert response.json()["role"] == "Standart"
+
+    @patch("app.routers.files.stats_repo.get_user_stats", new_callable=AsyncMock)
+    def test_get_user_stats_handles_role_name_db_none_as_standart(
+        self, mock_get_user_stats, override_dependencies
+    ):
+        mock_get_user_stats.return_value = UserStatsDTO(
+            summary_count=7, tools_count=4, role_name_db=None
+        )
+
+        response = client.get("/files/user/stats")
+
+        assert response.status_code == 200
+        assert response.json()["role"] == "Standart"
+
+    @patch("app.routers.files.stats_repo.get_global_stats", new_callable=AsyncMock)
+    def test_get_global_stats_returns_dto_fields(
+        self, mock_get_global_stats, override_dependencies
+    ):
+        mock_get_global_stats.return_value = GlobalStatsDTO(
+            total_users=10, total_processed=42, total_ai_summaries=17
+        )
+
+        response = client.get("/files/global-stats")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "total_users": 10,
+            "total_processed": 42,
+            "total_ai_summaries": 17,
+        }
+
+    @patch("app.routers.files.stats_repo.get_global_stats", new_callable=AsyncMock)
+    def test_get_global_stats_fallback_on_repo_exception(
+        self, mock_get_global_stats, override_dependencies
+    ):
+        mock_get_global_stats.side_effect = RuntimeError("boom")
+
+        response = client.get("/files/global-stats")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "total_users": 0,
+            "total_processed": 0,
+            "total_ai_summaries": 0,
+        }
+
+    @pytest.mark.asyncio
+    @patch("app.routers.files.stats_repo.increment_usage", new_callable=AsyncMock)
+    @patch("app.routers.files.settings.USE_SUPABASE", True)
+    async def test_increment_user_usage_task_uses_supabase(
+        self, mock_increment_usage, mock_supabase
+    ):
+        from app.routers.files import increment_user_usage_task
+
+        with patch("app.routers.files.get_supabase", return_value=mock_supabase):
+            await increment_user_usage_task("user-1", "summary")
+
+        mock_increment_usage.assert_awaited_once_with(
+            user_id="user-1",
+            operation_type="summary",
+            db=None,
+            supabase=mock_supabase,
+        )
+
+    @pytest.mark.asyncio
+    @patch("app.routers.files.stats_repo.increment_usage", new_callable=AsyncMock)
+    @patch("app.routers.files.settings.USE_SUPABASE", False)
+    async def test_increment_user_usage_task_uses_local_db(self, mock_increment_usage):
+        mock_session = MagicMock()
+        with patch("app.routers.files.SessionLocal", return_value=mock_session):
+            from app.routers.files import increment_user_usage_task
+
+            await increment_user_usage_task("user-1", "tool")
+
+        mock_increment_usage.assert_awaited_once_with(
+            user_id="user-1",
+            operation_type="tool",
+            db=mock_session,
+            supabase=None,
+        )
+        mock_session.close.assert_called_once()
+
+
+# ==========================================
+# SLICE-2 USER REPO SHIM TESTS
+# ==========================================
+
+
+class TestUserRepositoryShimEndpoints:
+    @patch(
+        "app.repositories.user_repo.UserRepository.is_pro_user",
+        new_callable=AsyncMock,
+    )
+    def test_is_pro_user_delegation_in_general_chat_start(
+        self, mock_is_pro_user, override_dependencies
+    ):
+        mock_is_pro_user.return_value = False
+
+        response = client.post("/files/chat/general/start", json={"mode": "flash"})
+
+        assert response.status_code == 403
+        mock_is_pro_user.assert_awaited_once()
+
+    @patch(
+        "app.repositories.user_repo.UserRepository.is_pro_user",
+        new_callable=AsyncMock,
+    )
+    def test_is_pro_user_delegation_in_general_chat_message(
+        self, mock_is_pro_user, override_dependencies
+    ):
+        mock_is_pro_user.return_value = False
+
+        payload = {"session_id": "general-session-123", "message": "Hello"}
+        response = client.post("/files/chat/general/message", json=payload)
+
+        assert response.status_code == 403
+        mock_is_pro_user.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_get_llm_provider_returns_cloud_when_db_says_1(self, mock_db):
+        repo = UserRepository()
+        mock_user = MagicMock()
+        mock_user.llm_choice_id = 1
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_user
+
+        provider = await repo.get_llm_provider(
+            user_id="test-user-id", db=mock_db, supabase=None
+        )
+
+        assert provider == "cloud"
+
+    @pytest.mark.asyncio
+    async def test_get_llm_provider_returns_local_when_db_says_0(self, mock_db):
+        repo = UserRepository()
+        mock_user = MagicMock()
+        mock_user.llm_choice_id = 0
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_user
+
+        provider = await repo.get_llm_provider(
+            user_id="test-user-id", db=mock_db, supabase=None
+        )
+
+        assert provider == "local"
+
+    @pytest.mark.asyncio
+    async def test_get_llm_provider_fallback_to_local_on_db_exception(self, mock_db):
+        repo = UserRepository()
+        mock_db.query.side_effect = RuntimeError("db boom")
+
+        provider = await repo.get_llm_provider(
+            user_id="test-user-id", db=mock_db, supabase=None
+        )
+
+        assert provider == "local"
 
 
 # ==========================================

@@ -1,45 +1,58 @@
-import NextAuth, { AuthOptions } from "next-auth";
-import GoogleProvider from "next-auth/providers/google";
-import CredentialsProvider from "next-auth/providers/credentials";
+import NextAuth, { AuthOptions } from 'next-auth';
+import GoogleProvider from 'next-auth/providers/google';
+import CredentialsProvider from 'next-auth/providers/credentials';
 
 export const authOptions: AuthOptions = {
   providers: [
     // 1. E-Posta/Şifre Girişi
     CredentialsProvider({
-      name: "Credentials",
+      name: 'Credentials',
       credentials: {
-        email: { label: "Email", type: "text" },
-        password: { label: "Password", type: "password" },
+        email: { label: 'Email', type: 'text' },
+        password: { label: 'Password', type: 'password' },
+        otpCode: { label: 'OTP', type: 'text' },
+        tempToken: { label: 'Temp token', type: 'text' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        const base =
+          process.env.BACKEND_API_URL?.replace(/\/$/, '') ||
+          'http://localhost:8000';
 
-        try {
-          const res = await fetch(`${process.env.BACKEND_API_URL}/auth/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              email: credentials.email,
-              password: credentials.password,
-            }),
-          });
+        const otpCode = credentials?.otpCode?.trim();
+        const tempToken = credentials?.tempToken?.trim();
 
-          if (!res.ok) return null;
+        if (otpCode && tempToken && credentials?.email) {
+          try {
+            const res = await fetch(`${base}/auth/verify-2fa`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                temp_token: tempToken,
+                otp_code: otpCode,
+              }),
+            });
 
-          const data = await res.json();
-          
-          // Backend'den gelen veriyi NextAuth'a teslim et
-          return {
-            id: data.user_id,
-            email: data.email,
-            name: data.username,
-            accessToken: data.access_token, // Backend'deki JWT
-            eula_accepted: data.eula_accepted,
-          } as any;
-        } catch (error) {
-          console.error("Authorize error:", error);
+            if (!res.ok) return null;
+
+            const data = await res.json();
+            return {
+              id: data.user_id,
+              email: data.email,
+              name: data.username ?? data.email,
+              accessToken: data.access_token,
+              eula_accepted: data.eula_accepted,
+            } as any;
+          } catch (error) {
+            console.error('Authorize verify-2fa error:', error);
+            return null;
+          }
+        }
+
+        if (credentials?.password) {
           return null;
         }
+
+        return null;
       },
     }),
 
@@ -49,8 +62,8 @@ export const authOptions: AuthOptions = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
-          prompt: "select_account",
-          scope: "openid email profile",
+          prompt: 'select_account',
+          scope: 'openid email profile',
         },
       },
     }),
@@ -68,11 +81,14 @@ export const authOptions: AuthOptions = {
       // B) İlk Giriş Anı (Google)
       if (account?.id_token) {
         try {
-          const res = await fetch(`${process.env.BACKEND_API_URL}/auth/google`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id_token: account.id_token }),
-          });
+          const res = await fetch(
+            `${process.env.BACKEND_API_URL}/auth/google`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id_token: account.id_token }),
+            }
+          );
 
           if (res.ok) {
             const data = await res.json();
@@ -81,12 +97,12 @@ export const authOptions: AuthOptions = {
             token.eula_accepted = data.eula_accepted;
           }
         } catch (error) {
-          console.error("Google Auth Error:", error);
+          console.error('Google Auth Error:', error);
         }
       }
 
       // C) Session Güncelleme (EULA onayı gibi durumlar için)
-      if (trigger === "update" && session?.eula_accepted !== undefined) {
+      if (trigger === 'update' && session?.eula_accepted !== undefined) {
         token.eula_accepted = session.eula_accepted;
       }
 
@@ -97,7 +113,7 @@ export const authOptions: AuthOptions = {
       // Token'daki verileri Session'a aktar (Frontend görsün diye)
       (session as any).accessToken = token.accessToken;
       (session as any).userId = token.userId;
-      
+
       if (session.user) {
         (session.user as any).eula_accepted = token.eula_accepted;
       }
@@ -105,10 +121,10 @@ export const authOptions: AuthOptions = {
     },
   },
 
-  session: { strategy: "jwt" },
+  session: { strategy: 'jwt' },
   secret: process.env.NEXTAUTH_SECRET,
   pages: {
-    signIn: "/login", // Kendi login sayfanızın yolu
+    signIn: '/login', // Kendi login sayfanızın yolu
   },
 };
 

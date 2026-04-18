@@ -78,8 +78,19 @@ class TestChatSessionStorage:
 
 # --- db: get_supabase + build_db_url + get_db ---
 class TestDbHelpers:
+    def test_get_supabase_placeholder_when_use_supabase_false(self):
+        with patch.object(db_module.settings, "USE_SUPABASE", False):
+            out = db_module.get_supabase()
+            assert out is db_module._SUPABASE_DISABLED_CLIENT
+
+    def test_supabase_disabled_client_table_raises_503(self):
+        with pytest.raises(HTTPException) as exc_info:
+            db_module._SUPABASE_DISABLED_CLIENT.table("users")
+        assert exc_info.value.status_code == 503
+
     def test_get_supabase_missing_keys(self):
         with (
+            patch.object(db_module.settings, "USE_SUPABASE", True),
             patch.object(db_module, "SUPABASE_URL", ""),
             patch.object(db_module, "SUPABASE_KEY", ""),
         ):
@@ -89,6 +100,7 @@ class TestDbHelpers:
     def test_get_supabase_fallback_second_create_client(self):
         fake_client = object()
         with (
+            patch.object(db_module.settings, "USE_SUPABASE", True),
             patch.object(db_module, "SUPABASE_URL", "http://x"),
             patch.object(db_module, "SUPABASE_KEY", "k"),
             patch.object(db_module, "create_client") as cc,
@@ -335,9 +347,13 @@ class TestAuthRouterBranches:
 
     @patch("app.routers.auth.check_rate_limit", return_value=False)
     def test_google_rate_limited(self, _rl):
-        from app.db import get_supabase
+        from app.db import get_supabase, get_db
+
+        def _db():
+            yield MagicMock()
 
         app.dependency_overrides[get_supabase] = lambda: MagicMock()
+        app.dependency_overrides[get_db] = _db
         try:
             r = client.post("/auth/google", json={"id_token": "t"})
             assert r.status_code == 429

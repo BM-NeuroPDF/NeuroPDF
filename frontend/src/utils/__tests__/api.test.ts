@@ -402,6 +402,32 @@ describe('sendRequest', () => {
     });
   });
 
+  it('uses relative URL when browser is https and NEXT_PUBLIC_API_URL is unset', async () => {
+    const prevEnv = process.env.NEXT_PUBLIC_API_URL;
+    delete process.env.NEXT_PUBLIC_API_URL;
+    const prevLoc = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...prevLoc, protocol: 'https:' },
+    });
+    (getSession as any).mockResolvedValue({ accessToken: 't' });
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({}),
+    });
+    await sendRequest('/https-no-env', 'GET');
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/https-no-env',
+      expect.any(Object)
+    );
+    process.env.NEXT_PUBLIC_API_URL = prevEnv;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: prevLoc,
+    });
+  });
+
   it('maps Error with econnreset message to temporary DB message', async () => {
     (getSession as any).mockResolvedValue({ accessToken: 't' });
     (global.fetch as any).mockRejectedValue(new Error('ECONNRESET upstream'));

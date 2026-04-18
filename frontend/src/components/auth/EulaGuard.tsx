@@ -3,19 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSession, signOut } from 'next-auth/react'; // signOut eklendi
 import { useLanguage } from '@/context/LanguageContext';
-
-const resolveApiBaseUrl = (): string => {
-  const envBase = (process.env.NEXT_PUBLIC_API_URL ?? '').trim();
-  const isHttpsBrowser =
-    typeof window !== 'undefined' && window.location.protocol === 'https:';
-
-  // HTTPS'te http backend'e doğrudan gitmek mixed-content üretir.
-  // Bu durumda same-origin rewrite için relative URL kullan.
-  if (isHttpsBrowser && envBase.startsWith('http://')) {
-    return '';
-  }
-  return envBase || 'http://localhost:8000';
-};
+import { resolveApiBaseUrl } from '@/utils/api';
 
 export default function EulaGuard({ children }: { children: React.ReactNode }) {
   const { data: session, status, update } = useSession();
@@ -23,7 +11,7 @@ export default function EulaGuard({ children }: { children: React.ReactNode }) {
 
   const [showModal, setShowModal] = useState(false);
   const [eulaContent, setEulaContent] = useState('Loading...');
-  const [timeLeft, setTimeLeft] = useState(20);
+  const [timeLeft, setTimeLeft] = useState(5);
   const [hasScrolled, setHasScrolled] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -58,7 +46,7 @@ export default function EulaGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (showModal) {
-      setTimeLeft(20);
+      setTimeLeft(5);
       setHasScrolled(false);
       timer = setInterval(() => setTimeLeft((p) => (p > 0 ? p - 1 : 0)), 1000);
     }
