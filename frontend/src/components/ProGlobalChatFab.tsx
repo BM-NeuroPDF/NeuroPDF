@@ -32,6 +32,7 @@ export default function ProGlobalChatFab({
   proRequiredDesc,
   closeText,
   goToPricingText,
+  avatarSrc = null,
 }: ProGlobalChatFabProps) {
   return (
     <>
@@ -73,13 +74,24 @@ export default function ProGlobalChatFab({
               data-testid="global-chat-fab"
             >
               <div className="relative z-10">
-                <Image
-                  src={NeuroLogoIcon}
-                  alt="AI Chat"
-                  width={40}
-                  height={40}
-                  className="drop-shadow-sm brightness-100 dark:brightness-110"
-                />
+                {avatarSrc ? (
+                  <Image
+                    src={avatarSrc}
+                    alt="avatar"
+                    width={32}
+                    height={32}
+                    className="rounded-full object-cover drop-shadow-sm w-10 h-10"
+                    unoptimized
+                  />
+                ) : (
+                  <Image
+                    src={NeuroLogoIcon}
+                    alt="AI Chat"
+                    width={40}
+                    height={40}
+                    className="drop-shadow-sm brightness-100 dark:brightness-110"
+                  />
+                )}
               </div>
             </motion.button>
           </div>

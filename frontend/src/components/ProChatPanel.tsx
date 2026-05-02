@@ -1,16 +1,17 @@
-import { useRef, useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { motion, AnimatePresence } from "framer-motion";
-import Image from "next/image";
-import NeuroLogoIcon from "@/assets/icons/NeuroPDF-Chat.svg";
-import { MAX_USER_MB, mbToBytes } from "@/app/config/fileLimits";
-import { usePopup } from "@/context/PopupContext";
-import { useLanguage } from "@/context/LanguageContext";
-import { usePdf } from "@/context/PdfContext";
+import { useRef, useEffect, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
+import NeuroLogoIcon from '@/assets/icons/NeuroPDF-Chat.svg';
+import { MAX_USER_MB, mbToBytes } from '@/app/config/fileLimits';
+import { usePopup } from '@/context/PopupContext';
+import { useLanguage } from '@/context/LanguageContext';
+import { usePdf } from '@/context/PdfContext';
 
 export type ProChatMessage = {
-  role: "user" | "assistant";
+  id?: string;
+  role: 'user' | 'assistant';
   content: string;
 };
 
@@ -46,12 +47,12 @@ export type ProChatPanelProps = {
 };
 
 function getInitials(name: string) {
-  if (!name) return "U";
+  if (!name) return 'U';
   return name
-    .split(" ")
+    .split(' ')
     .map((n) => n[0])
     .slice(0, 2)
-    .join("")
+    .join('')
     .toUpperCase();
 }
 
@@ -68,7 +69,7 @@ export default function ProChatPanel({
   headerTitle,
   headerSubtitle,
   avatarSrc,
-  userName = "U",
+  userName = 'U',
   placeholder,
   disclaimer,
   initializingLabel,
@@ -89,10 +90,10 @@ export default function ProChatPanel({
   const [isDragging, setIsDragging] = useState(false);
 
   // Default localized values if not provided via props
-  const activePlaceholder = placeholder || t("chatPlaceholder");
-  const activeDisclaimer = disclaimer || t("chatDisclaimer");
-  const activeInitializingLabel = initializingLabel || t("chatInitializing");
-  const activeTypingLabel = typingLabel || t("aiTyping");
+  const activePlaceholder = placeholder || t('chatPlaceholder');
+  const activeDisclaimer = disclaimer || t('chatDisclaimer');
+  const activeInitializingLabel = initializingLabel || t('chatInitializing');
+  const activeTypingLabel = typingLabel || t('aiTyping');
 
   // Sesli kayıt sırasında veya metin girişi yapıldığında input alanını en sağa kaydır (imleci sona taşı)
   useEffect(() => {
@@ -120,13 +121,13 @@ export default function ProChatPanel({
     const prev = prevMessageCountRef.current;
     const added = count - prev;
 
-    let behavior: ScrollBehavior = "smooth";
+    let behavior: ScrollBehavior = 'smooth';
     if (panelJustOpenedRef.current) {
-      behavior = "auto";
+      behavior = 'auto';
       panelJustOpenedRef.current = false;
     } else if (added > 1) {
       // Geçmiş sohbet geri yükleme veya çoklu mesaj tek seferde
-      behavior = "auto";
+      behavior = 'auto';
     }
 
     prevMessageCountRef.current = count;
@@ -138,14 +139,14 @@ export default function ProChatPanel({
   }, [messages, loading, isOpen]);
 
   const validateAndUpload = (file: File) => {
-    if (file.type !== "application/pdf") {
-      showError(t("errorOnlyPdf") || "Sadece PDF dosyaları yüklenebilir.");
+    if (file.type !== 'application/pdf') {
+      showError(t('errorOnlyPdf') || 'Sadece PDF dosyaları yüklenebilir.');
       return;
     }
     if (file.size > mbToBytes(MAX_USER_MB)) {
       showError(
-        (t("errorFileTooLarge") || "Dosya çok büyük (Maks {size}MB).").replace(
-          "{size}",
+        (t('errorFileTooLarge') || 'Dosya çok büyük (Maks {size}MB).').replace(
+          '{size}',
           MAX_USER_MB.toString()
         )
       );
@@ -157,7 +158,7 @@ export default function ProChatPanel({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) validateAndUpload(file);
-    if (e.target) e.target.value = "";
+    if (e.target) e.target.value = '';
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -174,10 +175,10 @@ export default function ProChatPanel({
     setIsDragging(false);
 
     // 1. Sağ Panelden (Aktif PDF) drop kontrolü
-    const isPanel = e.dataTransfer.getData("application/x-neuro-pdf");
+    const isPanel = e.dataTransfer.getData('application/x-neuro-pdf');
     if (isPanel && pdfFile) {
-        validateAndUpload(pdfFile);
-        return;
+      validateAndUpload(pdfFile);
+      return;
     }
 
     // 2. Masaüstünden dosya drop kontrolü
@@ -199,18 +200,19 @@ export default function ProChatPanel({
           />
 
           <motion.div
-            initial={{ x: "100%", opacity: 0.5 }}
+            initial={{ x: '100%', opacity: 0.5 }}
             animate={{ x: 0, opacity: 1 }}
-            exit={{ x: "100%", opacity: 0.5 }}
-            transition={{ type: "spring", stiffness: 260, damping: 25 }}
+            exit={{ x: '100%', opacity: 0.5 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 25 }}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`fixed top-[64px] right-2 bottom-2 w-full sm:w-[480px] z-[120] flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.11)] overflow-hidden rounded-l-[2rem] rounded-r-lg transition-all ${isDragging ? "ring-2 ring-indigo-500 ring-inset" : ""
-              }`}
+            className={`fixed top-[64px] right-2 bottom-2 w-full sm:w-[480px] z-[120] flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.11)] overflow-hidden rounded-l-[2rem] rounded-r-lg transition-all ${
+              isDragging ? 'ring-2 ring-indigo-500 ring-inset' : ''
+            }`}
             style={{
-              backgroundColor: "var(--background)",
-              border: "1px solid var(--container-border)",
+              backgroundColor: 'var(--background)',
+              border: '1px solid var(--container-border)',
             }}
           >
             <div className="chat-border-glow" />
@@ -242,7 +244,7 @@ export default function ProChatPanel({
                       </svg>
                     </div>
                     <p className="font-bold text-indigo-600 dark:text-indigo-400">
-                      {t("chatDropActive")}
+                      {t('chatDropActive')}
                     </p>
                   </div>
                 </motion.div>
@@ -253,8 +255,8 @@ export default function ProChatPanel({
             <div
               className="flex items-center justify-between px-8 py-5 border-b relative z-10"
               style={{
-                backgroundColor: "var(--navbar-bg)",
-                borderColor: "var(--navbar-border)",
+                backgroundColor: 'var(--navbar-bg)',
+                borderColor: 'var(--navbar-border)',
               }}
             >
               <div className="flex items-center gap-3">
@@ -269,13 +271,13 @@ export default function ProChatPanel({
                   </div>
                   <span
                     className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 rounded-full"
-                    style={{ borderColor: "var(--navbar-bg)" }}
+                    style={{ borderColor: 'var(--navbar-bg)' }}
                   />
                 </div>
                 <div>
                   <h3
                     className="font-bold leading-tight"
-                    style={{ color: "var(--foreground)" }}
+                    style={{ color: 'var(--foreground)' }}
                   >
                     {headerTitle}
                   </h3>
@@ -326,7 +328,7 @@ export default function ProChatPanel({
                       transition={{
                         repeat: Infinity,
                         duration: 1,
-                        ease: "linear",
+                        ease: 'linear',
                       }}
                       className="w-8 h-8 border-2 border-[var(--button-bg)] border-t-transparent rounded-full"
                     />
@@ -339,25 +341,28 @@ export default function ProChatPanel({
                 <AnimatePresence mode="popLayout">
                   {messages.map((msg, idx) => (
                     <motion.div
-                      key={idx}
+                      key={msg.id ?? `msg-${idx}`}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"
-                        }`}
+                      className={`flex ${
+                        msg.role === 'user' ? 'justify-end' : 'justify-start'
+                      }`}
                     >
                       <div
-                        className={`flex max-w-[90%] gap-3 ${msg.role === "user"
-                            ? "flex-row-reverse"
-                            : "flex-row"
-                          }`}
+                        className={`flex max-w-[90%] gap-3 ${
+                          msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'
+                        }`}
                       >
                         <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-white border border-gray-100 shadow-sm overflow-hidden text-[10px] font-bold text-black">
-                          {msg.role === "user" ? (
+                          {msg.role === 'user' ? (
                             avatarSrc ? (
-                              <img
+                              <Image
                                 src={avatarSrc}
+                                alt="avatar"
+                                width={32}
+                                height={32}
                                 className="w-full h-full object-cover"
-                                alt=""
+                                unoptimized
                               />
                             ) : (
                               <span className="text-gray-600">
@@ -375,10 +380,11 @@ export default function ProChatPanel({
                         </div>
 
                         <div
-                          className={`chat-bubble ${msg.role === "user"
-                              ? "chat-bubble-user"
-                              : "chat-bubble-ai"
-                            }`}
+                          className={`chat-bubble ${
+                            msg.role === 'user'
+                              ? 'chat-bubble-user'
+                              : 'chat-bubble-ai'
+                          }`}
                         >
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {msg.content}
@@ -409,8 +415,8 @@ export default function ProChatPanel({
             <div
               className="p-4 relative z-10"
               style={{
-                backgroundColor: "var(--navbar-bg)",
-                borderTop: "1px solid var(--navbar-border)",
+                backgroundColor: 'var(--navbar-bg)',
+                borderTop: '1px solid var(--navbar-border)',
               }}
             >
               {promptSuggestions.length > 0 && (
@@ -452,100 +458,103 @@ export default function ProChatPanel({
                 }}
                 className="flex items-center gap-2"
               >
-                  <div className="relative flex-1 group/input">
-                    <input
-                      ref={inputRef}
-                      type="text"
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      placeholder={isRecording ? t("chatListening") : activePlaceholder}
+                <div className="relative flex-1 group/input">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder={
+                      isRecording ? t('chatListening') : activePlaceholder
+                    }
+                    disabled={loading || initializing}
+                    className={`chat-input-field w-full pr-24 ${isRecording ? 'ring-2 ring-red-500/50' : ''}`}
+                  />
+                  <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={onVoiceToggle}
                       disabled={loading || initializing}
-                      className={`chat-input-field w-full pr-24 ${isRecording ? "ring-2 ring-red-500/50" : ""}`}
-                    />
-                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={onVoiceToggle}
-                        disabled={loading || initializing}
-                        className={`p-2.5 rounded-xl transition-all flex items-center justify-center relative ${isRecording
-                            ? "text-red-500 bg-red-50 dark:bg-red-900/20 opacity-100"
-                            : "text-[var(--foreground)] opacity-40 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/5"
-                          }`}
-                        aria-label={t("chatVoiceAria")}
-                        title={t("chatVoiceInput")}
-                      >
-                        {isRecording && (
-                          <motion.span
-                            initial={{ scale: 0.8, opacity: 0.5 }}
-                            animate={{ scale: 1.5, opacity: 0 }}
-                            transition={{ repeat: Infinity, duration: 1.5 }}
-                            className="absolute inset-0 rounded-xl bg-red-500/30"
-                          />
-                        )}
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="20"
-                          height="20"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                          <line x1="12" x2="12" y1="19" y2="22" />
-                        </svg>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={loading || initializing}
-                        className="p-2.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-all text-[var(--foreground)] opacity-40 hover:opacity-100 flex items-center justify-center"
-                        aria-label={t("chatPdfAria")}
-                        title={t("chatAttachPdf")}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="20"
-                          height="20"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.51a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-
-                  <motion.button
-                    whileTap={{ scale: 0.9 }}
-                    type="submit"
-                    disabled={!input.trim() || loading || initializing}
-                    className="btn-primary p-3 rounded-xl flex-shrink-0"
-                    data-testid="chat-send-button"
-                    aria-label="Send"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
+                      className={`p-2.5 rounded-xl transition-all flex items-center justify-center relative ${
+                        isRecording
+                          ? 'text-red-500 bg-red-50 dark:bg-red-900/20 opacity-100'
+                          : 'text-[var(--foreground)] opacity-40 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/5'
+                      }`}
+                      aria-label={t('chatVoiceAria')}
+                      title={t('chatVoiceInput')}
                     >
-                      <path d="m5 12 7-7 7 7" />
-                      <path d="M12 19V5" />
-                    </svg>
-                  </motion.button>
-                </form>
+                      {isRecording && (
+                        <motion.span
+                          initial={{ scale: 0.8, opacity: 0.5 }}
+                          animate={{ scale: 1.5, opacity: 0 }}
+                          transition={{ repeat: Infinity, duration: 1.5 }}
+                          className="absolute inset-0 rounded-xl bg-red-500/30"
+                        />
+                      )}
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                        <line x1="12" x2="12" y1="19" y2="22" />
+                      </svg>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={loading || initializing}
+                      className="p-2.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-all text-[var(--foreground)] opacity-40 hover:opacity-100 flex items-center justify-center"
+                      aria-label={t('chatPdfAria')}
+                      title={t('chatAttachPdf')}
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.51a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  type="submit"
+                  disabled={!input.trim() || loading || initializing}
+                  className="btn-primary p-3 rounded-xl flex-shrink-0"
+                  data-testid="chat-send-button"
+                  aria-label="Send"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <path d="m5 12 7-7 7 7" />
+                    <path d="M12 19V5" />
+                  </svg>
+                </motion.button>
+              </form>
 
               <p className="text-[10px] text-center mt-3 opacity-40 leading-tight">
                 {activeDisclaimer}
