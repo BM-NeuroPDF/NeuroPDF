@@ -1,16 +1,16 @@
 'use client';
 
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { useDropzone, type FileRejection } from 'react-dropzone';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { guestService } from '@/services/guestService';
 import { useGuestLimit } from '@/hooks/useGuestLimit';
 import UsageLimitModal from '@/components/UsageLimitModal';
 import { usePdf } from '@/context/PdfContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { sendRequest } from '@/utils/api';
+import { usePdfSummarize } from '@/hooks/usePdfSummarize';
 import { getMaxUploadBytes } from '@/app/config/fileLimits';
 import Popup from '@/components/ui/Popup';
 import { usePopup } from '@/hooks/usePopup';
@@ -23,18 +23,6 @@ const PdfViewer = dynamic(() => import('@/components/PdfViewer'), {
 const MarkdownViewer = dynamic(() => import('@/components/MarkdownViewer'), {
   ssr: false,
 });
-
-// Helper: Hata Kodları için ENUM
-type ErrorType =
-  | 'NONE'
-  | 'INVALID_TYPE'
-  | 'SIZE_EXCEEDED'
-  | 'CUSTOM'
-  | 'UPLOAD_FIRST'
-  | 'PANEL_ERROR'
-  | 'SUMMARY_ERROR'
-  | 'AUDIO_ERROR'
-  | 'PDF_GEN_ERROR';
 
 const formatTime = (seconds: number) => {
   if (!seconds || isNaN(seconds)) return '00:00';
@@ -59,17 +47,10 @@ export default function SummarizePdfPage() {
   } = usePdf();
 
   const { t } = useLanguage();
-  const [userRole, setUserRole] = useState<string | null>(null);
 
   const { popup, showError, close } = usePopup();
 
   const [file, setFile] = useState<File | null>(null);
-  const [summary, setSummary] = useState<string>('');
-  const [summarizing, setSummarizing] = useState(false);
-
-  // ✅ 2. Hata state'i (Metin yerine Kod)
-  const [errorType, setErrorType] = useState<ErrorType>('NONE');
-  const [customErrorMsg, setCustomErrorMsg] = useState<string | null>(null);
 
   // Limit Hesaplama
   const isGuest = status !== 'authenticated';
@@ -83,20 +64,40 @@ export default function SummarizePdfPage() {
     redirectToLogin,
   } = useGuestLimit();
 
+  const resetAudioRef = useRef<(() => void) | null>(null);
+
+  const {
+    userRole,
+    summary,
+    summarizing,
+    clearError,
+    resetState,
+    summarize,
+    setErrorType,
+    setCustomErrorMsg,
+    setSummary,
+  } = usePdfSummarize({
+    session: session ?? null,
+    status,
+    file,
+    setFile,
+    savePdf,
+    checkLimit,
+    showError,
+    t,
+    maxBytes,
+    resetAudio: () => {
+      resetAudioRef.current?.();
+    },
+    setSessionId,
+    setIsChatActive,
+    setChatMessages,
+    setActiveSessionDbId,
+    loadChatSessions,
+  });
+
   const isProUser =
     userRole?.toLowerCase() === 'pro' || userRole?.toLowerCase() === 'pro user';
-
-  useEffect(() => {
-    if (status !== 'authenticated' || !session) return;
-    sendRequest('/files/user/stats', 'GET')
-      .then((data) => setUserRole(data?.role ?? null))
-      .catch(() => setUserRole(null));
-  }, [status, session]);
-
-  const clearError = useCallback(() => {
-    setErrorType('NONE');
-    setCustomErrorMsg(null);
-  }, []);
 
   const {
     audioUrl,
@@ -123,16 +124,9 @@ export default function SummarizePdfPage() {
     onTtsError: () => setErrorType('AUDIO_ERROR'),
   });
 
-  const resetState = useCallback(
-    (f: File) => {
-      setFile(f);
-      savePdf(f);
-      setSummary('');
-      clearError();
-      resetAudio();
-    },
-    [savePdf, clearError, resetAudio]
-  );
+  useEffect(() => {
+    resetAudioRef.current = resetAudio;
+  }, [resetAudio]);
 
   // --- DROPZONE AYARLARI ---
   const onDrop = useCallback(
@@ -234,83 +228,6 @@ export default function SummarizePdfPage() {
     e.target.value = '';
   };
 
-  // --- ÖZETLEME İŞLEMİ ---
-  const handleSummarize = async () => {
-    if (!file) {
-      setErrorType('UPLOAD_FIRST');
-      return;
-    }
-    if (!session) {
-      const canProceed = await checkLimit();
-      if (!canProceed) return;
-    }
-    clearError();
-    setSummarizing(true);
-    resetAudio();
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const summarizeEndpoint = session
-        ? '/files/summarize'
-        : '/files/summarize-guest';
-      const data = await sendRequest(summarizeEndpoint, 'POST', formData, true);
-
-      if (data && data.summary) {
-        setSummary(data.summary);
-        setSummarizing(false); // ✅ Özet başarılı olduğunda hemen durumu güncelle
-
-        // PDF chat session yalnızca Pro kullanıcılar için arka planda başlatılır
-        if (data.pdf_text && session && file) {
-          sendRequest('/files/user/stats', 'GET')
-            .then((stats) => {
-              const role = (stats?.role ?? '').toLowerCase();
-              if (role !== 'pro' && role !== 'pro user') return;
-              return sendRequest('/files/chat/start-from-text', 'POST', {
-                pdf_text: data.pdf_text,
-                filename: file.name,
-              });
-            })
-            .then((chatRes) => {
-              if (chatRes?.session_id) {
-                setSessionId(chatRes.session_id);
-                setIsChatActive(true);
-                if (chatRes?.db_session_id) {
-                  setActiveSessionDbId(chatRes.db_session_id);
-                }
-                void loadChatSessions();
-                setChatMessages([
-                  {
-                    role: 'assistant',
-                    content: `👋 Merhaba! **"${file.name}"** dosyasını analiz ettim. Bana bu belgeyle ilgili her şeyi sorabilirsin.`,
-                  },
-                ]);
-              }
-            })
-            .catch((e) => {
-              if (e?.message?.includes('403') || e?.message?.includes('Pro'))
-                return;
-              console.warn('PDF chat session başlatılamadı:', e);
-            });
-        }
-
-        if (!session) {
-          try {
-            await guestService.incrementUsage();
-          } catch (e) {
-            console.error(e);
-          }
-        }
-      } else {
-        throw new Error('Özet alınamadı.');
-      }
-    } catch (e: unknown) {
-      console.error('PDF Özetleme Hatası:', e);
-      setErrorType('SUMMARY_ERROR'); // Genel özet hatası
-      setSummarizing(false); // ✅ Hata durumunda da durumu güncelle
-    }
-  };
-
   // --- PDF İNDİRME ---
   const handleDownloadPdf = async () => {
     if (!summary) return;
@@ -341,38 +258,6 @@ export default function SummarizePdfPage() {
     clearError();
     setProChatOpen(false);
   };
-
-  // ✅ Hata Mesajı Renderlayıcı
-  const getErrorMessage = () => {
-    if (customErrorMsg) return customErrorMsg;
-
-    switch (errorType) {
-      case 'INVALID_TYPE':
-        return t('invalidFileType');
-      case 'SIZE_EXCEEDED':
-        return `${t('fileSizeExceeded')} (Max: ${(maxBytes / (1024 * 1024)).toFixed(0)} MB)`;
-      case 'PANEL_ERROR':
-        return t('panelPdfError');
-      case 'UPLOAD_FIRST':
-        return t('uploadFirst');
-      case 'SUMMARY_ERROR':
-        return t('summarizeFailed');
-      case 'AUDIO_ERROR':
-        return 'Seslendirme servisine ulaşılamadı.'; // Bunu da dile ekleyebilirsiniz
-      case 'PDF_GEN_ERROR':
-        return 'PDF oluşturulurken hata meydana geldi.';
-      default:
-        return null;
-    }
-  };
-
-  const currentError = getErrorMessage();
-
-  useEffect(() => {
-    if (currentError) {
-      showError(currentError);
-    }
-  }, [currentError, showError]);
 
   return (
     <main className="min-h-screen p-6 max-w-4xl mx-auto font-bold text-[var(--foreground)] relative">
@@ -516,7 +401,7 @@ export default function SummarizePdfPage() {
           </div>
 
           <button
-            onClick={handleSummarize}
+            onClick={() => void summarize()}
             disabled={summarizing}
             className="btn-primary w-full sm:w-auto px-8 py-3 shadow-lg hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
