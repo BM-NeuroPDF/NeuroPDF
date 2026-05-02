@@ -14,13 +14,7 @@ import Image from 'next/image';
 import NeuroLogoIcon from '@/assets/icons/NeuroPDF-Chat.svg';
 import ProChatPanel from './ProChatPanel';
 import { translations, type Language } from '@/utils/translations';
-import type {
-  SpeechRecognitionConstructor,
-  SpeechRecognitionErrorEvent,
-  SpeechRecognitionInstance,
-  SpeechRecognitionResultEvent,
-  WindowWithSpeechRecognition,
-} from '@/types/speechRecognition';
+import { useVoiceInput } from '@/hooks/useVoiceInput';
 
 export default function ProGlobalChat() {
   const { data: session, status } = useSession();
@@ -226,14 +220,15 @@ export default function ProGlobalChat() {
   const [showProRequiredModal, setShowProRequiredModal] = useState(false);
   const [isRoleLoading, setIsRoleLoading] = useState(true);
   const [typingAudio, setTypingAudio] = useState<HTMLAudioElement | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-  const isManuallyStopped = useRef(false);
-  const committedTranscriptRef = useRef('');
   const translatingIdsRef = useRef<Set<string>>(new Set());
   const pendingAssistantTranslationsRef = useRef<
     Array<{ message: Message; targetIsPdfChat: boolean }>
   >([]);
+  const { isRecording, stopRecording, toggleRecording } = useVoiceInput({
+    language,
+    t,
+    setInput,
+  });
 
   // Yazıyor... sesi efekti (Loading sırasında döngüsel)
   useEffect(() => {
@@ -698,222 +693,6 @@ export default function ProGlobalChat() {
     };
   }, [userId, proChatPanelOpen, session?.user]);
 
-  // --- Voice Input (Speech-to-Text) Logic ---
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const w = window as WindowWithSpeechRecognition;
-    const SpeechRecognitionCtor: SpeechRecognitionConstructor | undefined =
-      w.SpeechRecognition ?? w.webkitSpeechRecognition;
-
-    if (!SpeechRecognitionCtor) return;
-
-    const recog = new SpeechRecognitionCtor();
-    const currentLang = language === 'tr' ? 'tr-TR' : 'en-US';
-    recog.continuous = true;
-    recog.interimResults = true;
-    recog.lang = currentLang || 'tr-TR';
-
-    console.log('SpeechRecognition initialized for language:', recog.lang);
-
-    recog.onstart = () => {
-      console.log('🎤 Ses tanıma başladı (Dinleniyor...)');
-    };
-
-    recog.onaudiostart = () => {
-      console.log('🔊 Tarayıcı mikrofon sesini yakalamaya başladı.');
-    };
-
-    recog.onspeechstart = () => {
-      console.log('🗣️ Tarayıcı insan sesi (konuşma) tespit etti!');
-    };
-
-    recog.onspeechend = () => {
-      console.log('🤐 Konuşma bittiği algılandı.');
-    };
-
-    recog.onsoundstart = () => {
-      console.log(
-        'SpeechRecognition.onsoundstart: Sound detected (hardware level).'
-      );
-    };
-
-    recog.onresult = (event: SpeechRecognitionResultEvent) => {
-      let finalTranscript = '';
-      let interimTranscript = '';
-
-      // We iterate through all results to reconstruct the full cumulative transcript.
-      // This is generally more robust than managing a partial ref for most modern implementations.
-      for (let i = 0; i < event.results.length; ++i) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript;
-        } else {
-          interimTranscript += transcript;
-        }
-      }
-
-      console.log(
-        '🎤 SpeechRecognition: Final=[',
-        finalTranscript,
-        '] Interim=[',
-        interimTranscript,
-        ']'
-      );
-
-      // Combine what was in the input box before recording started (saved in ref)
-      // with the new cumulative transcript from the speech recognition.
-      const prefix = committedTranscriptRef.current
-        ? `${committedTranscriptRef.current} `
-        : '';
-      const merged = `${prefix}${finalTranscript}${interimTranscript}`.trim();
-
-      if (merged) {
-        setInput(merged);
-      }
-    };
-
-    recog.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error('❌ Ses Tanıma Hatası:', event.error);
-      if (event.error === 'aborted') return; // Ignore manual aborts
-
-      const errorMsg =
-        event.error === 'no-speech'
-          ? t('toastMicErrorNoSpeech')
-          : event.error === 'not-allowed'
-            ? t('toastMicErrorNotAllowed')
-            : event.error === 'network'
-              ? t('toastMicErrorNetwork')
-              : `Hata: ${event.error}`;
-      toast.error(errorMsg);
-      setIsRecording(false);
-    };
-
-    recog.onnomatch = () => {
-      console.warn('❓ Ses duyuldu ama hiçbir kelimeyle eşleşmedi (no-match).');
-    };
-
-    recog.onend = () => {
-      console.log('SpeechRecognition.onend: Session ended.');
-      // If we are still supposed to be recording but it ended prematurely (silent timeout), restart.
-      if (!isManuallyStopped.current) {
-        try {
-          console.log('🔄 Otomatik yeniden başlatılıyor...');
-          recognitionRef.current?.start();
-          return;
-        } catch (e) {
-          console.error('Auto-restart failed:', e);
-        }
-      }
-      setIsRecording(false);
-    };
-
-    recognitionRef.current = recog;
-
-    // Cleanup: Bileşen unmount olduğunda veya dil değiştiğinde eski dinleyiciyi kapat
-    return () => {
-      try {
-        if (recognitionRef.current) {
-          isManuallyStopped.current = true;
-          recognitionRef.current.onstart = null;
-          recognitionRef.current.onresult = null;
-          recognitionRef.current.onerror = null;
-          recognitionRef.current.onend = null;
-          recognitionRef.current.stop();
-        }
-      } catch (e) {
-        console.error('Cleanup error:', e);
-      }
-    };
-  }, [language, t]);
-
-  const ensureMicrophoneAccess = async (): Promise<boolean> => {
-    if (typeof window === 'undefined') return false;
-    if (!navigator.mediaDevices?.getUserMedia) {
-      alert('Tarayıcınız mikrofon erişimini desteklemiyor.');
-      return false;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((track) => track.stop());
-      return true;
-    } catch (error) {
-      const err = error as DOMException;
-      if (err?.name === 'NotAllowedError') {
-        alert(
-          'Mikrofon izni reddedildi. Lütfen site ayarlarından mikrofona izin verin.'
-        );
-      } else if (err?.name === 'NotFoundError') {
-        alert('Mikrofon bulunamadı. Lütfen bir mikrofon bağlayın.');
-      } else {
-        alert(
-          'Mikrofon başlatılamadı. Lütfen tarayıcı izinlerini kontrol edin.'
-        );
-      }
-      return false;
-    }
-  };
-
-  const handleVoiceToggle = async () => {
-    const recognition = recognitionRef.current;
-    if (!recognition) {
-      alert('Tarayıcınız ses tanıma özelliğini desteklemiyor.');
-      return;
-    }
-
-    if (isRecording) {
-      console.log('🛑 Manual stop requested.');
-      isManuallyStopped.current = true;
-      recognition.stop();
-      setIsRecording(false);
-    } else {
-      console.log('🎤 Manual start requested.');
-      try {
-        const hasPermission = await ensureMicrophoneAccess();
-        if (!hasPermission) return;
-
-        // Reset state for new session - Start FRESH as requested.
-        isManuallyStopped.current = false;
-        committedTranscriptRef.current = '';
-        setInput('');
-
-        const currentLang = language === 'tr' ? 'tr-TR' : 'en-US';
-        recognition.lang = currentLang;
-
-        // If it was already running in the background for some reason, stop it first.
-        // We set isManuallyStopped to true TEMPORARILY to avoid the onend auto-restart.
-        isManuallyStopped.current = true;
-        recognition.stop();
-
-        setTimeout(() => {
-          isManuallyStopped.current = false;
-          // Ensure language is set right before start
-          recognition.lang = language === 'tr' ? 'tr-TR' : 'en-US';
-          console.log(
-            '🌐 SpeechRecognition starting with language:',
-            recognition.lang
-          );
-
-          try {
-            recognition.start();
-            setIsRecording(true);
-          } catch (e) {
-            console.warn(
-              'Recognition start failed (likely already running):',
-              e
-            );
-            // If it's already running, we just ensure isRecording is true.
-            setIsRecording(true);
-          }
-        }, 150);
-      } catch (e: unknown) {
-        console.error('Recognition toggle error:', e);
-        setIsRecording(false);
-      }
-    }
-  };
-
   const handleFileUpload = async (file: File) => {
     setInitializing(true);
     try {
@@ -985,10 +764,7 @@ export default function ProGlobalChat() {
   const handleSend = async (messageOverride?: string) => {
     const userMsg = (messageOverride ?? input).trim();
     if (!userMsg || !activeSessionId) return;
-    if (isRecording && recognitionRef.current) {
-      isManuallyStopped.current = true;
-      recognitionRef.current.stop();
-    }
+    if (isRecording) stopRecording();
     setInput('');
 
     const userMessage = makeRuntimeMessage('user', userMsg);
@@ -1289,7 +1065,7 @@ export default function ProGlobalChat() {
           initializingLabel={t('chatInitializing')}
           typingLabel={t('aiTyping')}
           isRecording={isRecording}
-          onVoiceToggle={handleVoiceToggle}
+          onVoiceToggle={toggleRecording}
         />
       )}
     </>
