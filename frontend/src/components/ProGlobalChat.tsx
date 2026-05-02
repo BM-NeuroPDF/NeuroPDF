@@ -15,6 +15,7 @@ import { useVoiceInput } from '@/hooks/useVoiceInput';
 import { usePdfClientActions } from '@/hooks/usePdfClientActions';
 import { useChatLocalization } from '@/hooks/useChatLocalization';
 import { useMessageTranslationQueue } from '@/hooks/useMessageTranslationQueue';
+import { useChatSessionBootstrap } from '@/hooks/useChatSessionBootstrap';
 
 export default function ProGlobalChat() {
   const { data: session, status } = useSession();
@@ -51,13 +52,10 @@ export default function ProGlobalChat() {
     t,
   });
 
-  const [userRole, setUserRole] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(false);
-  const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
   const [showProRequiredModal, setShowProRequiredModal] = useState(false);
-  const [isRoleLoading, setIsRoleLoading] = useState(true);
   const [typingAudio, setTypingAudio] = useState<HTMLAudioElement | null>(null);
   const { isRecording, stopRecording, toggleRecording } = useVoiceInput({
     language,
@@ -87,11 +85,46 @@ export default function ProGlobalChat() {
     };
   }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const activeSessionId = pdfSessionId || generalSessionId;
   const activeChatMessages = pdfSessionId
     ? pdfChatMessages
     : generalChatMessages;
   const isPdfChat = !!pdfSessionId;
+  const activeSessionId = pdfSessionId || generalSessionId;
+  const { userRole, isRoleLoading, avatarSrc, initChatSession } =
+    useChatSessionBootstrap({
+      session,
+      status,
+      language,
+      t,
+      pdfFile,
+      existingDocumentId,
+      pdfSessionId,
+      generalSessionId,
+      proChatOpen,
+      proChatPanelOpen,
+      setProChatOpen,
+      setProChatPanelOpen,
+      setPdfSessionId,
+      setGeneralSessionId,
+      setIsChatActive,
+      setActiveSessionDbId,
+      setPdfChatMessages,
+      setGeneralChatMessages,
+      makeAssistantMessage: (key: string, params?: Record<string, string>) =>
+        makeAssistantMessage(
+          key as
+            | 'chatWelcomePdf'
+            | 'chatWelcomeGeneral'
+            | 'chatInitError'
+            | 'chatErrorQuotaExceeded'
+            | 'chatErrorSessionExpired'
+            | 'chatErrorSessionRefresh'
+            | 'chatErrorConnection',
+          params
+        ),
+      loadChatSessions,
+      setInitializing,
+    });
   const isProUser =
     userRole?.toLowerCase() === 'pro' || userRole?.toLowerCase() === 'pro user';
   const canAccessChat = status === 'authenticated' && isProUser;
@@ -116,163 +149,6 @@ export default function ProGlobalChat() {
       setGeneralChatMessages,
     });
 
-  // Başka sayfadan "Sohbet Et" ile açıldığında paneli aç
-  useEffect(() => {
-    if (proChatOpen) {
-      setProChatPanelOpen(true);
-      setProChatOpen(false);
-    }
-  }, [proChatOpen, setProChatOpen, setProChatPanelOpen]);
-
-  // Dinamik PDF izleyici: pdfFile değiştiğinde Pro ise ve PDF oturumu yoksa arka planda chat session başlat
-  useEffect(() => {
-    if (!pdfFile || !isProUser || pdfSessionId) return;
-    let cancelled = false;
-    (async () => {
-      setInitializing(true);
-      try {
-        let chatRes: { session_id?: string; db_session_id?: string } | null =
-          null;
-        if (existingDocumentId) {
-          chatRes = await sendRequest('/files/chat/start-from-text', 'POST', {
-            // Mevcut PDF zaten DB'de kayıtlı; tekrar upload etmeden mevcut id ile başlat.
-            pdf_text: ' ',
-            filename: pdfFile.name,
-            pdf_id: existingDocumentId,
-            language: language,
-          });
-        } else {
-          const formData = new FormData();
-          formData.append('file', pdfFile);
-          formData.append('language', language);
-          chatRes = await sendRequest(
-            '/files/chat/start',
-            'POST',
-            formData,
-            true
-          );
-        }
-        if (cancelled) return;
-        if (chatRes?.session_id) {
-          setPdfSessionId(chatRes.session_id);
-          setIsChatActive(true);
-          if (chatRes?.db_session_id) {
-            setActiveSessionDbId(chatRes.db_session_id);
-          }
-          void loadChatSessions();
-          setPdfChatMessages([
-            makeAssistantMessage('chatWelcomePdf', { name: pdfFile.name }),
-          ]);
-        }
-      } catch (e) {
-        if (!cancelled) console.error('PDF chat otomatik başlatma hatası:', e);
-      } finally {
-        if (!cancelled) setInitializing(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    pdfFile,
-    isProUser,
-    pdfSessionId,
-    existingDocumentId,
-    language,
-    makeAssistantMessage,
-    setPdfSessionId,
-    setIsChatActive,
-    setPdfChatMessages,
-    setActiveSessionDbId,
-    loadChatSessions,
-  ]);
-
-  useEffect(() => {
-    const fetchUserRole = async () => {
-      // Auth hydrate tamamlanmadan role isteği atma.
-      if (status === 'loading' || status === 'unauthenticated') {
-        setIsRoleLoading(status === 'loading');
-        setUserRole(null);
-        return;
-      }
-      if (!session) {
-        setIsRoleLoading(false);
-        setUserRole(null);
-        return;
-      }
-
-      setIsRoleLoading(true);
-      // DB/proxy geç cevap verdiğinde ilk seferde başarısız olabiliyor.
-      // Pro yetkisi UI'da bir anda belirlenmediği için FAB tıklanınca modal açılabiliyor.
-      // Bu yüzden kısa retry ile userRole set'ini daha stabil hale getiriyoruz.
-      const maxAttempts = 3;
-      let attempt = 0;
-      while (attempt < maxAttempts) {
-        attempt += 1;
-        try {
-          const data = await sendRequest('/files/user/stats', 'GET');
-          setUserRole(data?.role ?? null);
-          setIsRoleLoading(false);
-          return;
-        } catch (error: unknown) {
-          const msg =
-            error && typeof error === 'object' && 'message' in error
-              ? String((error as { message?: string }).message)
-              : '';
-          const isAuthExpired =
-            msg.includes('Oturum süreniz dolmuş') ||
-            msg.includes('expired') ||
-            msg.includes('401');
-
-          if (isAuthExpired) {
-            setUserRole(null);
-            setIsRoleLoading(false);
-            return;
-          }
-
-          if (attempt < maxAttempts) {
-            await new Promise((r) => setTimeout(r, 1200));
-            continue;
-          }
-
-          console.error('Rol kontrolü hatası (retry bitti):', error);
-          setIsRoleLoading(false);
-        }
-      }
-    };
-    fetchUserRole();
-  }, [session, status]);
-
-  const userId = (session?.user as { id?: string })?.id ?? null;
-
-  useEffect(() => {
-    if (!session?.user || !proChatPanelOpen) return;
-    const uid = userId || 'me';
-    let cancelled = false;
-    (async () => {
-      try {
-        const blob = (await sendRequest(
-          `/api/v1/user/${uid}/avatar`,
-          'GET'
-        )) as Blob;
-        if (cancelled) return;
-        if (blob && blob.size > 0) {
-          setAvatarSrc((prev) => {
-            if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
-            return URL.createObjectURL(blob);
-          });
-          return;
-        }
-      } catch {
-        /* fallback */
-      }
-      if (session?.user?.image) setAvatarSrc(session.user.image);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, proChatPanelOpen, session?.user]);
-
   const handleFileUpload = async (file: File) => {
     setInitializing(true);
     try {
@@ -284,26 +160,6 @@ export default function ProGlobalChat() {
       console.error('Chat PDF yükleme hatası:', e);
     } finally {
       // setInitializing(false); useEffect içinde yapılacak
-    }
-  };
-
-  const initChatSession = async () => {
-    if (activeSessionId) return;
-    setInitializing(true);
-    try {
-      const res = await sendRequest('/files/chat/general/start', 'POST', {
-        llm_provider: 'cloud',
-        mode: 'flash',
-        language: language,
-      });
-      if (!res.session_id) throw new Error(t('chatInitError'));
-      setGeneralSessionId(res.session_id);
-      setGeneralChatMessages([makeAssistantMessage('chatWelcomeGeneral')]);
-    } catch (e) {
-      console.error('Chat başlatma hatası:', e);
-      setGeneralChatMessages([makeAssistantMessage('chatInitError')]);
-    } finally {
-      setInitializing(false);
     }
   };
 
