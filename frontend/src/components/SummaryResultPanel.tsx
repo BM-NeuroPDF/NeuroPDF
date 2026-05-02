@@ -1,8 +1,23 @@
 'use client';
 
-import type { ReactNode } from 'react';
-import MarkdownViewer from '@/components/MarkdownViewer';
+import dynamic from 'next/dynamic';
+import type { ComponentType, ReactNode } from 'react';
 import { translations } from '@/utils/translations';
+
+export type SummaryMarkdownViewerProps = {
+  markdown: string;
+  defaultPdfName?: string;
+  height?: number | string;
+};
+
+const summarizeMarkdownChunkLoading = () => (
+  <div className="animate-pulse bg-gray-200 rounded h-48" />
+);
+
+const DynamicMarkdownViewer = dynamic(
+  () => import('@/components/MarkdownViewer'),
+  { ssr: false, loading: summarizeMarkdownChunkLoading }
+);
 
 export interface SummaryResultPanelProps {
   summary: string;
@@ -16,6 +31,8 @@ export interface SummaryResultPanelProps {
   audioLoading: boolean;
   audioPlayer: ReactNode;
   t: (key: keyof (typeof translations)['tr']) => string;
+  /** Override for tests or to share one dynamic instance from the page. */
+  markdownViewer?: ComponentType<SummaryMarkdownViewerProps>;
 }
 
 export function SummaryResultPanel({
@@ -30,6 +47,7 @@ export function SummaryResultPanel({
   audioLoading,
   audioPlayer,
   t,
+  markdownViewer: MarkdownViewerComp = DynamicMarkdownViewer,
 }: SummaryResultPanelProps) {
   const isProUser =
     userRole?.toLowerCase() === 'pro' || userRole?.toLowerCase() === 'pro user';
@@ -40,7 +58,7 @@ export function SummaryResultPanel({
         <h3 className="text-xl mb-4 font-semibold border-b border-[var(--navbar-border)] pb-2">
           {t('summaryResultTitle') || 'Özet Sonucu'}
         </h3>
-        <MarkdownViewer markdown={summary} height={400} />
+        <MarkdownViewerComp markdown={summary} height={400} />
       </div>
 
       <div className="container-card p-6 border border-gray-300 dark:border-[var(--container-border)] shadow-xl space-y-4">

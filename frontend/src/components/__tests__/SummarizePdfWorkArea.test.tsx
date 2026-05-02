@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { SummarizePdfWorkArea } from '../SummarizePdfWorkArea';
+import PdfViewer from '@/components/PdfViewer';
 
 vi.mock('@/components/PdfViewer', () => ({
   default: function MockPdfViewer({ file }: { file: File }) {
@@ -21,6 +22,7 @@ describe('SummarizePdfWorkArea', () => {
         summarizing={false}
         onSummarize={vi.fn()}
         t={t as ComponentProps<typeof SummarizePdfWorkArea>['t']}
+        pdfViewer={PdfViewer}
       />
     );
     expect(screen.getByText('pdfPreviewTitle')).toBeInTheDocument();
@@ -35,6 +37,7 @@ describe('SummarizePdfWorkArea', () => {
         summarizing={false}
         onSummarize={onSummarize}
         t={t as ComponentProps<typeof SummarizePdfWorkArea>['t']}
+        pdfViewer={PdfViewer}
       />
     );
     fireEvent.click(screen.getByRole('button', { name: /summarizeButton/i }));
@@ -48,6 +51,7 @@ describe('SummarizePdfWorkArea', () => {
         summarizing
         onSummarize={vi.fn()}
         t={t as ComponentProps<typeof SummarizePdfWorkArea>['t']}
+        pdfViewer={PdfViewer}
       />
     );
     expect(
@@ -65,6 +69,7 @@ describe('SummarizePdfWorkArea', () => {
         summarizing={false}
         onSummarize={vi.fn()}
         t={tEmpty}
+        pdfViewer={PdfViewer}
       />
     );
     expect(screen.getByRole('button', { name: /Özetle/i })).toBeInTheDocument();

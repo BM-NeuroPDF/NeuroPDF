@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import type { FileRejection } from 'react-dropzone';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
@@ -19,6 +20,20 @@ import { SummarizeDropzone } from '@/components/SummarizeDropzone';
 import { SummarizePdfWorkArea } from '@/components/SummarizePdfWorkArea';
 import { SummaryAudioPlayer } from '@/components/SummaryAudioPlayer';
 import { SummaryResultPanel } from '@/components/SummaryResultPanel';
+
+const summarizePageChunkLoading = () => (
+  <div className="animate-pulse bg-gray-200 rounded h-48" />
+);
+
+const PdfViewer = dynamic(() => import('@/components/PdfViewer'), {
+  ssr: false,
+  loading: summarizePageChunkLoading,
+});
+
+const MarkdownViewer = dynamic(() => import('@/components/MarkdownViewer'), {
+  ssr: false,
+  loading: summarizePageChunkLoading,
+});
 
 export default function SummarizePdfPage() {
   const { data: session, status } = useSession();
@@ -277,6 +292,7 @@ export default function SummarizePdfPage() {
           summarizing={summarizing}
           onSummarize={() => void summarize()}
           t={t}
+          pdfViewer={PdfViewer}
         />
       )}
 
@@ -287,6 +303,7 @@ export default function SummarizePdfPage() {
           userRole={userRole}
           onNew={handleNew}
           onDownloadPdf={() => void handleDownloadPdf()}
+          markdownViewer={MarkdownViewer}
           onStartChat={
             session
               ? () => {

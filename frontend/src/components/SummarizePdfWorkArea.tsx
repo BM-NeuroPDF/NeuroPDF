@@ -1,13 +1,30 @@
 'use client';
 
-import PdfViewer from '@/components/PdfViewer';
+import dynamic from 'next/dynamic';
+import type { ComponentType } from 'react';
 import { translations } from '@/utils/translations';
+
+export type SummarizePdfViewerProps = {
+  file: File | string | Blob;
+  height?: number | string;
+};
+
+const summarizePdfChunkLoading = () => (
+  <div className="animate-pulse bg-gray-200 rounded h-48" />
+);
+
+const DynamicPdfViewer = dynamic(() => import('@/components/PdfViewer'), {
+  ssr: false,
+  loading: summarizePdfChunkLoading,
+});
 
 export interface SummarizePdfWorkAreaProps {
   file: File;
   summarizing: boolean;
   onSummarize: () => void;
   t: (key: keyof (typeof translations)['tr']) => string;
+  /** Override for tests or to share one dynamic instance from the page. */
+  pdfViewer?: ComponentType<SummarizePdfViewerProps>;
 }
 
 export function SummarizePdfWorkArea({
@@ -15,6 +32,7 @@ export function SummarizePdfWorkArea({
   summarizing,
   onSummarize,
   t,
+  pdfViewer: PdfViewerComp = DynamicPdfViewer,
 }: SummarizePdfWorkAreaProps) {
   return (
     <div className="mt-6 space-y-6">
@@ -24,7 +42,7 @@ export function SummarizePdfWorkArea({
             {t('pdfPreviewTitle')}
           </h3>
         </div>
-        <PdfViewer file={file} height={550} />
+        <PdfViewerComp file={file} height={550} />
       </div>
 
       <button

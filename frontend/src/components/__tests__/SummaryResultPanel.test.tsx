@@ -2,6 +2,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ComponentProps } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { SummaryResultPanel } from '../SummaryResultPanel';
+import MarkdownViewer from '@/components/MarkdownViewer';
+
+vi.mock('@/components/MarkdownViewer', () => ({
+  default: function MockMarkdownViewer({ markdown }: { markdown: string }) {
+    return (
+      <div data-testid="markdown-viewer-mock">
+        <span>{markdown}</span>
+        <button type="button">PDF indir</button>
+      </div>
+    );
+  },
+}));
 
 vi.mock('@/services/pdfService', () => ({
   pdfService: {
@@ -30,6 +42,7 @@ function setup(
     audioLoading: false,
     audioPlayer: <div data-testid="audio-slot">player</div>,
     t: t as ComponentProps<typeof SummaryResultPanel>['t'],
+    markdownViewer: MarkdownViewer,
     ...overrides,
   };
   const view = render(<SummaryResultPanel {...props} />);
@@ -115,6 +128,7 @@ describe('SummaryResultPanel', () => {
         audioLoading={false}
         audioPlayer={null}
         t={tFallback}
+        markdownViewer={MarkdownViewer}
       />
     );
     expect(screen.getByText('Sohbet Et')).toBeInTheDocument();
@@ -131,6 +145,7 @@ describe('SummaryResultPanel', () => {
         audioLoading={false}
         audioPlayer={null}
         t={tFallback}
+        markdownViewer={MarkdownViewer}
       />
     );
     expect(screen.getByText("Sohbet için Pro'ya geç")).toBeInTheDocument();
@@ -183,6 +198,7 @@ describe('SummaryResultPanel', () => {
         audioLoading
         audioPlayer={null}
         t={tEmpty}
+        markdownViewer={MarkdownViewer}
       />
     );
     expect(screen.getByText('Özet Sonucu')).toBeInTheDocument();
@@ -204,6 +220,7 @@ describe('SummaryResultPanel', () => {
         audioLoading={false}
         audioPlayer={null}
         t={tEmpty}
+        markdownViewer={MarkdownViewer}
       />
     );
     expect(screen.getByText('Özeti Dinle')).toBeInTheDocument();
