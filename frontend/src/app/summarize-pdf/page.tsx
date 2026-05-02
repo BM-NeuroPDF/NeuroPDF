@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState, useEffect, useRef } from 'react';
-import { useDropzone, type FileRejection } from 'react-dropzone';
+import type { FileRejection } from 'react-dropzone';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -16,6 +16,7 @@ import Popup from '@/components/ui/Popup';
 import { usePopup } from '@/hooks/usePopup';
 import { useSummaryAudio } from '@/hooks/useSummaryAudio';
 import { translations } from '@/utils/translations';
+import { SummarizeDropzone } from '@/components/SummarizeDropzone';
 
 const PdfViewer = dynamic(() => import('@/components/PdfViewer'), {
   ssr: false,
@@ -167,15 +168,8 @@ export default function SummarizePdfPage() {
         resetState(f);
       }
     },
-    [maxBytes, resetState, clearError]
+    [maxBytes, resetState, clearError, setErrorType, setCustomErrorMsg, setFile]
   );
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    multiple: false,
-    accept: { 'application/pdf': ['.pdf'] },
-    maxSize: maxBytes,
-  });
 
   const handleDropFromPanel = (
     e?: React.DragEvent<HTMLDivElement> | React.MouseEvent
@@ -315,76 +309,15 @@ export default function SummarizePdfPage() {
         <div className="info-box mb-4">{usageInfo.message}</div>
       )}
 
-      {/* Dropzone Alanı */}
-      <div
-        {...getRootProps({
-          onDrop: (e) => {
-            // Sağ panelden gelen veriyi kontrol et
-            const isPanel = e.dataTransfer.getData('application/x-neuro-pdf');
-            if (isPanel) {
-              handleDropFromPanel(e);
-            }
-            // else: Masaüstünden gelen dosyalar react-dropzone'un iç onDrop handler'ı ile zaten işlenecek (onDrop callback'i sayesinde)
-          },
-        })}
-        className={`container-card border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-300
-          ${
-            isDragActive
-              ? 'border-[var(--button-bg)] bg-[var(--background)] opacity-80'
-              : 'border-[var(--navbar-border)] hover:border-[var(--button-bg)]'
-          }`}
-      >
-        <input {...getInputProps()} accept="application/pdf" />
-        <div className="flex flex-col items-center gap-3">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-            className="w-12 h-12 opacity-50"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-            />
-          </svg>
-          {isDragActive ? <p>{t('dropActive')}</p> : <p>{t('dropPassive')}</p>}
-        </div>
-
-        {file && !isDragActive && (
-          <p className="mt-4 text-sm opacity-60 font-normal">
-            {t('currentFile')} <b>{file.name}</b> <br /> {t('changeFileHint')}
-          </p>
-        )}
-      </div>
-
-      <div className="mt-6 flex justify-start">
-        <label className="btn-primary cursor-pointer shadow-md hover:scale-105 flex items-center gap-2">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-            className="w-5 h-5"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"
-            />
-          </svg>
-          {t('selectFile')}
-          <input
-            type="file"
-            className="hidden"
-            accept=".pdf"
-            onChange={handleSelect}
-          />
-        </label>
-      </div>
+      <SummarizeDropzone
+        maxBytes={maxBytes}
+        disabled={summarizing}
+        t={t}
+        file={file}
+        onDrop={onDrop}
+        onFileInputChange={handleSelect}
+        onPanelDrop={(e) => handleDropFromPanel(e)}
+      />
 
       {file && !summary && (
         <div className="mt-6 space-y-6">

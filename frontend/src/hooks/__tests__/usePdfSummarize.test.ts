@@ -541,4 +541,65 @@ describe('usePdfSummarize', () => {
 
     expect(setSessionId).not.toHaveBeenCalled();
   });
+
+  it('skips start-from-text when post-summary stats role is not pro', async () => {
+    const session = { user: { name: 'A' }, expires: '1' } as Session;
+    mockedSendRequest
+      .mockResolvedValueOnce({ role: 'standard' })
+      .mockResolvedValueOnce({ summary: 's', pdf_text: 'body' })
+      .mockResolvedValueOnce({ role: 'standard' });
+
+    const setSessionId = vi.fn();
+    const { result } = renderHook(() =>
+      usePdfSummarize(
+        buildParams({
+          file: pdfFile,
+          session,
+          status: 'authenticated',
+          setSessionId,
+        })
+      )
+    );
+
+    await act(async () => {
+      await result.current.summarize();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(setSessionId).not.toHaveBeenCalled();
+    expect(mockedSendRequest).not.toHaveBeenCalledWith(
+      '/files/chat/start-from-text',
+      'POST',
+      expect.anything()
+    );
+  });
+
+  it('skips start-from-text when post-summary stats response is null', async () => {
+    const session = { user: { name: 'A' }, expires: '1' } as Session;
+    mockedSendRequest
+      .mockResolvedValueOnce({ role: 'standard' })
+      .mockResolvedValueOnce({ summary: 's', pdf_text: 'body' })
+      .mockResolvedValueOnce(null);
+
+    const setSessionId = vi.fn();
+    const { result } = renderHook(() =>
+      usePdfSummarize(
+        buildParams({
+          file: pdfFile,
+          session,
+          status: 'authenticated',
+          setSessionId,
+        })
+      )
+    );
+
+    await act(async () => {
+      await result.current.summarize();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(setSessionId).not.toHaveBeenCalled();
+  });
 });

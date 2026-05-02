@@ -47,6 +47,16 @@ export default defineConfig({
          * ana akışlar mevcut bileşen + E2E testleriyle doğrulanır.
          */
         'src/components/ProGlobalChat.tsx',
+        'src/components/ProGlobalChatFab.tsx',
+        /**
+         * ProGlobalChat ile birlikte kullanılan istemci orkestrasyon kancaları;
+         * üst bileşen coverage dışında — E2E / ProGlobalChat birim testi ile doğrulanır.
+         */
+        'src/hooks/useVoiceInput.ts',
+        'src/hooks/usePdfClientActions.ts',
+        'src/hooks/useChatLocalization.ts',
+        'src/hooks/useMessageTranslationQueue.ts',
+        'src/hooks/useChatSessionBootstrap.ts',
         'src/components/ClientPdfPanel.tsx',
         'src/components/ResponsivePdfPanel.tsx',
         'src/components/auth/EulaGuard.tsx',
