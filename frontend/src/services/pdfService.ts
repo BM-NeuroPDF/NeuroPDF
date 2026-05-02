@@ -26,7 +26,6 @@ class PDFService {
 
     if (apiToken) {
       headers['Authorization'] = `Bearer ${apiToken}`;
-      console.log('✅ Using NextAuth token for request');
     }
 
     return headers;
@@ -41,7 +40,6 @@ class PDFService {
     if (!isLoggedIn) {
       const guestId = await guestService.getGuestId();
       headers['X-Guest-ID'] = guestId;
-      console.log('✅ Using guest ID for request:', guestId);
     }
 
     return headers;
@@ -51,8 +49,6 @@ class PDFService {
    * Dosyayı indirmek için yardımcı fonksiyon
    */
   private downloadFile(blob: Blob, filename: string): void {
-    console.log('📥 Downloading file:', filename, 'Size:', blob.size, 'bytes');
-
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.style.display = 'none';
@@ -60,14 +56,12 @@ class PDFService {
     a.download = filename;
 
     document.body.appendChild(a);
-    console.log('🔗 Download link created, clicking...');
     a.click();
 
     // Cleanup
     setTimeout(() => {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      console.log('✅ Download triggered, cleanup done');
     }, 100);
   }
 
@@ -135,13 +129,10 @@ class PDFService {
     // Guest kullanıcı ise usage artır
     if (!isLoggedIn) {
       try {
-        const result = await guestService.incrementUsage();
-        console.log('✅ Guest usage incremented:', result);
+        await guestService.incrementUsage();
       } catch (error) {
         console.error('❌ Could not increment guest usage:', error);
       }
-    } else {
-      console.log('ℹ️ Logged in user - guest usage not tracked');
     }
   }
 
@@ -187,13 +178,10 @@ class PDFService {
     // Guest kullanıcı ise usage artır
     if (!isLoggedIn) {
       try {
-        const result = await guestService.incrementUsage();
-        console.log('✅ Guest usage incremented:', result);
+        await guestService.incrementUsage();
       } catch (error) {
         console.error('❌ Could not increment guest usage:', error);
       }
-    } else {
-      console.log('ℹ️ Logged in user - guest usage not tracked');
     }
   }
 
@@ -235,13 +223,10 @@ class PDFService {
     // Guest kullanıcı ise usage artır
     if (!isLoggedIn) {
       try {
-        const result = await guestService.incrementUsage();
-        console.log('✅ Guest usage incremented:', result);
+        await guestService.incrementUsage();
       } catch (error) {
         console.error('❌ Could not increment guest usage:', error);
       }
-    } else {
-      console.log('ℹ️ Logged in user - guest usage not tracked');
     }
   }
 
@@ -268,8 +253,6 @@ class PDFService {
 
     const authHeaders = this.getAuthHeaders(apiToken);
 
-    console.log('💾 Saving processed PDF with auth token...');
-
     const response = await fetch(`${apiBaseUrl}/files/save-processed`, {
       method: 'POST',
       headers: authHeaders,
@@ -282,7 +265,6 @@ class PDFService {
     }
 
     const result = await response.json();
-    console.log('✅ PDF saved successfully:', result);
     return result;
   }
 

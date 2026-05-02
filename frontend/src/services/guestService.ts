@@ -25,10 +25,6 @@ class GuestService {
     if (typeof window === 'undefined') return;
 
     this.guestId = localStorage.getItem('guest_id');
-
-    if (this.guestId) {
-      console.log('✅ Existing guest session found:', this.guestId);
-    }
   }
 
   /**
@@ -36,8 +32,6 @@ class GuestService {
    */
   async createSession(): Promise<GuestSession> {
     try {
-      console.log('🔄 Creating new guest session...');
-
       const response = await fetch(`${resolveApiBaseUrl()}/guest/session`, {
         method: 'POST', // ✅ POST olmalı!
         headers: {
@@ -62,8 +56,6 @@ class GuestService {
         localStorage.setItem('guest_id', this.guestId);
       }
 
-      console.log('✅ New guest session created:', this.guestId);
-      console.log('📊 Initial usage:', data);
       return data;
     } catch (error) {
       console.error('❌ Error creating guest session:', error);
@@ -77,7 +69,6 @@ class GuestService {
   async getGuestId(): Promise<string> {
     this.initializeGuestId();
     if (!this.guestId) {
-      console.log('⚠️ No guest ID found, creating new session...');
       await this.createSession();
     }
     return this.guestId!;
@@ -89,8 +80,6 @@ class GuestService {
   async checkUsage(): Promise<UsageCheck> {
     try {
       const guestId = await this.getGuestId();
-
-      console.log('🔍 Checking usage for guest:', guestId);
 
       const response = await fetch(`${resolveApiBaseUrl()}/guest/check-usage`, {
         method: 'GET', // ✅ GET doğru
@@ -106,7 +95,6 @@ class GuestService {
       }
 
       const result = await response.json();
-      console.log('✅ Usage check result:', result);
       return result;
     } catch (error) {
       console.error('❌ Error checking guest usage:', error);
@@ -120,8 +108,6 @@ class GuestService {
   async incrementUsage(): Promise<UsageCheck> {
     try {
       const guestId = await this.getGuestId();
-
-      console.log('➕ Incrementing usage for guest:', guestId);
 
       const response = await fetch(`${resolveApiBaseUrl()}/guest/use`, {
         method: 'POST', // ✅ POST doğru
@@ -138,10 +124,6 @@ class GuestService {
       }
 
       const result = await response.json();
-      console.log('✅ Usage incremented:', result);
-      console.log(
-        `📊 Status: ${result.usage_count}/${result.usage_count + result.remaining_usage} used`
-      );
       return result;
     } catch (error) {
       console.error('❌ Error incrementing usage:', error);
@@ -156,8 +138,6 @@ class GuestService {
     try {
       if (!this.guestId) return;
 
-      console.log('🗑️ Clearing guest session:', this.guestId);
-
       await fetch(`${resolveApiBaseUrl()}/guest/session`, {
         method: 'DELETE',
         headers: {
@@ -170,7 +150,6 @@ class GuestService {
       }
 
       this.guestId = null;
-      console.log('✅ Guest session cleared');
     } catch (error) {
       console.error('❌ Error clearing guest session:', error);
     }
