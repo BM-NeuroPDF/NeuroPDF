@@ -2,11 +2,12 @@
 
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import useSWR from 'swr';
 import { useLanguage } from '@/context/LanguageContext';
 import { sendRequest, swrFetcher } from '@/utils/api';
 import { usePdf } from '@/context/PdfContext';
+import { useProfileAvatar } from '@/hooks/useProfileAvatar';
 
 // Session user tipini genişletelim (id'ye erişim için)
 interface ExtendedUser {
@@ -25,8 +26,10 @@ export default function ProfilePage() {
 
   const [mounted, setMounted] = useState(false);
 
-  // ✅ Avatar Kaynağı State'i (Anlık değişim için)
-  const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
+  const { avatarSrc, fetchUserAvatar } = useProfileAvatar({
+    status,
+    user,
+  });
 
   // Modal State'leri
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -65,28 +68,6 @@ export default function ProfilePage() {
     }
   }, [status, router]);
 
-  // ✅ Backend'den avatar çek; yalnızca yoksa veya hata varsa session görselini kullan (tek setState = yanıp sönme yok)
-  const fetchUserAvatar = useCallback(async () => {
-    if (!user) return;
-    const uid = user.id || 'me';
-    try {
-      const blob = (await sendRequest(
-        `/api/v1/user/${uid}/avatar`,
-        'GET'
-      )) as Blob;
-      setAvatarSrc((prev) => {
-        if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
-        return URL.createObjectURL(blob);
-      });
-      return;
-    } catch (e) {
-      console.warn('Avatar getirme hatası:', e);
-    }
-    setAvatarSrc(user.image ?? null);
-  }, [user]);
-
-  const userId = user?.id ?? null;
-
   const { data: statsData } = useSWR<{
     summary_count: number;
     tools_count: number;
@@ -103,12 +84,6 @@ export default function ProfilePage() {
       setLlmChoice(llmData.provider.toLowerCase() as 'local' | 'cloud');
     }
   }, [llmData?.provider]);
-
-  useEffect(() => {
-    if (status === 'authenticated' && userId) fetchUserAvatar();
-  }, [status, userId, fetchUserAvatar]);
-
-  // --- FONKSİYONLAR ---
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
