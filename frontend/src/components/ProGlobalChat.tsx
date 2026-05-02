@@ -8,7 +8,6 @@ import { useLanguage } from '@/context/LanguageContext';
 import { usePdf } from '@/context/PdfContext';
 import ProChatPanel from './ProChatPanel';
 import ProGlobalChatFab from './ProGlobalChatFab';
-import type { Language } from '@/utils/translations';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 import { usePdfClientActions } from '@/hooks/usePdfClientActions';
 import { useChatLocalization } from '@/hooks/useChatLocalization';
@@ -16,10 +15,12 @@ import { useMessageTranslationQueue } from '@/hooks/useMessageTranslationQueue';
 import { useChatSessionBootstrap } from '@/hooks/useChatSessionBootstrap';
 
 export default function ProGlobalChat() {
+  // Session & auth
   const { data: session, status } = useSession();
   const router = useRouter();
   const { t, language } = useLanguage();
 
+  // PDF & chat state
   const {
     pdfFile,
     pdfList,
@@ -50,18 +51,20 @@ export default function ProGlobalChat() {
     t,
   });
 
+  // UI state
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(false);
   const [showProRequiredModal, setShowProRequiredModal] = useState(false);
   const [typingAudio, setTypingAudio] = useState<HTMLAudioElement | null>(null);
+
+  // Custom hooks
   const { isRecording, stopRecording, toggleRecording } = useVoiceInput({
     language,
     t,
     setInput,
   });
 
-  // Yazıyor... sesi efekti (Loading sırasında döngüsel)
   useEffect(() => {
     let audio: HTMLAudioElement | null = null;
     if (loading) {
@@ -147,17 +150,24 @@ export default function ProGlobalChat() {
       setGeneralChatMessages,
     });
 
+  // Handlers
+  const playNotificationTwice = useCallback(() => {
+    const playNotify = () => {
+      const audio = new Audio('/sounds/notification.mp3');
+      audio.volume = 0.5;
+      audio.play().catch(() => {});
+    };
+    playNotify();
+    setTimeout(playNotify, 600);
+  }, []);
+
   const handleFileUpload = async (file: File) => {
     setInitializing(true);
     try {
-      // Önceki PDF oturumunu temizle ve yeni dosyayı kaydet
       await savePdf(null);
       await savePdf(file);
-      // Bu işlem useEffect'i (satır 59) tetikler ve analizi başlatır.
     } catch (e) {
       console.error('Chat PDF yükleme hatası:', e);
-    } finally {
-      // setInitializing(false); useEffect içinde yapılacak
     }
   };
 
@@ -166,7 +176,6 @@ export default function ProGlobalChat() {
       router.push('/pricing');
       return;
     }
-    // Session hydrate/role fetch tamamlanmadan modal açma.
     if (isRoleLoading) return;
     if (!isProUser) {
       setShowProRequiredModal(true);
@@ -222,7 +231,7 @@ export default function ProGlobalChat() {
           sourceLanguage: userMessage.sourceLanguage,
           translations: userMessage.translations,
         },
-        language: language, // Mevcut dili gönder (TR/EN)
+        language: language,
       });
       const assistantMessage = makeRuntimeMessage(
         'assistant',
@@ -237,15 +246,7 @@ export default function ProGlobalChat() {
         await applyClientActions(res.client_actions);
       }
       enqueueAssistantTranslation(assistantMessage, isPdfChat);
-
-      // Bildirim sesi çal (Peş peşe 2 defa)
-      const playNotify = () => {
-        const audio = new Audio('/sounds/notification.mp3');
-        audio.volume = 0.5;
-        audio.play().catch(() => {});
-      };
-      playNotify();
-      setTimeout(playNotify, 600);
+      playNotificationTwice();
     } catch (e: unknown) {
       console.error('Chat mesaj hatası:', e);
       const errorMessage =
@@ -315,15 +316,7 @@ export default function ProGlobalChat() {
               setGeneralChatMessages((prev) => [...prev, retryAssistant]);
               await applyClientActions(retryRes.client_actions);
               enqueueAssistantTranslation(retryAssistant, false);
-
-              // Bildirim sesi çal (Retry sonrası da 2 defa)
-              const playNotify = () => {
-                const audio = new Audio('/sounds/notification.mp3');
-                audio.volume = 0.5;
-                audio.play().catch(() => {});
-              };
-              playNotify();
-              setTimeout(playNotify, 600);
+              playNotificationTwice();
             } else {
               throw new Error(t('chatInitError'));
             }
@@ -353,6 +346,7 @@ export default function ProGlobalChat() {
     }
   };
 
+  // Render
   return (
     <>
       <ProGlobalChatFab
