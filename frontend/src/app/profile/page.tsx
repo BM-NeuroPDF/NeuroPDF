@@ -13,6 +13,9 @@ import {
   LlmPreferenceCard,
   type LlmChoiceData,
 } from '@/components/LlmPreferenceCard';
+import { ProfileHeroCard } from '@/components/ProfileHeroCard';
+import { ProfileStatsCards } from '@/components/ProfileStatsCards';
+import { AccountSettingsSection } from '@/components/AccountSettingsSection';
 
 // Session user tipini genişletelim (id'ye erişim için)
 interface ExtendedUser {
@@ -231,14 +234,7 @@ export default function ProfilePage() {
     role: 'Standart',
   };
 
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .slice(0, 2)
-      .join('')
-      .toUpperCase();
-  };
+  const userPlan = stats.role || t('standardAccount') || 'Standart Hesap';
 
   return (
     <main className="min-h-screen p-6 max-w-5xl mx-auto font-bold text-[var(--foreground)] pt-24 relative">
@@ -613,74 +609,15 @@ export default function ProfilePage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
         {/* SOL KOLON */}
         <div className="md:col-span-1 flex flex-col gap-6">
-          <div
-            className="container-card p-6 border border-[var(--navbar-border)] rounded-3xl flex flex-col items-center text-center shadow-lg relative overflow-hidden"
-            style={{ backgroundColor: 'var(--container-bg)' }}
-          >
-            <div className="absolute top-0 w-full h-24 bg-gradient-to-b from-[var(--button-bg)] to-transparent opacity-10"></div>
-            <div className="relative z-10 w-32 h-32 mb-4 rounded-full border-4 border-[var(--container-bg)] shadow-xl overflow-hidden bg-gray-200 dark:bg-gray-800 flex items-center justify-center group">
-              <button
-                onClick={() => setShowImageModal(true)}
-                className="absolute top-1 right-1 p-2 bg-[var(--button-bg)] text-white rounded-full shadow-lg hover:brightness-110 transition-all z-20 hover:scale-110"
-                title={t('changeProfileImage') || 'Profil Resmini Değiştir'}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                  stroke="currentColor"
-                  className="w-4 h-4"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125"
-                  />
-                </svg>
-              </button>
-
-              {/* ✅ GÜNCEL AVATAR GÖSTERİMİ */}
-              {avatarSrc ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={avatarSrc}
-                  alt="Profil Resmi"
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <span className="text-4xl font-bold text-[var(--button-bg)]">
-                  {getInitials(
-                    session.user.name || t('defaultUser') || 'Kullanıcı'
-                  )}
-                </span>
-              )}
-            </div>
-            <h2
-              className="text-xl font-bold truncate w-full px-2"
-              title={session.user.name || ''}
-            >
-              {session.user.name}
-            </h2>
-            <p
-              className="text-sm opacity-60 font-medium truncate w-full mb-6 px-2"
-              title={session.user.email || ''}
-            >
-              {session.user.email}
-            </p>
-            <button
-              onClick={() => router.push('/documents')}
-              className="w-full mb-3 py-2 px-4 rounded-xl border border-[var(--navbar-border)] bg-[var(--background)] text-[var(--foreground)] font-semibold hover:brightness-110 transition-colors"
-            >
-              {t('navDocuments') || 'Belgelerim'}
-            </button>
-            <button
-              onClick={() => signOut({ callbackUrl: '/' })}
-              className="w-full py-2 px-4 rounded-xl border border-red-200 bg-red-50 text-red-600 font-semibold hover:bg-red-100 transition-colors dark:bg-red-900/10 dark:border-red-900 dark:text-red-400"
-            >
-              {t('signOut') || 'Çıkış Yap'}
-            </button>
-          </div>
+          <ProfileHeroCard
+            user={session.user}
+            avatarSrc={avatarSrc}
+            stats={stats}
+            onSignOut={() => void signOut({ callbackUrl: '/' })}
+            onEditAvatar={() => setShowImageModal(true)}
+            onOpenDocuments={() => router.push('/documents')}
+            t={t}
+          />
 
           <LlmPreferenceCard
             llmData={llmData}
@@ -692,164 +629,9 @@ export default function ProfilePage() {
 
         {/* SAĞ KOLON */}
         <div className="md:col-span-2 space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="sm:col-span-2 p-6 rounded-2xl border border-[var(--navbar-border)] shadow-sm bg-[var(--background)] flex items-center gap-4 hover:shadow-md transition-shadow">
-              <div className="p-3 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-6 h-6"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"
-                  />
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm opacity-60 font-medium">
-                  {t('membershipType') || 'Üyelik Tipi'}
-                </p>
-                <p className="text-lg font-bold">
-                  {stats.role || t('standardAccount') || 'Standart Hesap'}
-                </p>
-              </div>
-            </div>
-            <div className="p-6 rounded-2xl border border-[var(--navbar-border)] shadow-sm bg-[var(--background)] flex items-center gap-4 hover:shadow-md transition-shadow">
-              <div className="p-3 rounded-full bg-purple-100 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-6 h-6"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 00-1.423 1.423z"
-                  />
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm opacity-60 font-medium">
-                  {t('aiSummary') || 'AI Özetleme'}
-                </p>
-                <p className="text-lg font-bold">
-                  {stats.summary_count} {t('processCount') || 'İşlem'}
-                </p>
-              </div>
-            </div>
-            <div className="p-6 rounded-2xl border border-[var(--navbar-border)] shadow-sm bg-[var(--background)] flex items-center gap-4 hover:shadow-md transition-shadow">
-              <div className="p-3 rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-6 h-6"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M16.338 3.011a4 4 0 01-5.645 5.645L2.25 17.25M6.75 2.25h.75v.75h-.75zM12.75 6.75h.75v.75h-.75z"
-                  />
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm opacity-60 font-medium">
-                  {t('pdfTools') || 'PDF Araçları'}
-                </p>
-                <p className="text-lg font-bold">
-                  {stats.tools_count} {t('processCount') || 'İşlem'}
-                </p>
-              </div>
-            </div>
-          </div>
+          <ProfileStatsCards stats={stats} userPlan={userPlan} t={t} />
 
-          <div
-            className="container-card p-8 border border-[var(--navbar-border)] rounded-3xl shadow-lg"
-            style={{ backgroundColor: 'var(--container-bg)' }}
-          >
-            <h3 className="text-xl font-semibold mb-4">
-              {t('accountSettings') || 'Hesap Ayarları'}
-            </h3>
-            <p className="opacity-60 font-normal mb-6">
-              {t('accountSettingsHint') ||
-                'Şifre değişikliği ve hesap silme işlemleri için sağlayıcınızın (Google) ayarlarını kullanmanız gerekmektedir.'}
-            </p>
-            <div className="flex flex-col gap-3">
-              <button
-                disabled
-                className="btn-primary opacity-50 cursor-not-allowed flex justify-between items-center p-4"
-              >
-                <span className="font-semibold">
-                  {t('changeEmail') || 'E-posta Değiştir'}
-                </span>
-                <span className="text-xs bg-black/10 dark:bg-white/10 px-2 py-1 rounded font-bold">
-                  {t('comingSoon') || 'Yakında'}
-                </span>
-              </button>
-              <button
-                disabled
-                className="btn-primary opacity-50 cursor-not-allowed flex justify-between items-center p-4"
-              >
-                <span className="font-semibold">
-                  {t('downloadData') || 'Verilerimi İndir'}
-                </span>
-                <span className="text-xs bg-black/10 dark:bg-white/10 px-2 py-1 rounded font-bold">
-                  {t('comingSoon') || 'Yakında'}
-                </span>
-              </button>
-              <button
-                onClick={handleRequestDelete}
-                className="btn-primary w-full flex justify-between items-center p-4 mt-2 bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 hover:text-red-700 hover:scale-[1.01] transition-all dark:bg-red-900/20 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/40"
-                style={{
-                  backgroundColor: 'var(--error-bg)',
-                  color: 'var(--error-text)',
-                  borderColor: 'var(--error-border)',
-                }}
-              >
-                <span className="font-semibold flex items-center gap-2">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={1.5}
-                    stroke="currentColor"
-                    className="w-5 h-5"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-                    />
-                  </svg>
-                  {t('deleteAccount') || 'Hesabımı Sil'}
-                </span>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-5 h-5 opacity-60"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M8.25 4.5l7.5 7.5-7.5 7.5"
-                  />
-                </svg>
-              </button>
-            </div>
-          </div>
+          <AccountSettingsSection onRequestDelete={handleRequestDelete} t={t} />
         </div>
       </div>
     </main>
