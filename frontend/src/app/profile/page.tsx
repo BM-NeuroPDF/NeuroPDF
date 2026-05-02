@@ -18,7 +18,6 @@ import { ProfileStatsCards } from '@/components/ProfileStatsCards';
 import { AccountSettingsSection } from '@/components/AccountSettingsSection';
 import { ProfileAvatarModal } from '@/components/ProfileAvatarModal';
 
-// Session user tipini genişletelim (id'ye erişim için)
 interface ExtendedUser {
   id?: string;
   name?: string | null;
@@ -31,28 +30,16 @@ export default function ProfilePage() {
   const user = session?.user as ExtendedUser | undefined;
   const router = useRouter();
   const { t } = useLanguage();
-  const { savePdf } = usePdf();
 
-  const [mounted, setMounted] = useState(false);
+  const { savePdf } = usePdf();
+  useEffect(() => {
+    savePdf(null);
+  }, [savePdf]);
 
   const { avatarSrc, fetchUserAvatar } = useProfileAvatar({
     status,
     user,
   });
-
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [showImageModal, setShowImageModal] = useState(false);
-
-  useEffect(() => {
-    savePdf(null);
-  }, [savePdf]);
-
-  useEffect(() => {
-    setMounted(true);
-    if (status === 'unauthenticated') {
-      router.push('/login');
-    }
-  }, [status, router]);
 
   const { data: statsData } = useSWR<{
     summary_count: number;
@@ -64,6 +51,17 @@ export default function ProfilePage() {
     status === 'authenticated' ? '/files/user/llm-choice' : null,
     swrFetcher
   );
+
+  const [mounted, setMounted] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    if (status === 'unauthenticated') {
+      router.push('/login');
+    }
+  }, [status, router]);
 
   const handleRequestDelete = () => setShowConfirmModal(true);
 
@@ -102,12 +100,12 @@ export default function ProfilePage() {
         t={t}
       />
 
-      {/* --- SAYFA İÇERİĞİ --- */}
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl tracking-tight">
           {t('profileTitle') || 'Profilim'}
         </h1>
         <button
+          type="button"
           onClick={() => router.back()}
           className="text-sm font-medium opacity-60 hover:opacity-100 transition-opacity flex items-center gap-1"
         >
@@ -130,7 +128,6 @@ export default function ProfilePage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
-        {/* SOL KOLON */}
         <div className="md:col-span-1 flex flex-col gap-6">
           <ProfileHeroCard
             user={session.user}
@@ -150,7 +147,6 @@ export default function ProfilePage() {
           />
         </div>
 
-        {/* SAĞ KOLON */}
         <div className="md:col-span-2 space-y-6">
           <ProfileStatsCards stats={stats} userPlan={userPlan} t={t} />
 
