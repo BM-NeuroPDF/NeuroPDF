@@ -11,9 +11,10 @@ import type { Message } from '@/context/PdfContext';
 import Image from 'next/image';
 import NeuroLogoIcon from '@/assets/icons/NeuroPDF-Chat.svg';
 import ProChatPanel from './ProChatPanel';
-import { translations, type Language } from '@/utils/translations';
+import type { Language } from '@/utils/translations';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 import { usePdfClientActions } from '@/hooks/usePdfClientActions';
+import { useChatLocalization } from '@/hooks/useChatLocalization';
 
 export default function ProGlobalChat() {
   const { data: session, status } = useSession();
@@ -94,131 +95,20 @@ export default function ProGlobalChat() {
   const activeChatMessages = pdfSessionId
     ? pdfChatMessages
     : generalChatMessages;
-  const supportedLanguages = useMemo<Language[]>(() => ['tr', 'en'], []);
   const isPdfChat = !!pdfSessionId;
   const isProUser =
     userRole?.toLowerCase() === 'pro' || userRole?.toLowerCase() === 'pro user';
   const canAccessChat = status === 'authenticated' && isProUser;
-
-  type LocalizableChatKey =
-    | 'chatWelcomePdf'
-    | 'chatWelcomeGeneral'
-    | 'chatInitError'
-    | 'chatErrorQuotaExceeded'
-    | 'chatErrorSessionExpired'
-    | 'chatErrorSessionRefresh'
-    | 'chatErrorConnection';
-
-  const localizableAssistantKeys = useMemo<LocalizableChatKey[]>(
-    () => [
-      'chatWelcomePdf',
-      'chatWelcomeGeneral',
-      'chatInitError',
-      'chatErrorQuotaExceeded',
-      'chatErrorSessionExpired',
-      'chatErrorSessionRefresh',
-      'chatErrorConnection',
-    ],
-    []
-  );
-
-  const interpolate = useCallback(
-    (template: string, params?: Record<string, string>) => {
-      if (!params) return template;
-      return Object.entries(params).reduce(
-        (acc, [key, value]) => acc.replaceAll(`{${key}}`, value),
-        template
-      );
-    },
-    []
-  );
-
-  const makeAssistantMessage = useCallback(
-    (key: LocalizableChatKey, params?: Record<string, string>): Message => ({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      role: 'assistant',
-      content: interpolate(t(key), params),
-      i18nKey: key,
-      i18nParams: params,
-      sourceLanguage: language,
-      translations: {
-        [language]: interpolate(t(key), params),
-      },
-    }),
-    [interpolate, language, t]
-  );
-
-  const makeRuntimeMessage = useCallback(
-    (role: 'user' | 'assistant', content: string): Message => ({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      role,
-      content,
-      sourceLanguage: language,
-      translations: {
-        [language]: content,
-      },
-    }),
-    [language]
-  );
-
-  const localizeMessageIfPossible = useCallback(
-    (message: Message): Message => {
-      if (message.translations?.[language]) {
-        return {
-          ...message,
-          content: message.translations[language] as string,
-        };
-      }
-      if (message.role !== 'assistant') return message;
-
-      if (
-        message.i18nKey &&
-        localizableAssistantKeys.includes(message.i18nKey as LocalizableChatKey)
-      ) {
-        return {
-          ...message,
-          content: interpolate(
-            t(message.i18nKey as LocalizableChatKey),
-            message.i18nParams
-          ),
-        };
-      }
-
-      for (const key of localizableAssistantKeys) {
-        if (key === 'chatWelcomePdf') continue;
-        if (
-          message.content === translations.tr[key] ||
-          message.content === translations.en[key]
-        ) {
-          return makeAssistantMessage(key);
-        }
-      }
-
-      const pdfWelcomeMatch =
-        message.content.match(/\*\*"(.+?)"\*\*/) ??
-        message.content.match(/"(.+?)"/);
-      if (pdfWelcomeMatch?.[1]) {
-        const name = pdfWelcomeMatch[1];
-        const trCandidate = translations.tr.chatWelcomePdf.replace(
-          '{name}',
-          name
-        );
-        const enCandidate = translations.en.chatWelcomePdf.replace(
-          '{name}',
-          name
-        );
-        if (
-          message.content === trCandidate ||
-          message.content === enCandidate
-        ) {
-          return makeAssistantMessage('chatWelcomePdf', { name });
-        }
-      }
-
-      return message;
-    },
-    [interpolate, language, makeAssistantMessage, t, localizableAssistantKeys]
-  );
+  const {
+    supportedLanguages,
+    makeAssistantMessage,
+    makeRuntimeMessage,
+    displayChatMessages,
+  } = useChatLocalization({
+    language,
+    t,
+    activeChatMessages,
+  });
 
   // Başka sayfadan "Sohbet Et" ile açıldığında paneli aç
   useEffect(() => {
@@ -227,11 +117,6 @@ export default function ProGlobalChat() {
       setProChatOpen(false);
     }
   }, [proChatOpen, setProChatOpen, setProChatPanelOpen]);
-
-  const displayChatMessages = useMemo(
-    () => activeChatMessages.map(localizeMessageIfPossible),
-    [activeChatMessages, localizeMessageIfPossible]
-  );
 
   const cacheTranslationForMessage = useCallback(
     (
