@@ -2,8 +2,12 @@
 Integration tests for PDF operations.
 """
 
+import io
 import pytest
 import uuid
+from pypdf import PdfWriter
+from sqlalchemy import inspect as sa_inspect
+
 from app.models import PDF, User
 from app.storage import (
     save_pdf_to_db,
@@ -29,6 +33,19 @@ class TestPDFOperations:
         assert pdf.filename == filename
         assert pdf.pdf_data == pdf_bytes
         assert pdf.file_size == len(pdf_bytes)
+        assert pdf.page_count is None
+
+    def test_save_pdf_to_db_persists_page_count(self, db_session, clean_db, test_user):
+        """Geçerli PDF yüklenince sayfa sayısı kaydedilir."""
+        buf = io.BytesIO()
+        writer = PdfWriter()
+        writer.add_blank_page(width=72, height=72)
+        writer.write(buf)
+        pdf_bytes = buf.getvalue()
+
+        pdf = save_pdf_to_db(db_session, test_user.id, pdf_bytes, "one_page.pdf")
+
+        assert pdf.page_count == 1
 
     def test_get_pdf_from_db(self, db_session, clean_db, test_user):
         """Test retrieving PDF from database."""
@@ -110,6 +127,21 @@ class TestPDFOperations:
 
         assert len(pdfs) == 3
         assert all(pdf.user_id == test_user.id for pdf in pdfs)
+
+    def test_list_user_pdfs_does_not_load_pdf_blob(
+        self, db_session, clean_db, test_user
+    ):
+        """Özet liste sorgusu pdf_data kolonunu çekmez (lazy load öncesi)."""
+        buf = io.BytesIO()
+        writer = PdfWriter()
+        writer.add_blank_page(width=72, height=72)
+        writer.write(buf)
+        save_pdf_to_db(db_session, test_user.id, buf.getvalue(), "listed.pdf")
+
+        pdfs = list_user_pdfs(db_session, test_user.id)
+        assert len(pdfs) == 1
+        assert pdfs[0].page_count == 1
+        assert "pdf_data" in sa_inspect(pdfs[0]).unloaded
 
     def test_pdf_cascade_delete_with_user(self, db_session, clean_db, test_user):
         """Test PDF cascade delete when user is deleted."""

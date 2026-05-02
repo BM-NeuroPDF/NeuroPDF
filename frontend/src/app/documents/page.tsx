@@ -3,7 +3,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { Eye, FileText, Loader2, MessageCircle, PencilLine, RefreshCw } from 'lucide-react';
+import {
+  Eye,
+  FileText,
+  Loader2,
+  MessageCircle,
+  PencilLine,
+  RefreshCw,
+} from 'lucide-react';
 import useSWR from 'swr';
 import {
   fetchStoredPdfBlob,
@@ -239,7 +246,7 @@ export default function DocumentsPage() {
                     <div className="mt-3 text-xs opacity-70 space-y-1">
                       <p>Yuklenme: {formatDate(doc.created_at)}</p>
                       <p>Boyut: {formatSize(doc.file_size)}</p>
-                      <p>Sayfa: {doc.page_count ?? '-'}</p>
+                      <p>Sayfa: {doc.page_count ?? '?'}</p>
                     </div>
                   </button>
 

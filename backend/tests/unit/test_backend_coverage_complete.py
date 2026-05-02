@@ -68,6 +68,32 @@ class TestChatSessionStorage:
                 assistant_message="b",
             )
 
+    def test_get_chat_session_by_ai_id(self):
+        db = MagicMock()
+        sess = MagicMock()
+        q = db.query.return_value
+        q.filter.return_value.first.return_value = sess
+        out = css.get_chat_session_by_ai_id(db, "ai-1", "user-1")
+        assert out is sess
+        q.filter.assert_called_once()
+
+    def test_append_chat_turn_persists_messages(self):
+        db = MagicMock()
+        session = MagicMock()
+        session.id = "sid-1"
+        with patch.object(css, "get_chat_session_by_ai_id", return_value=session):
+            css.append_chat_turn(
+                db,
+                ai_session_id="ai-1",
+                user_id="user-1",
+                user_message="hi",
+                assistant_message="yo",
+                user_metadata={"id": "m1"},
+                assistant_metadata={"id": "m2"},
+            )
+        assert db.add.call_count == 2
+        db.commit.assert_called_once()
+
     def test_history_for_ai_restore_filters(self):
         m1 = Mock(role="user", content="u")
         m2 = Mock(role="system", content="s")
@@ -139,6 +165,21 @@ class TestDbHelpers:
             st.DB_SSLMODE = "disable"
             url = build_db_url()
             assert "postgresql+psycopg2://" in url
+
+    def test_build_db_url_local_env_plain_postgresql_prefix(self, monkeypatch):
+        monkeypatch.setenv("USE_SUPABASE", "false")
+        with patch("app.db.settings") as st:
+            st.SUPABASE_DATABASE_URL = None
+            st.LOCAL_DATABASE_URL = "postgresql://u:p@localhost:5432/mydb"
+            st.DATABASE_URL = None
+            st.DB_USER = "a"
+            st.DB_PASSWORD = "b"
+            st.DB_HOST = "h"
+            st.DB_PORT = "5432"
+            st.DB_NAME = "n"
+            st.DB_SSLMODE = "disable"
+            url = build_db_url()
+            assert url.startswith("postgresql+psycopg2://")
 
 
 class TestGetDbGenerator:

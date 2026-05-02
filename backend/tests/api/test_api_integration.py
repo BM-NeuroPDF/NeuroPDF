@@ -5,6 +5,7 @@ These tests run when the test DB is available; they verify Auth, Profile, and Fi
 
 import pytest
 from io import BytesIO
+from pypdf import PdfWriter
 
 
 @pytest.mark.api
@@ -33,6 +34,27 @@ class TestFileUploadWithTestDb:
         data = response.json()
         assert "file_id" in data
         assert data.get("filename") == "test.pdf"
+
+    def test_upload_valid_pdf_then_my_files_has_page_count(
+        self, test_client, auth_headers
+    ):
+        """Yüklemede sayfa sayısı kaydedilir; my-files blob çekmeden döner."""
+        buf = BytesIO()
+        w = PdfWriter()
+        w.add_blank_page(width=72, height=72)
+        w.write(buf)
+        content = buf.getvalue()
+        files = {"file": ("pages.pdf", BytesIO(content), "application/pdf")}
+        up = test_client.post("/files/upload", files=files, headers=auth_headers)
+        assert up.status_code == 200
+        file_id = up.json()["file_id"]
+
+        listed = test_client.get("/files/my-files", headers=auth_headers)
+        assert listed.status_code == 200
+        payload = listed.json()
+        assert payload["total"] >= 1
+        row = next(f for f in payload["files"] if f["id"] == file_id)
+        assert row["page_count"] == 1
 
 
 @pytest.mark.api

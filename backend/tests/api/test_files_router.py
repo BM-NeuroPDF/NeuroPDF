@@ -517,14 +517,17 @@ class TestFileManagementEndpoints:
         mock_pdf.filename = "test.pdf"
         mock_pdf.file_size = 1024
         mock_pdf.created_at = None
+        mock_pdf.page_count = 3
 
-        # Mock the query chain: db.query(PDF).filter(...).order_by(...).all()
+        # Mock: db.query(PDF).options(...).filter(...).order_by(...).all()
         mock_query = MagicMock()
+        mock_after_options = MagicMock()
         mock_filter = MagicMock()
         mock_order_by = MagicMock()
         mock_order_by.all.return_value = [mock_pdf]
         mock_filter.order_by.return_value = mock_order_by
-        mock_query.filter.return_value = mock_filter
+        mock_after_options.filter.return_value = mock_filter
+        mock_query.options.return_value = mock_after_options
         mock_db.query.return_value = mock_query
 
         response = client.get("/files/my-files")
@@ -536,6 +539,7 @@ class TestFileManagementEndpoints:
         assert "total" in data
         assert isinstance(data["files"], list)
         assert len(data["files"]) == 1
+        assert data["files"][0]["page_count"] == 3
 
     def test_delete_file(self, override_dependencies, mock_supabase):
         """Test deleting a file"""

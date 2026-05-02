@@ -2,7 +2,11 @@
 Unit tests for storage functionality
 """
 
-from app.storage import StorageService
+import io
+
+from pypdf import PdfWriter
+
+from app.storage import StorageService, compute_pdf_page_count
 
 
 class TestStorageService:
@@ -75,3 +79,14 @@ class TestStorageService:
         )
         assert "../" not in dangerous_path
         assert "/etc" not in dangerous_path
+
+    def test_compute_pdf_page_count_valid(self):
+        buf = io.BytesIO()
+        w = PdfWriter()
+        w.add_blank_page(width=72, height=72)
+        w.add_blank_page(width=72, height=72)
+        w.write(buf)
+        assert compute_pdf_page_count(buf.getvalue()) == 2
+
+    def test_compute_pdf_page_count_invalid(self):
+        assert compute_pdf_page_count(b"not a pdf") is None

@@ -1,10 +1,12 @@
 from pathlib import Path
 from fastapi import UploadFile, HTTPException
 from typing import Optional
+import io
 import uuid
 import os
 import logging
-from sqlalchemy.orm import Session  # ✅ Import eklendi
+from pypdf import PdfReader
+from sqlalchemy.orm import Session, load_only
 from .models import UserAvatar, User, PDF
 
 # Logger kurulumu ✅
@@ -165,6 +167,15 @@ def get_active_avatar(db: Session, user_id: str):
 # ==========================================
 
 
+def compute_pdf_page_count(pdf_bytes: bytes) -> int | None:
+    """Sayfa sayısını hesaplar; geçersiz PDF için None."""
+    try:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        return len(reader.pages)
+    except Exception:
+        return None
+
+
 def save_pdf_to_db(
     db: Session, user_id: str, pdf_bytes: bytes, filename: Optional[str] = None
 ) -> PDF:
@@ -173,6 +184,7 @@ def save_pdf_to_db(
         pdf_id = str(uuid.uuid4())
         file_size = len(pdf_bytes)
         safe_filename = StorageService.sanitize_filename(filename) if filename else None
+        page_count = compute_pdf_page_count(pdf_bytes)
 
         new_pdf = PDF(
             id=pdf_id,
@@ -180,6 +192,7 @@ def save_pdf_to_db(
             pdf_data=pdf_bytes,
             filename=safe_filename,
             file_size=file_size,
+            page_count=page_count,
         )
         db.add(new_pdf)
         db.commit()
@@ -224,10 +237,20 @@ def delete_pdf_from_db(db: Session, pdf_id: str, user_id: Optional[str] = None) 
 
 
 def list_user_pdfs(db: Session, user_id: str) -> list[PDF]:
-    """Kullanıcının tüm PDF dosyalarını listeler."""
+    """Kullanıcının PDF özet listesini döner (pdf_data blob'u yüklemez)."""
     try:
         return (
             db.query(PDF)
+            .options(
+                load_only(
+                    PDF.id,
+                    PDF.user_id,
+                    PDF.filename,
+                    PDF.file_size,
+                    PDF.created_at,
+                    PDF.page_count,
+                )
+            )
             .filter(PDF.user_id == user_id)
             .order_by(PDF.created_at.desc())
             .all()

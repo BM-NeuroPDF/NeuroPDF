@@ -427,14 +427,6 @@ def _reorder_pdf_to_buffer(file_obj, page_numbers: str) -> io.BytesIO:
     return out
 
 
-def _safe_page_count_sync(pdf_bytes: bytes) -> int | None:
-    try:
-        reader = PdfReader(io.BytesIO(pdf_bytes))
-        return len(reader.pages)
-    except Exception:
-        return None
-
-
 def _build_reportlab_document(doc: SimpleDocTemplate, story: list) -> None:
     doc.build(story)
 
@@ -2264,11 +2256,6 @@ async def get_my_files(
         pdfs = list_user_pdfs(db, user_id)
         files = []
         for pdf in pdfs:
-            page_count = None
-            if pdf.pdf_data:
-                page_count = await run_in_threadpool(
-                    _safe_page_count_sync, pdf.pdf_data
-                )
             files.append(
                 {
                     "id": pdf.id,
@@ -2277,7 +2264,7 @@ async def get_my_files(
                     "created_at": pdf.created_at.isoformat()
                     if pdf.created_at
                     else None,
-                    "page_count": page_count,
+                    "page_count": pdf.page_count,
                 }
             )
         return {"files": files, "total": len(files)}
