@@ -8,6 +8,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { sendRequest, swrFetcher } from '@/utils/api';
 import { usePdf } from '@/context/PdfContext';
 import { useProfileAvatar } from '@/hooks/useProfileAvatar';
+import { DeleteAccountModal } from '@/components/DeleteAccountModal';
 
 // Session user tipini genişletelim (id'ye erişim için)
 interface ExtendedUser {
@@ -31,9 +32,7 @@ export default function ProfilePage() {
     user,
   });
 
-  // Modal State'leri
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [, setIsDeleting] = useState(false);
 
   // Avatar Modal State'leri
   const [showImageModal, setShowImageModal] = useState(false);
@@ -228,18 +227,6 @@ export default function ProfilePage() {
   };
 
   const handleRequestDelete = () => setShowConfirmModal(true);
-  const handleCancelDelete = () => setShowConfirmModal(false);
-  const handleConfirmDelete = async () => {
-    setShowConfirmModal(false);
-    setIsDeleting(true);
-    try {
-      await sendRequest('/auth/delete-account', 'DELETE');
-      await signOut({ callbackUrl: '/' });
-    } catch {
-      alert(t('deleteAccountError') || 'Hata oluştu.');
-      setIsDeleting(false);
-    }
-  };
 
   const resetModal = () => {
     setShowImageModal(false);
@@ -279,36 +266,12 @@ export default function ProfilePage() {
 
   return (
     <main className="min-h-screen p-6 max-w-5xl mx-auto font-bold text-[var(--foreground)] pt-24 relative">
-      {/* 🔴 HESAP SİLME MODALI */}
-      {showConfirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="bg-[var(--container-bg)] rounded-2xl shadow-2xl max-w-md w-full border border-[var(--navbar-border)] p-6">
-            <div className="text-center">
-              <h3 className="text-xl font-bold mb-2">
-                {t('deleteAccountTitle') ||
-                  'Hesabınızı Silmek İstiyor musunuz?'}
-              </h3>
-              <p className="text-sm opacity-60 mb-6">
-                {t('deleteAccountWarning') || 'Bu işlem geri alınamaz.'}
-              </p>
-            </div>
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={handleCancelDelete}
-                className="btn-secondary flex-1"
-              >
-                {t('cancel') || 'Vazgeç'}
-              </button>
-              <button
-                onClick={handleConfirmDelete}
-                className="btn-danger flex-1"
-              >
-                {t('confirmDelete') || 'Sil'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteAccountModal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        session={session ?? null}
+        t={t}
+      />
 
       {/* 🔵 AVATAR MODALI */}
       {showImageModal && (
