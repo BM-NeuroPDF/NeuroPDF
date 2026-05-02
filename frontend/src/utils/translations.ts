@@ -254,6 +254,7 @@ export const translations = {
     aiSummary: 'AI Özetleme',
     pdfTools: 'PDF Araçları',
     processCount: 'İşlem',
+    documentCountLabel: 'belge işlemi',
     accountSettings: 'Hesap Ayarları',
     accountSettingsHint:
       'Şifre değişikliği ve hesap silme işlemleri için sağlayıcınızın (Google) ayarlarını kullanmanız gerekmektedir.',
@@ -610,6 +611,7 @@ export const translations = {
     aiSummary: 'AI Summaries',
     pdfTools: 'PDF Tools',
     processCount: 'Tasks',
+    documentCountLabel: 'document operations',
     accountSettings: 'Account Settings',
     accountSettingsHint:
       "Please use your provider's (Google) settings for password changes and account deletion.",

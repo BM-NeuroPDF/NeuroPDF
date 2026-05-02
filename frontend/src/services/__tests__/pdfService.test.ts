@@ -263,9 +263,8 @@ describe('pdfService', () => {
     );
   });
 
-  it('extractPages logs for logged-in user without guest increment', async () => {
+  it('extractPages does not increment guest usage when logged in', async () => {
     vi.useFakeTimers();
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     fetchMock.mockResolvedValue({
       ok: true,
       blob: async () => new Blob(['%PDF'], { type: 'application/pdf' }),
@@ -274,10 +273,7 @@ describe('pdfService', () => {
     const file = new File(['x'], 'doc.pdf', { type: 'application/pdf' });
     await pdfService.extractPages(file, '1-2', 'tok');
     vi.advanceTimersByTime(150);
-    expect(log.mock.calls.some((c) => String(c[0]).includes('Logged in'))).toBe(
-      true
-    );
-    log.mockRestore();
+    expect(incrementUsage).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
 
