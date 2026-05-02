@@ -124,11 +124,14 @@ describe('useGuestLimit', () => {
 
     const { result } = renderHook(() => useGuestLimit());
 
-    const canProceed = await result.current.checkLimit();
+    let canProceed = false;
+    await act(async () => {
+      canProceed = await result.current.checkLimit();
+    });
 
+    expect(canProceed).toBe(true);
+    expect(guestService.checkUsage).toHaveBeenCalled();
     await waitFor(() => {
-      expect(canProceed).toBe(true);
-      expect(guestService.checkUsage).toHaveBeenCalled();
       expect(result.current.usageInfo).toBeTruthy();
     });
   });
@@ -147,10 +150,13 @@ describe('useGuestLimit', () => {
 
     const { result } = renderHook(() => useGuestLimit());
 
-    const canProceed = await result.current.checkLimit();
+    let canProceed = true;
+    await act(async () => {
+      canProceed = await result.current.checkLimit();
+    });
 
+    expect(canProceed).toBe(false);
     await waitFor(() => {
-      expect(canProceed).toBe(false);
       expect(result.current.showLimitModal).toBe(true);
     });
   });
@@ -185,7 +191,9 @@ describe('useGuestLimit', () => {
 
     const { result } = renderHook(() => useGuestLimit());
 
-    result.current.closeLimitModal();
+    act(() => {
+      result.current.closeLimitModal();
+    });
 
     expect(result.current.showLimitModal).toBe(false);
   });

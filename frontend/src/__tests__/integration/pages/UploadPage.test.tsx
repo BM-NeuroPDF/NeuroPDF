@@ -10,7 +10,7 @@ import {
   afterEach,
   afterAll,
 } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { setupServer } from 'msw/node';
 import { handlers } from '../handlers';
@@ -218,27 +218,23 @@ describe('UploadPage Integration', () => {
         .closest('label')
         ?.querySelector('input[type="file"]') as HTMLInputElement;
 
-      // Create invalid file (not PDF)
       const invalidFile = new File(['content'], 'test.txt', {
         type: 'text/plain',
       });
 
-      // Simulate file selection by directly setting files and triggering change
-      Object.defineProperty(fileInput, 'files', {
-        value: [invalidFile],
-        writable: false,
+      await act(async () => {
+        Object.defineProperty(fileInput, 'files', {
+          value: [invalidFile],
+          writable: false,
+        });
+        const changeEvent = new Event('change', { bubbles: true });
+        Object.defineProperty(changeEvent, 'target', {
+          value: fileInput,
+          enumerable: true,
+        });
+        fileInput.dispatchEvent(changeEvent);
       });
 
-      // Create a synthetic event that React will recognize
-      const changeEvent = new Event('change', { bubbles: true });
-      Object.defineProperty(changeEvent, 'target', {
-        value: fileInput,
-        enumerable: true,
-      });
-
-      fileInput.dispatchEvent(changeEvent);
-
-      // Wait for error message (popup appears)
       await waitFor(
         () => {
           expect(
