@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, useRef, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useDropzone, type FileRejection } from 'react-dropzone';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
@@ -14,6 +14,7 @@ import { sendRequest } from '@/utils/api';
 import { getMaxUploadBytes } from '@/app/config/fileLimits';
 import Popup from '@/components/ui/Popup';
 import { usePopup } from '@/hooks/usePopup';
+import { useSummaryAudio } from '@/hooks/useSummaryAudio';
 import { translations } from '@/utils/translations';
 
 const PdfViewer = dynamic(() => import('@/components/PdfViewer'), {
@@ -70,15 +71,6 @@ export default function SummarizePdfPage() {
   const [errorType, setErrorType] = useState<ErrorType>('NONE');
   const [customErrorMsg, setCustomErrorMsg] = useState<string | null>(null);
 
-  // Audio State
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [audioLoading, setAudioLoading] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
   // Limit Hesaplama
   const isGuest = status !== 'authenticated';
   const maxBytes = getMaxUploadBytes(isGuest);
@@ -106,13 +98,30 @@ export default function SummarizePdfPage() {
     setCustomErrorMsg(null);
   }, []);
 
-  const resetAudio = useCallback(() => {
-    setAudioUrl(null);
-    setAudioBlob(null);
-    setIsPlaying(false);
-    setCurrentTime(0);
-    setDuration(0);
-  }, []);
+  const {
+    audioUrl,
+    audioBlob,
+    isPlaying,
+    audioLoading,
+    currentTime,
+    duration,
+    audioRef,
+    requestAudio,
+    togglePlay,
+    seek,
+    downloadAudio,
+    resetAudio,
+    skipBy,
+    onTimeUpdate,
+    onLoadedMetadata,
+    onEnded,
+    onPause,
+    onPlay,
+  } = useSummaryAudio({
+    summary,
+    onClearError: clearError,
+    onTtsError: () => setErrorType('AUDIO_ERROR'),
+  });
 
   const resetState = useCallback(
     (f: File) => {
@@ -302,45 +311,6 @@ export default function SummarizePdfPage() {
     }
   };
 
-  // --- SESLENDİRME İŞLEMİ (TTS) ---
-  const handleListen = async () => {
-    if (!summary) return;
-    if (audioUrl) {
-      togglePlay();
-      return;
-    }
-    setAudioLoading(true);
-    clearError();
-    try {
-      const resultBlob = await sendRequest('/files/listen-summary', 'POST', {
-        text: summary,
-      });
-      if (!(resultBlob instanceof Blob))
-        throw new Error('Ses verisi alınamadı.');
-
-      setAudioBlob(resultBlob);
-      const objectUrl = window.URL.createObjectURL(resultBlob);
-      setAudioUrl(objectUrl);
-    } catch {
-      setErrorType('AUDIO_ERROR');
-    } finally {
-      setAudioLoading(false);
-    }
-  };
-
-  // Ses İndirme
-  const handleDownloadAudio = () => {
-    if (!audioBlob) return;
-    const url = window.URL.createObjectURL(audioBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'ozet-seslendirme.mp3';
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-  };
-
   // --- PDF İNDİRME ---
   const handleDownloadPdf = async () => {
     if (!summary) return;
@@ -362,43 +332,6 @@ export default function SummarizePdfPage() {
       setErrorType('PDF_GEN_ERROR');
     }
   };
-
-  // --- Audio Kontrolleri ---
-  const togglePlay = () => {
-    if (audioRef.current) {
-      if (isPlaying) audioRef.current.pause();
-      else audioRef.current.play();
-      setIsPlaying(!isPlaying);
-    }
-  };
-  const handleTimeUpdate = () => {
-    if (audioRef.current) setCurrentTime(audioRef.current.currentTime);
-  };
-  const handleLoadedMetadata = () => {
-    if (audioRef.current) {
-      setDuration(audioRef.current.duration);
-      audioRef.current
-        .play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
-    }
-  };
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const time = parseFloat(e.target.value);
-    if (audioRef.current) {
-      audioRef.current.currentTime = time;
-      setCurrentTime(time);
-    }
-  };
-  const skipTime = (seconds: number) => {
-    if (audioRef.current) audioRef.current.currentTime += seconds;
-  };
-
-  useEffect(() => {
-    return () => {
-      if (audioUrl) window.URL.revokeObjectURL(audioUrl);
-    };
-  }, [audioUrl]);
 
   const handleNew = () => {
     setFile(null);
@@ -446,11 +379,11 @@ export default function SummarizePdfPage() {
       <audio
         ref={audioRef}
         src={audioUrl || undefined}
-        onTimeUpdate={handleTimeUpdate}
-        onLoadedMetadata={handleLoadedMetadata}
-        onEnded={() => setIsPlaying(false)}
-        onPause={() => setIsPlaying(false)}
-        onPlay={() => setIsPlaying(true)}
+        onTimeUpdate={onTimeUpdate}
+        onLoadedMetadata={onLoadedMetadata}
+        onEnded={onEnded}
+        onPause={onPause}
+        onPlay={onPlay}
         className="hidden"
       />
 
@@ -663,7 +596,7 @@ export default function SummarizePdfPage() {
 
               {session ? (
                 <button
-                  onClick={handleListen}
+                  onClick={() => void requestAudio()}
                   disabled={audioLoading}
                   className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all shadow-md hover:scale-105 ${
                     audioUrl || audioLoading
@@ -780,7 +713,7 @@ export default function SummarizePdfPage() {
                     min="0"
                     max={duration || 0}
                     value={currentTime}
-                    onChange={handleSeek}
+                    onChange={seek}
                     className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-[var(--button-bg)]"
                   />
                   <span className="text-xs font-mono opacity-70 w-10">
@@ -790,7 +723,7 @@ export default function SummarizePdfPage() {
                 {/* Kontroller */}
                 <div className="flex justify-center items-center gap-6">
                   <button
-                    onClick={() => skipTime(-10)}
+                    onClick={() => skipBy(-10)}
                     className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition"
                   >
                     <svg
@@ -845,7 +778,7 @@ export default function SummarizePdfPage() {
                     )}
                   </button>
                   <button
-                    onClick={() => skipTime(10)}
+                    onClick={() => skipBy(10)}
                     className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition"
                   >
                     <svg
@@ -868,7 +801,7 @@ export default function SummarizePdfPage() {
                 {/* İNDİRME BUTONU */}
                 {session && audioBlob && (
                   <button
-                    onClick={handleDownloadAudio}
+                    onClick={downloadAudio}
                     title={t('downloadAudio') || 'Sesi İndir (MP3)'}
                     className="absolute bottom-4 right-4 text-gray-400 hover:text-[var(--button-bg)] hover:bg-gray-100 dark:hover:bg-gray-700 p-2 rounded-full transition-all"
                   >
