@@ -1,13 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { sendRequest } from '@/utils/api';
 import { useLanguage } from '@/context/LanguageContext';
 import { usePdf } from '@/context/PdfContext';
-import type { Message } from '@/context/PdfContext';
 import Image from 'next/image';
 import NeuroLogoIcon from '@/assets/icons/NeuroPDF-Chat.svg';
 import ProChatPanel from './ProChatPanel';
@@ -15,6 +14,7 @@ import type { Language } from '@/utils/translations';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 import { usePdfClientActions } from '@/hooks/usePdfClientActions';
 import { useChatLocalization } from '@/hooks/useChatLocalization';
+import { useMessageTranslationQueue } from '@/hooks/useMessageTranslationQueue';
 
 export default function ProGlobalChat() {
   const { data: session, status } = useSession();
@@ -59,10 +59,6 @@ export default function ProGlobalChat() {
   const [showProRequiredModal, setShowProRequiredModal] = useState(false);
   const [isRoleLoading, setIsRoleLoading] = useState(true);
   const [typingAudio, setTypingAudio] = useState<HTMLAudioElement | null>(null);
-  const translatingIdsRef = useRef<Set<string>>(new Set());
-  const pendingAssistantTranslationsRef = useRef<
-    Array<{ message: Message; targetIsPdfChat: boolean }>
-  >([]);
   const { isRecording, stopRecording, toggleRecording } = useVoiceInput({
     language,
     t,
@@ -109,6 +105,16 @@ export default function ProGlobalChat() {
     t,
     activeChatMessages,
   });
+  const { translateAndCacheMessage, enqueueAssistantTranslation } =
+    useMessageTranslationQueue({
+      language,
+      loading,
+      supportedLanguages,
+      activeChatMessages,
+      isPdfChat,
+      setPdfChatMessages,
+      setGeneralChatMessages,
+    });
 
   // Başka sayfadan "Sohbet Et" ile açıldığında paneli aç
   useEffect(() => {
@@ -117,155 +123,6 @@ export default function ProGlobalChat() {
       setProChatOpen(false);
     }
   }, [proChatOpen, setProChatOpen, setProChatPanelOpen]);
-
-  const cacheTranslationForMessage = useCallback(
-    (
-      id: string,
-      targetLanguage: Language,
-      translatedText: string,
-      targetIsPdfChat: boolean
-    ) => {
-      const updater = (prev: Message[]) =>
-        prev.map((msg) =>
-          msg.id === id
-            ? {
-                ...msg,
-                translations: {
-                  ...(msg.translations ?? {}),
-                  [targetLanguage]: translatedText,
-                },
-                content:
-                  language === targetLanguage ? translatedText : msg.content,
-              }
-            : msg
-        );
-
-      if (targetIsPdfChat) {
-        setPdfChatMessages(updater);
-      } else {
-        setGeneralChatMessages(updater);
-      }
-    },
-    [language, setGeneralChatMessages, setPdfChatMessages]
-  );
-
-  const translateAndCacheMessage = useCallback(
-    async (message: Message, targetIsPdfChat: boolean) => {
-      if (!message.id || message.i18nKey) return;
-      if (translatingIdsRef.current.has(message.id)) return;
-
-      const normalizedCurrentLanguage = String(language || 'tr').toLowerCase();
-      const rawSourceLanguage = String(
-        message.sourceLanguage ?? normalizedCurrentLanguage
-      ).toLowerCase();
-      const sourceLanguage = (
-        supportedLanguages.includes(rawSourceLanguage as Language)
-          ? rawSourceLanguage
-          : normalizedCurrentLanguage
-      ) as Language;
-      const currentTranslations = message.translations ?? {};
-      const baseText = currentTranslations[sourceLanguage] ?? message.content;
-      const needsTranslation = supportedLanguages.some(
-        (lang) => lang !== sourceLanguage && !currentTranslations[lang]
-      );
-      if (!needsTranslation) return;
-
-      translatingIdsRef.current.add(message.id);
-
-      try {
-        await Promise.all(
-          supportedLanguages
-            .filter((lang) => lang !== sourceLanguage)
-            .map(async (targetLanguage) => {
-              if (message.translations?.[targetLanguage]) return;
-              try {
-                const res = await sendRequest(
-                  '/files/chat/translate-message',
-                  'POST',
-                  {
-                    text: baseText,
-                    source_language: sourceLanguage,
-                    target_language: targetLanguage,
-                  }
-                );
-                const translated = String(res?.translation ?? '').trim();
-                if (!translated) return;
-                cacheTranslationForMessage(
-                  message.id as string,
-                  targetLanguage,
-                  translated,
-                  targetIsPdfChat
-                );
-              } catch (error) {
-                console.error('Mesaj çevirisi alınamadı:', error);
-              }
-            })
-        );
-      } finally {
-        translatingIdsRef.current.delete(message.id);
-      }
-    },
-    [cacheTranslationForMessage, language, supportedLanguages]
-  );
-
-  useEffect(() => {
-    if (loading) return;
-    const activeLanguage = String(language || 'tr').toLowerCase() as Language;
-
-    activeChatMessages.forEach((message) => {
-      if (!message.id || message.i18nKey) return;
-      const sourceCandidate = String(
-        message.sourceLanguage ?? activeLanguage
-      ).toLowerCase();
-      const sourceLanguage = (
-        supportedLanguages.includes(sourceCandidate as Language)
-          ? sourceCandidate
-          : activeLanguage
-      ) as Language;
-      const hasActiveTranslation = Boolean(
-        message.translations?.[activeLanguage]
-      );
-
-      if (activeLanguage !== sourceLanguage && !hasActiveTranslation) {
-        void translateAndCacheMessage(
-          { ...message, sourceLanguage },
-          isPdfChat
-        );
-      }
-    });
-  }, [
-    activeChatMessages,
-    isPdfChat,
-    language,
-    loading,
-    supportedLanguages,
-    translateAndCacheMessage,
-  ]);
-
-  const enqueueAssistantTranslation = useCallback(
-    (message: Message, targetIsPdfChat: boolean) => {
-      if (!message.id) return;
-      const exists = pendingAssistantTranslationsRef.current.some(
-        (entry) => entry.message.id === message.id
-      );
-      if (exists) return;
-      pendingAssistantTranslationsRef.current.push({
-        message,
-        targetIsPdfChat,
-      });
-    },
-    []
-  );
-
-  useEffect(() => {
-    if (loading) return;
-    if (pendingAssistantTranslationsRef.current.length === 0) return;
-    const queue = [...pendingAssistantTranslationsRef.current];
-    pendingAssistantTranslationsRef.current = [];
-    queue.forEach(({ message, targetIsPdfChat }) => {
-      void translateAndCacheMessage(message, targetIsPdfChat);
-    });
-  }, [loading, translateAndCacheMessage]);
 
   // Dinamik PDF izleyici: pdfFile değiştiğinde Pro ise ve PDF oturumu yoksa arka planda chat session başlat
   useEffect(() => {
