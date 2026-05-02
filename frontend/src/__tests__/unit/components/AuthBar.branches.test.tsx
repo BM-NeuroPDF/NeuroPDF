@@ -44,7 +44,7 @@ describe('AuthBar translation fallbacks', () => {
       data: { user: { email: 'a@b.com' } },
       status: 'authenticated',
       update: async () => null,
-    } as any);
+    } as unknown as ReturnType<typeof useSession>);
 
     render(<AuthBar />);
 
@@ -58,7 +58,7 @@ describe('AuthBar translation fallbacks', () => {
       data: { user: { email: 'a@b.com' } },
       status: 'authenticated',
       update: async () => null,
-    } as any);
+    } as unknown as ReturnType<typeof useSession>);
 
     render(<AuthBar />);
 

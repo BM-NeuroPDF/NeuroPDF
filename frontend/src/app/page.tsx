@@ -1,7 +1,6 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import NeuroLogo from '@/components/NeuroLogo';
@@ -9,7 +8,6 @@ import { sendRequest } from '@/utils/api';
 
 export default function HomePage() {
   const { data: session } = useSession();
-  const router = useRouter();
   const { t } = useLanguage();
 
   // Hangi istatistiği gösteriyoruz? (false: Global, true: Kişisel)

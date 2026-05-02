@@ -3,13 +3,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { useLanguage } from '@/context/LanguageContext';
-
-import 'react-pdf/dist/Page/TextLayer.css';
-import 'react-pdf/dist/Page/AnnotationLayer.css';
+import type { ReactPdfJsWorkerModule } from '@/types/pdfjsWorker';
 
 // Configure worker from CDN to exactly match installed pdfjs version (.mjs)
 if (typeof window !== 'undefined') {
-  (pdfjs as any).GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
+  (pdfjs as ReactPdfJsWorkerModule).GlobalWorkerOptions.workerSrc =
+    '/pdf.worker.mjs';
 }
 
 type Props = {
@@ -23,6 +22,7 @@ export function clampPdfPage(newPage: number, numPages: number): number {
 }
 
 export default function PdfViewer({ file, height = 700 }: Props) {
+  void height;
   const { t } = useLanguage();
   const [numPages, setNumPages] = useState(0);
   const [scale, setScale] = useState(1.0);

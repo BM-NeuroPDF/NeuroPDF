@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import PdfViewer, { clampPdfPage } from '../PdfViewer';
 import { useLanguage } from '@/context/LanguageContext';
 
@@ -9,7 +9,13 @@ import { useLanguage } from '@/context/LanguageContext';
 vi.mock('@/context/LanguageContext');
 vi.mock('react-pdf', () => ({
   pdfjs: { GlobalWorkerOptions: { workerSrc: '' } },
-  Document: ({ onLoadSuccess, children }: any) => {
+  Document: ({
+    onLoadSuccess,
+    children,
+  }: {
+    onLoadSuccess?: (pdf: { numPages: number }) => void;
+    children?: React.ReactNode;
+  }) => {
     useEffect(() => {
       if (onLoadSuccess) {
         onLoadSuccess({ numPages: 5 });
@@ -17,7 +23,7 @@ vi.mock('react-pdf', () => ({
     }, [onLoadSuccess]);
     return <div data-testid="pdf-document">{children}</div>;
   },
-  Page: ({ pageNumber }: any) => (
+  Page: ({ pageNumber }: { pageNumber: number }) => (
     <div data-testid={`pdf-page-${pageNumber}`}>Page {pageNumber}</div>
   ),
 }));
@@ -41,7 +47,9 @@ describe('PdfViewer', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (useLanguage as any).mockReturnValue(mockUseLanguage);
+    vi.mocked(useLanguage).mockReturnValue(
+      mockUseLanguage as ReturnType<typeof useLanguage>
+    );
   });
 
   it('renders PDF viewer with file', () => {

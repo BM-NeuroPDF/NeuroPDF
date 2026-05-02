@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import React from 'react';
 import { render, screen } from '@testing-library/react';
 import NavBar, { isNavLinkActive } from '@/components/NavBar';
 
@@ -28,7 +29,13 @@ vi.mock('next-auth/react', () => ({
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
   usePathname: vi.fn(() => '/'),
-  Link: ({ children, href, ...props }: any) => (
+  Link: ({
+    children,
+    href,
+    ...props
+  }: React.PropsWithChildren<
+    { href: string } & Omit<React.ComponentPropsWithoutRef<'a'>, 'href'>
+  >) => (
     <a href={href} {...props}>
       {children}
     </a>
@@ -91,7 +98,9 @@ describe('NavBar branches (fallback labels & pathname)', () => {
   });
 
   it('does not mark route active when pathname is undefined', () => {
-    vi.mocked(usePathname).mockReturnValue(undefined as any);
+    vi.mocked(usePathname).mockReturnValue(
+      undefined as unknown as ReturnType<typeof usePathname>
+    );
 
     render(<NavBar />);
 

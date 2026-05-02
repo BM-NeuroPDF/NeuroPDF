@@ -34,14 +34,20 @@ export const authOptions: AuthOptions = {
 
             if (!res.ok) return null;
 
-            const data = await res.json();
+            const data = (await res.json()) as {
+              user_id: string;
+              email: string;
+              username?: string;
+              access_token: string;
+              eula_accepted?: boolean;
+            };
             return {
               id: data.user_id,
               email: data.email,
               name: data.username ?? data.email,
               accessToken: data.access_token,
               eula_accepted: data.eula_accepted,
-            } as any;
+            };
           } catch (error) {
             console.error('Authorize verify-2fa error:', error);
             return null;
@@ -73,9 +79,9 @@ export const authOptions: AuthOptions = {
     async jwt({ token, account, user, trigger, session }) {
       // A) İlk Giriş Anı (Credentials)
       if (user) {
-        token.accessToken = (user as any).accessToken;
+        token.accessToken = user.accessToken;
         token.userId = user.id;
-        token.eula_accepted = (user as any).eula_accepted;
+        token.eula_accepted = user.eula_accepted;
       }
 
       // B) İlk Giriş Anı (Google)
@@ -110,12 +116,11 @@ export const authOptions: AuthOptions = {
     },
 
     async session({ session, token }) {
-      // Token'daki verileri Session'a aktar (Frontend görsün diye)
-      (session as any).accessToken = token.accessToken;
-      (session as any).userId = token.userId;
+      session.accessToken = token.accessToken;
+      session.userId = token.userId;
 
       if (session.user) {
-        (session.user as any).eula_accepted = token.eula_accepted;
+        session.user.eula_accepted = token.eula_accepted;
       }
       return session;
     },

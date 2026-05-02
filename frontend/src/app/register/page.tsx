@@ -37,7 +37,7 @@ export default function RegisterPage() {
   // 🔹 1. Sayfa yüklendiğinde Sağ Paneli KAPAT
   useEffect(() => {
     // Context'teki dosyayı temizle -> Layout paneli kapatır
-    savePdf(null as any);
+    savePdf(null);
   }, [savePdf]);
 
   // ---------------------------------------------------------
@@ -128,9 +128,9 @@ export default function RegisterPage() {
 
       showSuccess(t('registerSuccess'));
       setTimeout(() => router.push('/login'), 2000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Register Error:', err);
-      showError(err.message || t('registerError'));
+      showError(err instanceof Error ? err.message : t('registerError'));
     } finally {
       setLoading(false);
     }

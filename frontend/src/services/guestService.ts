@@ -75,6 +75,7 @@ class GuestService {
    * Guest ID'yi al, yoksa oluştur
    */
   async getGuestId(): Promise<string> {
+    this.initializeGuestId();
     if (!this.guestId) {
       console.log('⚠️ No guest ID found, creating new session...');
       await this.createSession();

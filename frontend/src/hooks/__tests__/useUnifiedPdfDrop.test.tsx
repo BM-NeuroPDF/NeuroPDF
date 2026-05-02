@@ -4,6 +4,10 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { useUnifiedPdfDrop } from '../useUnifiedPdfDrop';
 
+type UnifiedRootProps = ReturnType<
+  ReturnType<typeof useUnifiedPdfDrop>['getRootProps']
+>;
+
 const panelFile = new File(['%PDF'], 'panel.pdf', { type: 'application/pdf' });
 
 vi.mock('@/context/PdfContext', () => ({
@@ -21,16 +25,14 @@ describe('useUnifiedPdfDrop', () => {
   });
 
   it('sets dropEffect to copy for neuro mime on drag over capture', () => {
-    let rootProps: ReturnType<
-      ReturnType<typeof useUnifiedPdfDrop>['getRootProps']
-    >;
+    const captured: { root?: UnifiedRootProps } = {};
     function Probe() {
       const { getRootProps } = useUnifiedPdfDrop({
         options: { multiple: false, accept: { 'application/pdf': ['.pdf'] } },
         onFiles,
       });
-      rootProps = getRootProps();
-      return <div data-testid="drop" {...rootProps} />;
+      captured.root = getRootProps();
+      return <div data-testid="drop" {...captured.root!} />;
     }
     render(<Probe />);
     const dt = {
@@ -38,53 +40,49 @@ describe('useUnifiedPdfDrop', () => {
       getData: () => '',
       dropEffect: 'none' as string,
     };
-    (rootProps as any).onDragOverCapture?.({
+    captured.root?.onDragOverCapture?.({
       dataTransfer: dt,
       preventDefault: vi.fn(),
-    });
+    } as unknown as React.DragEvent<HTMLDivElement>);
     expect(dt.dropEffect).toBe('copy');
   });
 
   it('falls back to pdfFile when neuro payload JSON is invalid', () => {
-    let rootProps: ReturnType<
-      ReturnType<typeof useUnifiedPdfDrop>['getRootProps']
-    >;
+    const captured: { root?: UnifiedRootProps } = {};
     function Probe() {
       const { getRootProps } = useUnifiedPdfDrop({
         options: { multiple: false, accept: { 'application/pdf': ['.pdf'] } },
         onFiles,
       });
-      rootProps = getRootProps();
-      return <div {...rootProps} />;
+      captured.root = getRootProps();
+      return <div {...captured.root!} />;
     }
     render(<Probe />);
-    (rootProps as any).onDropCapture?.({
+    captured.root?.onDropCapture?.({
       dataTransfer: {
         getData: (mime: string) =>
           mime === 'application/x-neuro-pdf' ? 'not-json{' : '',
       },
       preventDefault: vi.fn(),
       stopPropagation: vi.fn(),
-    });
+    } as unknown as React.DragEvent<HTMLDivElement>);
     expect(onFiles).toHaveBeenCalledWith([panelFile], []);
   });
 
   it('forwards panel file on custom drop capture', () => {
-    let rootProps: ReturnType<
-      ReturnType<typeof useUnifiedPdfDrop>['getRootProps']
-    >;
+    const captured: { root?: UnifiedRootProps } = {};
     function Probe() {
       const { getRootProps } = useUnifiedPdfDrop({
         options: { multiple: false, accept: { 'application/pdf': ['.pdf'] } },
         onFiles,
       });
-      rootProps = getRootProps();
-      return <div {...rootProps} />;
+      captured.root = getRootProps();
+      return <div {...captured.root!} />;
     }
     render(<Probe />);
     const preventDefault = vi.fn();
     const stopPropagation = vi.fn();
-    (rootProps as any).onDropCapture?.({
+    captured.root?.onDropCapture?.({
       dataTransfer: {
         getData: (mime: string) =>
           mime === 'application/x-neuro-pdf'
@@ -93,7 +91,7 @@ describe('useUnifiedPdfDrop', () => {
       },
       preventDefault,
       stopPropagation,
-    });
+    } as unknown as React.DragEvent<HTMLDivElement>);
     expect(onFiles).toHaveBeenCalledWith([panelFile], []);
     expect(preventDefault).toHaveBeenCalled();
     expect(stopPropagation).toHaveBeenCalled();
@@ -122,24 +120,22 @@ describe('useUnifiedPdfDrop', () => {
   });
 
   it('delegates to base onDropCapture when no neuro payload', () => {
-    let rootProps: ReturnType<
-      ReturnType<typeof useUnifiedPdfDrop>['getRootProps']
-    >;
+    const captured: { root?: UnifiedRootProps } = {};
     function Probe() {
       const { getRootProps } = useUnifiedPdfDrop({
         options: { multiple: false, accept: { 'application/pdf': ['.pdf'] } },
         onFiles,
       });
-      rootProps = getRootProps();
-      return <div {...rootProps} />;
+      captured.root = getRootProps();
+      return <div {...captured.root!} />;
     }
     render(<Probe />);
     expect(() =>
-      (rootProps as any).onDropCapture?.({
+      captured.root?.onDropCapture?.({
         dataTransfer: { getData: () => '' },
         preventDefault: vi.fn(),
         stopPropagation: vi.fn(),
-      })
+      } as unknown as React.DragEvent<HTMLDivElement>)
     ).not.toThrow();
   });
 });

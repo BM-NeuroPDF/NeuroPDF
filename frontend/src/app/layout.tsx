@@ -1,22 +1,33 @@
 // app/layout.tsx
-import type { Metadata } from "next";
-import "./globals.css";
-import { PopupProvider } from "@/context/PopupContext";
-import Providers from "./Providers";
-import NavBar from "@/components/NavBar";
-import ClientPdfPanel from "@/components/ClientPdfPanel";
-import EulaGuard from "@/components/auth/EulaGuard";
-import ProGlobalChat from "@/components/ProGlobalChat"; // Global ProChat FAB + panel (Pro: chat; standart: /pricing)
+import type { Metadata } from 'next';
+import './globals.css';
+import 'react-pdf/dist/Page/TextLayer.css';
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import { PopupProvider } from '@/context/PopupContext';
+import Providers from './Providers';
+import NavBar from '@/components/NavBar';
+import ResponsivePdfPanel from '@/components/ResponsivePdfPanel';
+import EulaGuard from '@/components/auth/EulaGuard';
+import ProGlobalChat from '@/components/ProGlobalChat'; // Global ProChat FAB + panel (Pro: chat; standart: /pricing)
 
-import { PdfProvider } from "@/context/PdfContext";
-import { LanguageProvider } from "@/context/LanguageContext";
+import { PdfProvider } from '@/context/PdfContext';
+import { LanguageProvider } from '@/context/LanguageContext';
 
 export const metadata: Metadata = {
-  title: "PDF-AI",
-  description: "Google ile giriş + FastAPI JWT akışı",
+  title: 'NeuroPDF',
+  description: 'Google ile giriş + FastAPI JWT akışı',
+  icons: {
+    icon: '/logo/NeuroPDF-Chat.svg',
+    shortcut: '/logo/NeuroPDF-Chat.svg',
+    apple: '/logo/NeuroPDF-Chat.svg',
+  },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="tr">
       <body className="antialiased transition-colors duration-300 bg-[var(--background)] text-[var(--foreground)]">
@@ -24,24 +35,24 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <LanguageProvider>
             <PdfProvider>
               <PopupProvider>
-              <NavBar />
+                <NavBar />
 
-              <EulaGuard>
-                <div
-                  className="flex min-h-screen"
-                  style={{ paddingTop: "var(--navbar-height)" }}
-                >
-                  <main className="flex-1 flex flex-col min-w-0 px-4 md:px-6">
-                    {children}
-                  </main>
+                <EulaGuard>
+                  <div
+                    className="flex min-h-screen"
+                    style={{ paddingTop: 'var(--navbar-height)' }}
+                  >
+                    <main className="relative z-0 flex min-h-0 flex-1 flex-col min-w-0 px-4 md:px-6">
+                      {children}
+                    </main>
 
-                  <div className="hidden lg:block">
-                    <ClientPdfPanel />
+                    <div className="relative z-[31] w-0 shrink-0 overflow-visible">
+                      <ResponsivePdfPanel />
+                    </div>
                   </div>
-                </div>
                   {/* Global ProChat: FAB tüm sayfalarda; panel ve mesaj geçmişi context ile korunur */}
-              <ProGlobalChat />
-              </EulaGuard>
+                  <ProGlobalChat />
+                </EulaGuard>
               </PopupProvider>
             </PdfProvider>
           </LanguageProvider>

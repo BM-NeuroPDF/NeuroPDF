@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { useDropzone, type FileRejection } from 'react-dropzone';
 import { useSession } from 'next-auth/react';
 import dynamic from 'next/dynamic';
 import { guestService } from '@/services/guestService';
@@ -34,7 +34,7 @@ type ErrorType =
 
 export default function MergePdfPage() {
   const { data: session, status } = useSession();
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const { pdfFile, savePdf } = usePdf();
 
   const [files, setFiles] = useState<File[]>([]);
@@ -74,7 +74,7 @@ export default function MergePdfPage() {
 
   // --- DROPZONE AYARLARI ---
   const onDrop = useCallback(
-    (acceptedFiles: File[], fileRejections: any[]) => {
+    (acceptedFiles: File[], fileRejections: FileRejection[]) => {
       clearError();
 
       // Hata Kontrolü
@@ -229,7 +229,7 @@ export default function MergePdfPage() {
           console.error('Misafir sayaç hatası:', error);
         }
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('❌ Birleştirme Hatası:', e);
       setErrorType('MERGE_ERROR');
     } finally {
@@ -274,7 +274,7 @@ export default function MergePdfPage() {
 
       alert(`${t('saveSuccess')}\n${t('fileSize')}: ${result.size_kb} KB`);
       clearFiles();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('❌ Save error:', e);
       setErrorType('SAVE_ERROR');
     } finally {

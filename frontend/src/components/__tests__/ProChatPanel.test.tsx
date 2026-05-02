@@ -4,9 +4,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import ProChatPanel from '../ProChatPanel';
 
 vi.mock('framer-motion', () => {
-  const passthrough = (Tag: keyof JSX.IntrinsicElements) => {
+  const passthrough = (Tag: keyof React.JSX.IntrinsicElements) => {
     const Component = ({ children, ...rest }: { children?: React.ReactNode }) =>
-      React.createElement(Tag, rest, children);
+      React.createElement(Tag, rest as React.Attributes, children);
     Component.displayName = `motion.${String(Tag)}`;
     return Component;
   };
@@ -74,9 +74,7 @@ describe('ProChatPanel (presentational)', () => {
   });
 
   it('does not render when closed', () => {
-    const { container } = render(
-      <ProChatPanel {...defaultProps} isOpen={false} />
-    );
+    render(<ProChatPanel {...defaultProps} isOpen={false} />);
     expect(screen.queryByText('Neuro AI')).not.toBeInTheDocument();
   });
 

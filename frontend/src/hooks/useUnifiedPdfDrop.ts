@@ -1,6 +1,6 @@
-import { useCallback } from "react";
-import { useDropzone, DropzoneOptions } from "react-dropzone";
-import { usePdf } from "@/context/PdfContext";
+import { useCallback } from 'react';
+import { useDropzone, DropzoneOptions, FileRejection } from 'react-dropzone';
+import { usePdf } from '@/context/PdfContext';
 
 /**
  * Unified PDF drop hook
@@ -21,19 +21,23 @@ export function useUnifiedPdfDrop({
   onFiles,
 }: {
   options: DropzoneOptions;
-  onFiles: (files: File[], rejections: any[]) => void;
+  onFiles: (files: File[], rejections: FileRejection[]) => void;
 }) {
   const { pdfFile, pdfList } = usePdf();
 
   // Wrap dropzone onDrop to delegate to consumer-provided handler
   const onDrop = useCallback(
-    (acceptedFiles: File[], fileRejections: any[]) => {
+    (acceptedFiles: File[], fileRejections: FileRejection[]) => {
       onFiles(acceptedFiles, fileRejections);
     },
     [onFiles]
   );
 
-  const { getRootProps: _getRootProps, getInputProps, isDragActive } = useDropzone({
+  const {
+    getRootProps: _getRootProps,
+    getInputProps,
+    isDragActive,
+  } = useDropzone({
     ...options,
     onDrop,
   });
@@ -46,20 +50,22 @@ export function useUnifiedPdfDrop({
       return {
         ...base,
         onDragOverCapture: (e: React.DragEvent) => {
-          base.onDragOverCapture?.(e as any);
+          base.onDragOverCapture?.(
+            e as unknown as React.DragEvent<HTMLElement>
+          );
           // Allow drop for both native and panel-origin drags
           e.preventDefault();
           try {
             const types = Array.from(e.dataTransfer?.types || []);
-            if (types.includes("application/x-neuro-pdf")) {
-              e.dataTransfer.dropEffect = "copy";
+            if (types.includes('application/x-neuro-pdf')) {
+              e.dataTransfer.dropEffect = 'copy';
             }
-          } catch (_) {}
+          } catch {}
         },
         onDropCapture: (e: React.DragEvent) => {
           // If panel-origin flag is present, forward the context pdfFile to consumer
           try {
-            const raw = e.dataTransfer?.getData("application/x-neuro-pdf");
+            const raw = e.dataTransfer?.getData('application/x-neuro-pdf');
             if (raw) {
               // Stop default bubbling so react-dropzone doesn't override this
               e.preventDefault();
@@ -81,10 +87,10 @@ export function useUnifiedPdfDrop({
                 return;
               }
             }
-          } catch (_) {}
+          } catch {}
 
-          // Fallback to any user-provided handler
-          base.onDropCapture?.(e as any);
+          // Fallback to user-provided handler
+          base.onDropCapture?.(e as unknown as React.DragEvent<HTMLElement>);
         },
       } as typeof base;
     },

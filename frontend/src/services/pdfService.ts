@@ -9,6 +9,12 @@ interface UploadResponse {
   temp_id: string;
 }
 
+interface SaveProcessedResponse {
+  filename?: string;
+  size_kb?: number;
+  [key: string]: unknown;
+}
+
 class PDFService {
   /**
    * ✅ GÜNCELLEME: NextAuth token'ı kullan
@@ -250,7 +256,7 @@ class PDFService {
     blob: Blob,
     filename: string,
     apiToken?: string | null
-  ): Promise<any> {
+  ): Promise<SaveProcessedResponse> {
     const apiBaseUrl = resolveApiBaseUrl();
     if (!apiToken) {
       throw new Error('You must be logged in to save files');

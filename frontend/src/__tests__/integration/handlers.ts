@@ -29,7 +29,7 @@ export const handlers = [
   // ==========================================
   // PDF Upload
   // ==========================================
-  http.post(`${BASE_URL}/files/upload`, async ({ request }) => {
+  http.post(`${BASE_URL}/files/upload`, async () => {
     await delay(500); // Simulate network delay
     return HttpResponse.json(mockUploadResponse, { status: 200 });
   }),
@@ -37,12 +37,12 @@ export const handlers = [
   // ==========================================
   // PDF Summarize
   // ==========================================
-  http.post(`${BASE_URL}/files/summarize`, async ({ request }) => {
+  http.post(`${BASE_URL}/files/summarize`, async () => {
     await delay(1000);
     return HttpResponse.json(mockSummaryResponse, { status: 200 });
   }),
 
-  http.post(`${BASE_URL}/files/summarize-guest`, async ({ request }) => {
+  http.post(`${BASE_URL}/files/summarize-guest`, async () => {
     await delay(1000);
     return HttpResponse.json(mockSummaryResponse, { status: 200 });
   }),
@@ -62,7 +62,7 @@ export const handlers = [
     }
   ),
 
-  http.get(`${BASE_URL}/files/summary/:file_id`, async ({ params }) => {
+  http.get(`${BASE_URL}/files/summary/:file_id`, async () => {
     await delay(300);
     return HttpResponse.json(
       {
@@ -76,17 +76,17 @@ export const handlers = [
   // ==========================================
   // Chat Endpoints
   // ==========================================
-  http.post(`${BASE_URL}/files/chat/start`, async ({ request }) => {
+  http.post(`${BASE_URL}/files/chat/start`, async () => {
     await delay(800);
     return HttpResponse.json(mockChatSessionResponse, { status: 200 });
   }),
 
-  http.post(`${BASE_URL}/files/chat/start-from-text`, async ({ request }) => {
+  http.post(`${BASE_URL}/files/chat/start-from-text`, async () => {
     await delay(800);
     return HttpResponse.json(mockChatSessionResponse, { status: 200 });
   }),
 
-  http.post(`${BASE_URL}/files/chat/message`, async ({ request }) => {
+  http.post(`${BASE_URL}/files/chat/message`, async () => {
     await delay(1000);
     return HttpResponse.json(mockChatMessageResponse, { status: 200 });
   }),
@@ -150,12 +150,12 @@ export const handlers = [
     });
   }),
 
-  http.post(`${BASE_URL}/files/chat/general/start`, async ({ request }) => {
+  http.post(`${BASE_URL}/files/chat/general/start`, async () => {
     await delay(500);
     return HttpResponse.json(mockChatSessionResponse, { status: 200 });
   }),
 
-  http.post(`${BASE_URL}/files/chat/general/message`, async ({ request }) => {
+  http.post(`${BASE_URL}/files/chat/general/message`, async () => {
     await delay(1000);
     return HttpResponse.json(mockChatMessageResponse, { status: 200 });
   }),
@@ -163,7 +163,7 @@ export const handlers = [
   // ==========================================
   // PDF Operations
   // ==========================================
-  http.post(`${BASE_URL}/files/merge-pdfs`, async ({ request }) => {
+  http.post(`${BASE_URL}/files/merge-pdfs`, async () => {
     await delay(1500);
     // Return a mock PDF blob
     const mockPdfBlob = new Blob(['mock pdf content'], {
@@ -178,7 +178,7 @@ export const handlers = [
     });
   }),
 
-  http.post(`${BASE_URL}/files/extract-pages`, async ({ request }) => {
+  http.post(`${BASE_URL}/files/extract-pages`, async () => {
     await delay(1000);
     const mockPdfBlob = new Blob(['extracted pages'], {
       type: 'application/pdf',
@@ -192,7 +192,7 @@ export const handlers = [
     });
   }),
 
-  http.post(`${BASE_URL}/files/convert-text`, async ({ request }) => {
+  http.post(`${BASE_URL}/files/convert-text`, async () => {
     await delay(800);
     const mockTextBlob = new Blob(['Extracted text content'], {
       type: 'text/plain',
@@ -206,7 +206,7 @@ export const handlers = [
     });
   }),
 
-  http.post(`${BASE_URL}/files/save-processed`, async ({ request }) => {
+  http.post(`${BASE_URL}/files/save-processed`, async () => {
     await delay(500);
     return HttpResponse.json(
       {
@@ -221,7 +221,7 @@ export const handlers = [
   // ==========================================
   // Authentication
   // ==========================================
-  http.post(`${BASE_URL}/auth/login`, async ({ request }) => {
+  http.post(`${BASE_URL}/auth/login`, async () => {
     await delay(500);
     return HttpResponse.json(
       {
@@ -248,7 +248,7 @@ export const handlers = [
     );
   }),
 
-  http.post(`${BASE_URL}/auth/register`, async ({ request }) => {
+  http.post(`${BASE_URL}/auth/register`, async () => {
     await delay(500);
     return HttpResponse.json(
       {
@@ -264,7 +264,7 @@ export const handlers = [
     );
   }),
 
-  http.post(`${BASE_URL}/auth/google`, async ({ request }) => {
+  http.post(`${BASE_URL}/auth/google`, async () => {
     await delay(500);
     return HttpResponse.json(
       {
@@ -280,7 +280,7 @@ export const handlers = [
     );
   }),
 
-  http.get(`${BASE_URL}/auth/me`, async ({ request }) => {
+  http.get(`${BASE_URL}/auth/me`, async () => {
     await delay(200);
     return HttpResponse.json(
       {
@@ -295,7 +295,7 @@ export const handlers = [
   // ==========================================
   // User Avatar
   // ==========================================
-  http.get(`${BASE_URL}/api/v1/user/:user_id/avatar`, async ({ params }) => {
+  http.get(`${BASE_URL}/api/v1/user/:user_id/avatar`, async () => {
     await delay(300);
     // Return a mock image blob
     const mockImageBlob = new Blob(['mock image'], { type: 'image/png' });
@@ -310,7 +310,7 @@ export const handlers = [
   // ==========================================
   // Guest Endpoints
   // ==========================================
-  http.post(`${BASE_URL}/guest/session`, async ({ request }) => {
+  http.post(`${BASE_URL}/guest/session`, async () => {
     await delay(200);
     return HttpResponse.json(
       {
@@ -321,7 +321,7 @@ export const handlers = [
     );
   }),
 
-  http.get(`${BASE_URL}/guest/check-usage`, async ({ request }) => {
+  http.get(`${BASE_URL}/guest/check-usage`, async () => {
     await delay(200);
     return HttpResponse.json(
       {
@@ -333,7 +333,7 @@ export const handlers = [
     );
   }),
 
-  http.post(`${BASE_URL}/guest/use`, async ({ request }) => {
+  http.post(`${BASE_URL}/guest/use`, async () => {
     await delay(200);
     return HttpResponse.json(
       {

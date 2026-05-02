@@ -9,10 +9,18 @@ import { toast } from 'sonner';
 import { sendRequest } from '@/utils/api';
 import { useLanguage } from '@/context/LanguageContext';
 import { usePdf } from '@/context/PdfContext';
+import type { Message } from '@/context/PdfContext';
 import Image from 'next/image';
 import NeuroLogoIcon from '@/assets/icons/NeuroPDF-Chat.svg';
 import ProChatPanel from './ProChatPanel';
-import { translations } from '@/utils/translations';
+import { translations, type Language } from '@/utils/translations';
+import type {
+  SpeechRecognitionConstructor,
+  SpeechRecognitionErrorEvent,
+  SpeechRecognitionInstance,
+  SpeechRecognitionResultEvent,
+  WindowWithSpeechRecognition,
+} from '@/types/speechRecognition';
 
 export default function ProGlobalChat() {
   const { data: session, status } = useSession();
@@ -45,15 +53,15 @@ export default function ProGlobalChat() {
   const handleExtractPagesLocal = useCallback(
     async (startPage: number | undefined, endPage: number | undefined) => {
       if (startPage == null || endPage == null) {
-        toast.error(t("toastInvalidRange"));
+        toast.error(t('toastInvalidRange'));
         return;
       }
       if (!pdfFile) {
-        toast.error(t("toastPdfRequired"));
+        toast.error(t('toastPdfRequired'));
         return;
       }
       if (startPage < 1 || endPage < 1 || endPage < startPage) {
-        toast.error(t("toastPagesInvalid"));
+        toast.error(t('toastPagesInvalid'));
         return;
       }
       try {
@@ -61,7 +69,9 @@ export default function ProGlobalChat() {
         const src = await PDFDocument.load(buffer);
         const pageCount = src.getPageCount();
         if (startPage > pageCount || endPage > pageCount) {
-          toast.error(t("toastPdfLimit").replace("{count}", pageCount.toString()));
+          toast.error(
+            t('toastPdfLimit').replace('{count}', pageCount.toString())
+          );
           return;
         }
         const dest = await PDFDocument.create();
@@ -78,18 +88,18 @@ export default function ProGlobalChat() {
           type: 'application/pdf',
         });
         await savePdf(outFile);
-        toast.success(t("toastExtractSuccess"));
+        toast.success(t('toastExtractSuccess'));
       } catch (e) {
         console.error('EXTRACT_PAGES_LOCAL:', e);
-        toast.error(t("toastExtractError"));
+        toast.error(t('toastExtractError'));
       }
     },
-    [pdfFile, savePdf]
+    [pdfFile, savePdf, t]
   );
 
   const handleMergePdfsLocal = useCallback(async () => {
     if (pdfList.length < 2) {
-      toast.error(t("toastMergeMinFiles"));
+      toast.error(t('toastMergeMinFiles'));
       return;
     }
     try {
@@ -110,26 +120,26 @@ export default function ProGlobalChat() {
         }
       );
       await savePdf(outFile);
-      toast.success(t("toastMergeSuccess"));
+      toast.success(t('toastMergeSuccess'));
     } catch (e) {
       console.error('MERGE_PDFS_LOCAL:', e);
-      toast.error(t("toastMergeError"));
+      toast.error(t('toastMergeError'));
     }
-  }, [pdfList, savePdf]);
+  }, [pdfList, savePdf, t]);
 
   const handleClearAllPdfs = useCallback(() => {
     clearPdf();
-    toast.info(t("toastClearSuccess"));
+    toast.info(t('toastClearSuccess'));
   }, [clearPdf, t]);
 
   const handleSwapPagesLocal = useCallback(
     async (pageA: number, pageB: number) => {
       if (!pdfFile) {
-        toast.error(t("toastPdfRequired"));
+        toast.error(t('toastPdfRequired'));
         return;
       }
       if (pageA < 1 || pageB < 1 || pageA === pageB) {
-        toast.error(t("toastPagesInvalid"));
+        toast.error(t('toastPagesInvalid'));
         return;
       }
       try {
@@ -137,7 +147,9 @@ export default function ProGlobalChat() {
         const src = await PDFDocument.load(buffer);
         const pageCount = src.getPageCount();
         if (pageA > pageCount || pageB > pageCount) {
-          toast.error(t("toastPdfLimit").replace("{count}", pageCount.toString()));
+          toast.error(
+            t('toastPdfLimit').replace('{count}', pageCount.toString())
+          );
           return;
         }
         const order = Array.from({ length: pageCount }, (_, i) => i + 1);
@@ -156,13 +168,13 @@ export default function ProGlobalChat() {
           type: 'application/pdf',
         });
         await savePdf(outFile);
-        toast.success(t("toastSwapSuccess"));
+        toast.success(t('toastSwapSuccess'));
       } catch (e) {
         console.error('SWAP_PAGES_LOCAL:', e);
-        toast.error(t("toastSwapError"));
+        toast.error(t('toastSwapError'));
       }
     },
-    [pdfFile, savePdf]
+    [pdfFile, savePdf, t]
   );
 
   const applyClientActions = useCallback(
@@ -215,9 +227,13 @@ export default function ProGlobalChat() {
   const [isRoleLoading, setIsRoleLoading] = useState(true);
   const [typingAudio, setTypingAudio] = useState<HTMLAudioElement | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const isManuallyStopped = useRef(false);
   const committedTranscriptRef = useRef('');
+  const translatingIdsRef = useRef<Set<string>>(new Set());
+  const pendingAssistantTranslationsRef = useRef<
+    Array<{ message: Message; targetIsPdfChat: boolean }>
+  >([]);
 
   // Yazıyor... sesi efekti (Loading sırasında döngüsel)
   useEffect(() => {
@@ -245,10 +261,131 @@ export default function ProGlobalChat() {
   const activeChatMessages = pdfSessionId
     ? pdfChatMessages
     : generalChatMessages;
+  const supportedLanguages = useMemo<Language[]>(() => ['tr', 'en'], []);
   const isPdfChat = !!pdfSessionId;
   const isProUser =
     userRole?.toLowerCase() === 'pro' || userRole?.toLowerCase() === 'pro user';
   const canAccessChat = status === 'authenticated' && isProUser;
+
+  type LocalizableChatKey =
+    | 'chatWelcomePdf'
+    | 'chatWelcomeGeneral'
+    | 'chatInitError'
+    | 'chatErrorQuotaExceeded'
+    | 'chatErrorSessionExpired'
+    | 'chatErrorSessionRefresh'
+    | 'chatErrorConnection';
+
+  const localizableAssistantKeys = useMemo<LocalizableChatKey[]>(
+    () => [
+      'chatWelcomePdf',
+      'chatWelcomeGeneral',
+      'chatInitError',
+      'chatErrorQuotaExceeded',
+      'chatErrorSessionExpired',
+      'chatErrorSessionRefresh',
+      'chatErrorConnection',
+    ],
+    []
+  );
+
+  const interpolate = useCallback(
+    (template: string, params?: Record<string, string>) => {
+      if (!params) return template;
+      return Object.entries(params).reduce(
+        (acc, [key, value]) => acc.replaceAll(`{${key}}`, value),
+        template
+      );
+    },
+    []
+  );
+
+  const makeAssistantMessage = useCallback(
+    (key: LocalizableChatKey, params?: Record<string, string>): Message => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      role: 'assistant',
+      content: interpolate(t(key), params),
+      i18nKey: key,
+      i18nParams: params,
+      sourceLanguage: language,
+      translations: {
+        [language]: interpolate(t(key), params),
+      },
+    }),
+    [interpolate, language, t]
+  );
+
+  const makeRuntimeMessage = useCallback(
+    (role: 'user' | 'assistant', content: string): Message => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      role,
+      content,
+      sourceLanguage: language,
+      translations: {
+        [language]: content,
+      },
+    }),
+    [language]
+  );
+
+  const localizeMessageIfPossible = useCallback(
+    (message: Message): Message => {
+      if (message.translations?.[language]) {
+        return {
+          ...message,
+          content: message.translations[language] as string,
+        };
+      }
+      if (message.role !== 'assistant') return message;
+
+      if (
+        message.i18nKey &&
+        localizableAssistantKeys.includes(message.i18nKey as LocalizableChatKey)
+      ) {
+        return {
+          ...message,
+          content: interpolate(
+            t(message.i18nKey as LocalizableChatKey),
+            message.i18nParams
+          ),
+        };
+      }
+
+      for (const key of localizableAssistantKeys) {
+        if (key === 'chatWelcomePdf') continue;
+        if (
+          message.content === translations.tr[key] ||
+          message.content === translations.en[key]
+        ) {
+          return makeAssistantMessage(key);
+        }
+      }
+
+      const pdfWelcomeMatch =
+        message.content.match(/\*\*"(.+?)"\*\*/) ??
+        message.content.match(/"(.+?)"/);
+      if (pdfWelcomeMatch?.[1]) {
+        const name = pdfWelcomeMatch[1];
+        const trCandidate = translations.tr.chatWelcomePdf.replace(
+          '{name}',
+          name
+        );
+        const enCandidate = translations.en.chatWelcomePdf.replace(
+          '{name}',
+          name
+        );
+        if (
+          message.content === trCandidate ||
+          message.content === enCandidate
+        ) {
+          return makeAssistantMessage('chatWelcomePdf', { name });
+        }
+      }
+
+      return message;
+    },
+    [interpolate, language, makeAssistantMessage, t, localizableAssistantKeys]
+  );
 
   // Başka sayfadan "Sohbet Et" ile açıldığında paneli aç
   useEffect(() => {
@@ -258,41 +395,159 @@ export default function ProGlobalChat() {
     }
   }, [proChatOpen, setProChatOpen, setProChatPanelOpen]);
 
-  // DİNAMİK HOŞGELDİN MESAJI GÜNCELLEME (Welcome Message Sync)
-  useEffect(() => {
-    // PDF Chat: Eğer mesaj listesinde sadece "hoşgeldin" sinyali veya mevcut welcome mesajı varsa güncelle
-    if (pdfChatMessages.length === 1 && pdfChatMessages[0].role === 'assistant' && pdfFile) {
-      const currentContent = pdfChatMessages[0].content;
-      const expectedOldTr = translations.tr.chatWelcomePdf.replace("{name}", pdfFile.name);
-      const expectedOldEn = translations.en.chatWelcomePdf.replace("{name}", pdfFile.name);
-      const isSignal = currentContent.startsWith("WELCOME_PDF:");
-      
-      if (isSignal || currentContent === expectedOldTr || currentContent === expectedOldEn) {
-        setPdfChatMessages([
-          {
-            role: 'assistant',
-            content: t("chatWelcomePdf").replace("{name}", pdfFile.name),
-          },
-        ]);
-      }
-    }
+  const displayChatMessages = useMemo(
+    () => activeChatMessages.map(localizeMessageIfPossible),
+    [activeChatMessages, localizeMessageIfPossible]
+  );
 
-    // Genel Chat: Benzer mantık
-    if (generalChatMessages.length === 1 && generalChatMessages[0].role === 'assistant') {
-      const currentContent = generalChatMessages[0].content;
-      const expectedOldTr = translations.tr.chatWelcomeGeneral;
-      const expectedOldEn = translations.en.chatWelcomeGeneral;
-      
-      if (currentContent === expectedOldTr || currentContent === expectedOldEn) {
-        setGeneralChatMessages([
-          {
-            role: 'assistant',
-            content: t("chatWelcomeGeneral"),
-          },
-        ]);
+  const cacheTranslationForMessage = useCallback(
+    (
+      id: string,
+      targetLanguage: Language,
+      translatedText: string,
+      targetIsPdfChat: boolean
+    ) => {
+      const updater = (prev: Message[]) =>
+        prev.map((msg) =>
+          msg.id === id
+            ? {
+                ...msg,
+                translations: {
+                  ...(msg.translations ?? {}),
+                  [targetLanguage]: translatedText,
+                },
+                content:
+                  language === targetLanguage ? translatedText : msg.content,
+              }
+            : msg
+        );
+
+      if (targetIsPdfChat) {
+        setPdfChatMessages(updater);
+      } else {
+        setGeneralChatMessages(updater);
       }
-    }
-  }, [language, pdfFile, t, setPdfChatMessages, setGeneralChatMessages]);
+    },
+    [language, setGeneralChatMessages, setPdfChatMessages]
+  );
+
+  const translateAndCacheMessage = useCallback(
+    async (message: Message, targetIsPdfChat: boolean) => {
+      if (!message.id || message.i18nKey) return;
+      if (translatingIdsRef.current.has(message.id)) return;
+
+      const normalizedCurrentLanguage = String(language || 'tr').toLowerCase();
+      const rawSourceLanguage = String(
+        message.sourceLanguage ?? normalizedCurrentLanguage
+      ).toLowerCase();
+      const sourceLanguage = (
+        supportedLanguages.includes(rawSourceLanguage as Language)
+          ? rawSourceLanguage
+          : normalizedCurrentLanguage
+      ) as Language;
+      const currentTranslations = message.translations ?? {};
+      const baseText = currentTranslations[sourceLanguage] ?? message.content;
+      const needsTranslation = supportedLanguages.some(
+        (lang) => lang !== sourceLanguage && !currentTranslations[lang]
+      );
+      if (!needsTranslation) return;
+
+      translatingIdsRef.current.add(message.id);
+
+      try {
+        await Promise.all(
+          supportedLanguages
+            .filter((lang) => lang !== sourceLanguage)
+            .map(async (targetLanguage) => {
+              if (message.translations?.[targetLanguage]) return;
+              try {
+                const res = await sendRequest(
+                  '/files/chat/translate-message',
+                  'POST',
+                  {
+                    text: baseText,
+                    source_language: sourceLanguage,
+                    target_language: targetLanguage,
+                  }
+                );
+                const translated = String(res?.translation ?? '').trim();
+                if (!translated) return;
+                cacheTranslationForMessage(
+                  message.id as string,
+                  targetLanguage,
+                  translated,
+                  targetIsPdfChat
+                );
+              } catch (error) {
+                console.error('Mesaj çevirisi alınamadı:', error);
+              }
+            })
+        );
+      } finally {
+        translatingIdsRef.current.delete(message.id);
+      }
+    },
+    [cacheTranslationForMessage, language, supportedLanguages]
+  );
+
+  useEffect(() => {
+    if (loading) return;
+    const activeLanguage = String(language || 'tr').toLowerCase() as Language;
+
+    activeChatMessages.forEach((message) => {
+      if (!message.id || message.i18nKey) return;
+      const sourceCandidate = String(
+        message.sourceLanguage ?? activeLanguage
+      ).toLowerCase();
+      const sourceLanguage = (
+        supportedLanguages.includes(sourceCandidate as Language)
+          ? sourceCandidate
+          : activeLanguage
+      ) as Language;
+      const hasActiveTranslation = Boolean(
+        message.translations?.[activeLanguage]
+      );
+
+      if (activeLanguage !== sourceLanguage && !hasActiveTranslation) {
+        void translateAndCacheMessage(
+          { ...message, sourceLanguage },
+          isPdfChat
+        );
+      }
+    });
+  }, [
+    activeChatMessages,
+    isPdfChat,
+    language,
+    loading,
+    supportedLanguages,
+    translateAndCacheMessage,
+  ]);
+
+  const enqueueAssistantTranslation = useCallback(
+    (message: Message, targetIsPdfChat: boolean) => {
+      if (!message.id) return;
+      const exists = pendingAssistantTranslationsRef.current.some(
+        (entry) => entry.message.id === message.id
+      );
+      if (exists) return;
+      pendingAssistantTranslationsRef.current.push({
+        message,
+        targetIsPdfChat,
+      });
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (loading) return;
+    if (pendingAssistantTranslationsRef.current.length === 0) return;
+    const queue = [...pendingAssistantTranslationsRef.current];
+    pendingAssistantTranslationsRef.current = [];
+    queue.forEach(({ message, targetIsPdfChat }) => {
+      void translateAndCacheMessage(message, targetIsPdfChat);
+    });
+  }, [loading, translateAndCacheMessage]);
 
   // Dinamik PDF izleyici: pdfFile değiştiğinde Pro ise ve PDF oturumu yoksa arka planda chat session başlat
   useEffect(() => {
@@ -331,10 +586,7 @@ export default function ProGlobalChat() {
           }
           void loadChatSessions();
           setPdfChatMessages([
-            {
-              role: 'assistant',
-              content: t("chatWelcomePdf").replace("{name}", pdfFile.name),
-            },
+            makeAssistantMessage('chatWelcomePdf', { name: pdfFile.name }),
           ]);
         }
       } catch (e) {
@@ -351,6 +603,8 @@ export default function ProGlobalChat() {
     isProUser,
     pdfSessionId,
     existingDocumentId,
+    language,
+    makeAssistantMessage,
     setPdfSessionId,
     setIsChatActive,
     setPdfChatMessages,
@@ -448,13 +702,13 @@ export default function ProGlobalChat() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
+    const w = window as WindowWithSpeechRecognition;
+    const SpeechRecognitionCtor: SpeechRecognitionConstructor | undefined =
+      w.SpeechRecognition ?? w.webkitSpeechRecognition;
 
-    if (!SpeechRecognition) return;
+    if (!SpeechRecognitionCtor) return;
 
-    const recog = new SpeechRecognition();
+    const recog = new SpeechRecognitionCtor();
     const currentLang = language === 'tr' ? 'tr-TR' : 'en-US';
     recog.continuous = true;
     recog.interimResults = true;
@@ -484,10 +738,10 @@ export default function ProGlobalChat() {
       );
     };
 
-    recog.onresult = (event: any) => {
+    recog.onresult = (event: SpeechRecognitionResultEvent) => {
       let finalTranscript = '';
       let interimTranscript = '';
-      
+
       // We iterate through all results to reconstruct the full cumulative transcript.
       // This is generally more robust than managing a partial ref for most modern implementations.
       for (let i = 0; i < event.results.length; ++i) {
@@ -499,29 +753,37 @@ export default function ProGlobalChat() {
         }
       }
 
-      console.log('🎤 SpeechRecognition: Final=[', finalTranscript, '] Interim=[', interimTranscript, ']');
-      
+      console.log(
+        '🎤 SpeechRecognition: Final=[',
+        finalTranscript,
+        '] Interim=[',
+        interimTranscript,
+        ']'
+      );
+
       // Combine what was in the input box before recording started (saved in ref)
       // with the new cumulative transcript from the speech recognition.
-      const prefix = committedTranscriptRef.current ? `${committedTranscriptRef.current} ` : '';
+      const prefix = committedTranscriptRef.current
+        ? `${committedTranscriptRef.current} `
+        : '';
       const merged = `${prefix}${finalTranscript}${interimTranscript}`.trim();
-      
+
       if (merged) {
         setInput(merged);
       }
     };
 
-    recog.onerror = (event: any) => {
+    recog.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.error('❌ Ses Tanıma Hatası:', event.error);
       if (event.error === 'aborted') return; // Ignore manual aborts
-      
+
       const errorMsg =
         event.error === 'no-speech'
-          ? t("toastMicErrorNoSpeech")
+          ? t('toastMicErrorNoSpeech')
           : event.error === 'not-allowed'
-            ? t("toastMicErrorNotAllowed")
+            ? t('toastMicErrorNotAllowed')
             : event.error === 'network'
-              ? t("toastMicErrorNetwork")
+              ? t('toastMicErrorNetwork')
               : `Hata: ${event.error}`;
       toast.error(errorMsg);
       setIsRecording(false);
@@ -563,7 +825,7 @@ export default function ProGlobalChat() {
         console.error('Cleanup error:', e);
       }
     };
-  }, [language]);
+  }, [language, t]);
 
   const ensureMicrophoneAccess = async (): Promise<boolean> => {
     if (typeof window === 'undefined') return false;
@@ -613,33 +875,39 @@ export default function ProGlobalChat() {
 
         // Reset state for new session - Start FRESH as requested.
         isManuallyStopped.current = false;
-        committedTranscriptRef.current = "";
-        setInput("");
-        
+        committedTranscriptRef.current = '';
+        setInput('');
+
         const currentLang = language === 'tr' ? 'tr-TR' : 'en-US';
         recognition.lang = currentLang;
-        
+
         // If it was already running in the background for some reason, stop it first.
         // We set isManuallyStopped to true TEMPORARILY to avoid the onend auto-restart.
         isManuallyStopped.current = true;
         recognition.stop();
-        
+
         setTimeout(() => {
           isManuallyStopped.current = false;
           // Ensure language is set right before start
           recognition.lang = language === 'tr' ? 'tr-TR' : 'en-US';
-          console.log('🌐 SpeechRecognition starting with language:', recognition.lang);
-          
+          console.log(
+            '🌐 SpeechRecognition starting with language:',
+            recognition.lang
+          );
+
           try {
             recognition.start();
             setIsRecording(true);
           } catch (e) {
-            console.warn('Recognition start failed (likely already running):', e);
+            console.warn(
+              'Recognition start failed (likely already running):',
+              e
+            );
             // If it's already running, we just ensure isRecording is true.
             setIsRecording(true);
           }
         }, 150);
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error('Recognition toggle error:', e);
         setIsRecording(false);
       }
@@ -669,22 +937,12 @@ export default function ProGlobalChat() {
         mode: 'flash',
         language: language,
       });
-      if (!res.session_id) throw new Error(t("chatInitError"));
+      if (!res.session_id) throw new Error(t('chatInitError'));
       setGeneralSessionId(res.session_id);
-      setGeneralChatMessages([
-        {
-          role: 'assistant',
-          content: t("chatWelcomeGeneral"),
-        },
-      ]);
+      setGeneralChatMessages([makeAssistantMessage('chatWelcomeGeneral')]);
     } catch (e) {
       console.error('Chat başlatma hatası:', e);
-      setGeneralChatMessages([
-        {
-          role: 'assistant',
-          content: t("chatInitError"),
-        },
-      ]);
+      setGeneralChatMessages([makeAssistantMessage('chatInitError')]);
     } finally {
       setInitializing(false);
     }
@@ -712,15 +970,15 @@ export default function ProGlobalChat() {
     if (n === 0) return [];
     if (n === 1) {
       return [
-        { text: t("chatSuggestionSummary"), icon: '📝' },
-        { text: t("chatSuggestionTranslate"), icon: '🌐' },
-        { text: t("chatSuggestionExtract"), icon: '✂️' },
-        { text: t("chatSuggestionClear"), icon: '🧹' },
+        { text: t('chatSuggestionSummary'), icon: '📝' },
+        { text: t('chatSuggestionTranslate'), icon: '🌐' },
+        { text: t('chatSuggestionExtract'), icon: '✂️' },
+        { text: t('chatSuggestionClear'), icon: '🧹' },
       ];
     }
     return [
-      { text: t("chatSuggestionMerge"), icon: '✨' },
-      { text: t("chatSuggestionClear"), icon: '🧹' },
+      { text: t('chatSuggestionMerge'), icon: '✨' },
+      { text: t('chatSuggestionClear'), icon: '🧹' },
     ];
   }, [pdfList.length, t]);
 
@@ -733,17 +991,13 @@ export default function ProGlobalChat() {
     }
     setInput('');
 
+    const userMessage = makeRuntimeMessage('user', userMsg);
     if (isPdfChat) {
-      setPdfChatMessages((prev) => [
-        ...prev,
-        { role: 'user', content: userMsg },
-      ]);
+      setPdfChatMessages((prev) => [...prev, userMessage]);
     } else {
-      setGeneralChatMessages((prev) => [
-        ...prev,
-        { role: 'user', content: userMsg },
-      ]);
+      setGeneralChatMessages((prev) => [...prev, userMessage]);
     }
+    void translateAndCacheMessage(userMessage, isPdfChat);
     setLoading(true);
 
     try {
@@ -753,22 +1007,26 @@ export default function ProGlobalChat() {
       const res = await sendRequest(endpoint, 'POST', {
         session_id: activeSessionId,
         message: userMsg,
+        message_payload: {
+          id: userMessage.id,
+          sourceLanguage: userMessage.sourceLanguage,
+          translations: userMessage.translations,
+        },
         language: language, // Mevcut dili gönder (TR/EN)
       });
+      const assistantMessage = makeRuntimeMessage(
+        'assistant',
+        String(res.answer ?? '')
+      );
       if (isPdfChat) {
-        setPdfChatMessages((prev) => [
-          ...prev,
-          { role: 'assistant', content: res.answer },
-        ]);
+        setPdfChatMessages((prev) => [...prev, assistantMessage]);
         await applyClientActions(res.client_actions);
         void loadChatSessions();
       } else {
-        setGeneralChatMessages((prev) => [
-          ...prev,
-          { role: 'assistant', content: res.answer },
-        ]);
+        setGeneralChatMessages((prev) => [...prev, assistantMessage]);
         await applyClientActions(res.client_actions);
       }
+      enqueueAssistantTranslation(assistantMessage, isPdfChat);
 
       // Bildirim sesi çal (Peş peşe 2 defa)
       const playNotify = () => {
@@ -792,16 +1050,15 @@ export default function ProGlobalChat() {
         errorMessage.includes('Quota exceeded') ||
         errorMessage.includes('Gemini API')
       ) {
-        const errorMsg = t("chatErrorQuotaExceeded");
         if (isPdfChat) {
           setPdfChatMessages((prev) => [
             ...prev,
-            { role: 'assistant', content: errorMsg },
+            makeAssistantMessage('chatErrorQuotaExceeded'),
           ]);
         } else {
           setGeneralChatMessages((prev) => [
             ...prev,
-            { role: 'assistant', content: errorMsg },
+            makeAssistantMessage('chatErrorQuotaExceeded'),
           ]);
         }
         setLoading(false);
@@ -814,10 +1071,9 @@ export default function ProGlobalChat() {
         errorMessage.includes('session')
       ) {
         if (isPdfChat) {
-          const errorMsg = t("chatErrorSessionExpired");
           setPdfChatMessages((prev) => [
             ...prev,
-            { role: 'assistant', content: errorMsg },
+            makeAssistantMessage('chatErrorSessionExpired'),
           ]);
         } else {
           try {
@@ -834,14 +1090,21 @@ export default function ProGlobalChat() {
                 {
                   session_id: res.session_id,
                   message: userMsg,
+                  message_payload: {
+                    id: userMessage.id,
+                    sourceLanguage: userMessage.sourceLanguage,
+                    translations: userMessage.translations,
+                  },
                   language: language,
                 }
               );
-              setGeneralChatMessages((prev) => [
-                ...prev,
-                { role: 'assistant', content: retryRes.answer },
-              ]);
+              const retryAssistant = makeRuntimeMessage(
+                'assistant',
+                String(retryRes.answer ?? '')
+              );
+              setGeneralChatMessages((prev) => [...prev, retryAssistant]);
               await applyClientActions(retryRes.client_actions);
+              enqueueAssistantTranslation(retryAssistant, false);
 
               // Bildirim sesi çal (Retry sonrası da 2 defa)
               const playNotify = () => {
@@ -852,30 +1115,26 @@ export default function ProGlobalChat() {
               playNotify();
               setTimeout(playNotify, 600);
             } else {
-              throw new Error(t("chatInitError"));
+              throw new Error(t('chatInitError'));
             }
           } catch (retryError) {
             console.error('Session yenileme hatası:', retryError);
             setGeneralChatMessages((prev) => [
               ...prev,
-              {
-                role: 'assistant',
-                content: t("chatErrorSessionRefresh"),
-              },
+              makeAssistantMessage('chatErrorSessionRefresh'),
             ]);
           }
         }
       } else {
-        const errorMsg = t("chatErrorConnection");
         if (isPdfChat) {
           setPdfChatMessages((prev) => [
             ...prev,
-            { role: 'assistant', content: errorMsg },
+            makeAssistantMessage('chatErrorConnection'),
           ]);
         } else {
           setGeneralChatMessages((prev) => [
             ...prev,
-            { role: 'assistant', content: errorMsg },
+            makeAssistantMessage('chatErrorConnection'),
           ]);
         }
       }
@@ -924,7 +1183,8 @@ export default function ProGlobalChat() {
               whileTap={{ scale: 0.9 }}
               onClick={handleFabClick}
               className="p-2 rounded-full group relative flex items-center justify-center bg-transparent hover:bg-[var(--container-bg)]/50 transition-colors border-0 shadow-none"
-              aria-label={t("navDocuments")}
+              aria-label={t('navDocuments')}
+              data-testid="global-chat-fab"
             >
               <div className="relative z-10">
                 <Image
@@ -965,10 +1225,10 @@ export default function ProGlobalChat() {
                 className="font-bold text-lg mb-2"
                 style={{ color: 'var(--foreground)' }}
               >
-                {t("chatProRequiredTitle")}
+                {t('chatProRequiredTitle')}
               </h3>
               <p className="text-sm opacity-80 mb-6">
-                {t("chatProRequiredDesc")}
+                {t('chatProRequiredDesc')}
               </p>
               <div className="flex gap-3">
                 <button
@@ -980,7 +1240,7 @@ export default function ProGlobalChat() {
                     color: 'var(--foreground)',
                   }}
                 >
-                  {t("chatClose")}
+                  {t('chatClose')}
                 </button>
                 <button
                   type="button"
@@ -990,7 +1250,7 @@ export default function ProGlobalChat() {
                   }}
                   className="flex-1 py-2.5 px-4 rounded-xl font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
                 >
-                  {t("chatGoToPricing")}
+                  {t('chatGoToPricing')}
                 </button>
               </div>
             </motion.div>
@@ -1003,7 +1263,7 @@ export default function ProGlobalChat() {
         <ProChatPanel
           isOpen={proChatPanelOpen}
           onClose={() => setProChatPanelOpen(false)}
-          messages={activeChatMessages}
+          messages={displayChatMessages}
           onSend={handleSend}
           onFileUpload={handleFileUpload}
           loading={loading}
@@ -1018,15 +1278,15 @@ export default function ProGlobalChat() {
           headerSubtitle={
             isPdfChat
               ? pdfFile?.name
-                ? t("chatHeaderAnalysis").replace("{name}", pdfFile.name)
-                : t("chatHeaderPdf")
-              : t("chatHeaderGeneral")
+                ? t('chatHeaderAnalysis').replace('{name}', pdfFile.name)
+                : t('chatHeaderPdf')
+              : t('chatHeaderGeneral')
           }
           avatarSrc={avatarSrc}
           userName={session?.user?.name ?? 'U'}
           placeholder={t('chatPlaceholder')}
           disclaimer={t('chatDisclaimer')}
-          initializingLabel={t("chatInitializing")}
+          initializingLabel={t('chatInitializing')}
           typingLabel={t('aiTyping')}
           isRecording={isRecording}
           onVoiceToggle={handleVoiceToggle}

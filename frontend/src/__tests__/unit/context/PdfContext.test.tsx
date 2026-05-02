@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
+import type { Session } from 'next-auth';
 import { SessionProvider } from 'next-auth/react';
 
 vi.mock('@/utils/api', async (importOriginal) => {
@@ -46,7 +47,7 @@ function AuthTestProviders({ children }: { children: React.ReactNode }) {
         {
           user: { name: 'Auth User', email: 'a@b.com' },
           expires: '2099-12-31',
-        } as any
+        } as Session
       }
     >
       <PdfProvider>{children}</PdfProvider>
@@ -76,7 +77,7 @@ Object.defineProperty(window, 'sessionStorage', {
 });
 
 // Helper function to create a mock PDF File
-function createMockPdfFile(name = 'test.pdf', size = 1024): File {
+function createMockPdfFile(name = 'test.pdf'): File {
   const blob = new Blob(['mock pdf content'], { type: 'application/pdf' });
   return new File([blob], name, { type: 'application/pdf' });
 }
@@ -691,7 +692,7 @@ describe('PdfContext', () => {
     it('loadChatSessions normalizes null sessions from API', async () => {
       vi.mocked(api.fetchChatSessions).mockResolvedValue({
         sessions: null,
-      } as any);
+      } as unknown as Awaited<ReturnType<typeof api.fetchChatSessions>>);
 
       const { result } = renderHook(() => usePdf(), {
         wrapper: AuthTestProviders,
@@ -741,7 +742,9 @@ describe('PdfContext', () => {
     });
 
     it('restoreSession handles API response without messages field', async () => {
-      vi.mocked(api.fetchSessionMessages).mockResolvedValue({} as any);
+      vi.mocked(api.fetchSessionMessages).mockResolvedValue(
+        {} as Awaited<ReturnType<typeof api.fetchSessionMessages>>
+      );
       vi.mocked(api.resumeChatSession).mockResolvedValue({
         session_id: 'sid',
         pdf_id: null,
@@ -822,9 +825,106 @@ describe('PdfContext', () => {
         await result.current.restoreSession('row-filter');
       });
 
-      expect(result.current.chatMessages).toEqual([
-        { role: 'assistant', content: 'keep' },
-      ]);
+      expect(result.current.chatMessages).toHaveLength(1);
+      expect(result.current.chatMessages[0]).toMatchObject({
+        role: 'assistant',
+        content: 'keep',
+      });
+    });
+
+    it('restoreSession normalizes undefined fetchSessionMessages.messages via mapIncomingMessages', async () => {
+      vi.mocked(api.fetchSessionMessages).mockResolvedValue({
+        messages: undefined,
+      } as unknown as Awaited<ReturnType<typeof api.fetchSessionMessages>>);
+      vi.mocked(api.resumeChatSession).mockResolvedValue({
+        session_id: 'sid',
+        pdf_id: null,
+        db_session_id: 'db1',
+        filename: 'doc.pdf',
+        messages: [{ role: 'user', content: 'from-resume' }],
+      });
+
+      const { result } = renderHook(() => usePdf(), {
+        wrapper: AuthTestProviders,
+      });
+
+      await act(async () => {
+        await result.current.restoreSession('row-undef-messages');
+      });
+
+      expect(result.current.chatMessages).toHaveLength(1);
+      expect(result.current.chatMessages[0]).toMatchObject({
+        role: 'user',
+        content: 'from-resume',
+      });
+    });
+
+    it('restoreSession maps invalid sourceLanguage and non-object translations to undefined', async () => {
+      vi.mocked(api.fetchSessionMessages).mockResolvedValue({
+        messages: [
+          {
+            role: 'user',
+            content: 'hi',
+            sourceLanguage: 'de' as unknown as 'tr',
+            translations: 'not-an-object' as unknown as Record<string, string>,
+          },
+        ],
+      });
+      vi.mocked(api.resumeChatSession).mockResolvedValue({
+        session_id: 'sid',
+        pdf_id: null,
+        db_session_id: 'db1',
+        filename: 'doc.pdf',
+      });
+
+      const { result } = renderHook(() => usePdf(), {
+        wrapper: AuthTestProviders,
+      });
+
+      await act(async () => {
+        await result.current.restoreSession('row-lang-branch');
+      });
+
+      expect(result.current.chatMessages[0]).toMatchObject({
+        role: 'user',
+        content: 'hi',
+        sourceLanguage: undefined,
+        translations: undefined,
+      });
+    });
+
+    it('restoreSession maps translation metadata from backend history', async () => {
+      vi.mocked(api.fetchSessionMessages).mockResolvedValue({
+        messages: [
+          {
+            role: 'assistant',
+            content: 'Merhaba',
+            id: 'msg-1',
+            sourceLanguage: 'tr',
+            translations: { tr: 'Merhaba', en: 'Hello' },
+          },
+        ],
+      });
+      vi.mocked(api.resumeChatSession).mockResolvedValue({
+        session_id: 'sid',
+        pdf_id: null,
+        db_session_id: 'db1',
+        filename: 'doc.pdf',
+      });
+
+      const { result } = renderHook(() => usePdf(), {
+        wrapper: AuthTestProviders,
+      });
+
+      await act(async () => {
+        await result.current.restoreSession('row-meta');
+      });
+
+      expect(result.current.chatMessages[0]).toMatchObject({
+        id: 'msg-1',
+        sourceLanguage: 'tr',
+        translations: { tr: 'Merhaba', en: 'Hello' },
+      });
     });
 
     it('restoreSession uses default filename when resume filename is whitespace', async () => {

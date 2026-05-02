@@ -2,20 +2,22 @@
 
 import { SessionProvider } from 'next-auth/react';
 import { Toaster } from 'sonner';
+import type { ReactPdfJsWorkerModule } from '@/types/pdfjsWorker';
 
 // PDF Worker yapılandırması - Global seviyede yap (tüm sayfalar için)
 if (typeof window !== 'undefined') {
   import('react-pdf')
     .then((mod) => {
-      const pdfjs = mod.pdfjs;
+      const pdfjs = mod.pdfjs as ReactPdfJsWorkerModule;
       // Worker yapılandırmasını her zaman doğru CDN URL'i ile set et (yanlış değer varsa override et)
       const correctWorkerSrc = '/pdf.worker.mjs';
+      const workerSrc = pdfjs.GlobalWorkerOptions.workerSrc;
       if (
-        !(pdfjs as any).GlobalWorkerOptions.workerSrc ||
-        (pdfjs as any).GlobalWorkerOptions.workerSrc === 'pdf.worker.mjs' ||
-        !(pdfjs as any).GlobalWorkerOptions.workerSrc.startsWith('http')
+        !workerSrc ||
+        workerSrc === 'pdf.worker.mjs' ||
+        !workerSrc.startsWith('http')
       ) {
-        (pdfjs as any).GlobalWorkerOptions.workerSrc = correctWorkerSrc;
+        pdfjs.GlobalWorkerOptions.workerSrc = correctWorkerSrc;
       }
     })
     .catch((err) => {

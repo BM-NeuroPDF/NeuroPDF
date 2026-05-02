@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState, useRef, useEffect } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { useDropzone, type FileRejection } from 'react-dropzone';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -14,6 +14,7 @@ import { sendRequest } from '@/utils/api';
 import { getMaxUploadBytes } from '@/app/config/fileLimits';
 import Popup from '@/components/ui/Popup';
 import { usePopup } from '@/hooks/usePopup';
+import { translations } from '@/utils/translations';
 
 const PdfViewer = dynamic(() => import('@/components/PdfViewer'), {
   ssr: false,
@@ -56,10 +57,10 @@ export default function SummarizePdfPage() {
     loadChatSessions,
   } = usePdf();
 
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const [userRole, setUserRole] = useState<string | null>(null);
 
-  const { popup, showError, showSuccess, showInfo, close } = usePopup();
+  const { popup, showError, close } = usePopup();
 
   const [file, setFile] = useState<File | null>(null);
   const [summary, setSummary] = useState<string>('');
@@ -100,30 +101,33 @@ export default function SummarizePdfPage() {
       .catch(() => setUserRole(null));
   }, [status, session]);
 
-  const clearError = () => {
+  const clearError = useCallback(() => {
     setErrorType('NONE');
     setCustomErrorMsg(null);
-  };
+  }, []);
 
-  const resetAudio = () => {
+  const resetAudio = useCallback(() => {
     setAudioUrl(null);
     setAudioBlob(null);
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
-  };
+  }, []);
 
-  const resetState = (f: File) => {
-    setFile(f);
-    savePdf(f);
-    setSummary('');
-    clearError();
-    resetAudio();
-  };
+  const resetState = useCallback(
+    (f: File) => {
+      setFile(f);
+      savePdf(f);
+      setSummary('');
+      clearError();
+      resetAudio();
+    },
+    [savePdf, clearError, resetAudio]
+  );
 
   // --- DROPZONE AYARLARI ---
   const onDrop = useCallback(
-    (acceptedFiles: File[], fileRejections: any[]) => {
+    (acceptedFiles: File[], fileRejections: FileRejection[]) => {
       clearError();
 
       // Hata Kontrolü
@@ -160,8 +164,8 @@ export default function SummarizePdfPage() {
         resetState(f);
       }
     },
-    [maxBytes]
-  ); // t bağımlılığına gerek yok
+    [maxBytes, resetState, clearError]
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -291,7 +295,7 @@ export default function SummarizePdfPage() {
       } else {
         throw new Error('Özet alınamadı.');
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('PDF Özetleme Hatası:', e);
       setErrorType('SUMMARY_ERROR'); // Genel özet hatası
       setSummarizing(false); // ✅ Hata durumunda da durumu güncelle
@@ -317,7 +321,7 @@ export default function SummarizePdfPage() {
       setAudioBlob(resultBlob);
       const objectUrl = window.URL.createObjectURL(resultBlob);
       setAudioUrl(objectUrl);
-    } catch (e: any) {
+    } catch {
       setErrorType('AUDIO_ERROR');
     } finally {
       setAudioLoading(false);
@@ -354,7 +358,7 @@ export default function SummarizePdfPage() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-    } catch (e: any) {
+    } catch {
       setErrorType('PDF_GEN_ERROR');
     }
   };
@@ -435,7 +439,7 @@ export default function SummarizePdfPage() {
     if (currentError) {
       showError(currentError);
     }
-  }, [currentError]);
+  }, [currentError, showError]);
 
   return (
     <main className="min-h-screen p-6 max-w-4xl mx-auto font-bold text-[var(--foreground)] relative">
@@ -734,8 +738,10 @@ export default function SummarizePdfPage() {
                     />
                   </svg>
                   {isProUser
-                    ? (t as any)('chatButton') || 'Sohbet Et'
-                    : (t as any)('upgradeToChat') || "Sohbet için Pro'ya geç"}
+                    ? t('chatButton' as keyof typeof translations.tr) ||
+                      'Sohbet Et'
+                    : t('upgradeToChat' as keyof typeof translations.tr) ||
+                      "Sohbet için Pro'ya geç"}
                 </button>
               )}
 

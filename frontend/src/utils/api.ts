@@ -1,4 +1,5 @@
 import { getSession, signOut } from 'next-auth/react';
+import type { Session } from 'next-auth';
 
 const TEMP_DB_ERROR_MESSAGE =
   'Veritabanı bağlantısı geçici olarak sağlanamadı. Lütfen birkaç saniye sonra tekrar deneyin.';
@@ -44,10 +45,33 @@ const handleTokenExpired = async () => {
   }
 };
 
+/** JSON body for non-multipart requests */
+export type SendRequestJsonBody = Record<string, unknown>;
+
+function readSessionBearerToken(session: Session | null): string | null {
+  if (!session) return null;
+  return (
+    session.accessToken ??
+    session.apiToken ??
+    session.user?.accessToken ??
+    session.user?.apiToken ??
+    null
+  );
+}
+
+function isFastApiValidationItem(v: unknown): v is { msg: string } {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    'msg' in v &&
+    typeof (v as { msg: unknown }).msg === 'string'
+  );
+}
+
 export const sendRequest = async (
   endpoint: string,
   method: string = 'GET',
-  body: any = null,
+  body: FormData | SendRequestJsonBody | null = null,
   isFileUpload: boolean = false
 ) => {
   const baseUrl = resolveBaseUrl();
@@ -60,6 +84,8 @@ export const sendRequest = async (
       return '/api/proxy/chat/general/start';
     if (endpoint === '/files/chat/general/message')
       return '/api/proxy/chat/general/message';
+    if (endpoint === '/files/chat/translate-message')
+      return '/api/proxy/chat/translate-message';
     if (endpoint === '/files/chat/sessions') return '/api/proxy/chat/sessions';
     if (endpoint.startsWith('/files/chat/sessions/')) {
       return endpoint.replace(
@@ -73,14 +99,7 @@ export const sendRequest = async (
   // 1. KRİTİK ADIM: Token'ı Session'dan (Cookie'den) Çek
   // getSession() fonksiyonu NextAuth cookie'sini çözer ve veriyi getirir.
   const session = await getSession();
-
-  // Farklı NextAuth callback sürümlerinden gelen token alanlarını destekle.
-  const token =
-    (session as any)?.accessToken ??
-    (session as any)?.apiToken ??
-    (session as any)?.user?.accessToken ??
-    (session as any)?.user?.apiToken ??
-    null;
+  const token = readSessionBearerToken(session);
 
   // Misafir ID (Hala LocalStorage'da durur, bu doğru)
   const guestId =
@@ -111,15 +130,10 @@ export const sendRequest = async (
   };
 
   if (body) {
-    config.body = isFileUpload ? body : JSON.stringify(body);
+    config.body = isFileUpload
+      ? (body as FormData)
+      : JSON.stringify(body as SendRequestJsonBody);
   }
-
-  console.log(`🔵 API Request: ${method} ${normalizedEndpoint}`, {
-    method: config.method,
-    headers: config.headers,
-    bodyType: isFileUpload ? 'FormData' : 'JSON',
-    hasBody: !!config.body,
-  });
 
   try {
     // Proxy rotası kullanılıyorsa baseUrl'i zorla boşalt (relative fetch)
@@ -144,13 +158,18 @@ export const sendRequest = async (
         throw new Error(TEMP_DB_ERROR_MESSAGE);
       }
 
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = (await response.json().catch(() => ({}))) as {
+        detail?: unknown;
+      };
 
       let errorMessage = `Hata: ${response.status}`;
-      if (errorData.detail) {
+      if (errorData.detail !== undefined && errorData.detail !== null) {
         if (Array.isArray(errorData.detail)) {
           // FastAPI Validator Error Array (422)
-          errorMessage = errorData.detail.map((err: any) => err.msg).join(', ');
+          errorMessage = errorData.detail
+            .filter(isFastApiValidationItem)
+            .map((err) => err.msg)
+            .join(', ');
         } else if (typeof errorData.detail === 'string') {
           errorMessage = errorData.detail;
         } else {
@@ -229,6 +248,9 @@ export async function fetchSessionMessages(sessionDbId: string): Promise<{
   messages: Array<{
     role: string;
     content: string;
+    id?: string | null;
+    sourceLanguage?: 'tr' | 'en' | null;
+    translations?: Record<string, string> | null;
     created_at?: string | null;
   }>;
 }> {
@@ -240,6 +262,14 @@ export async function resumeChatSession(sessionDbId: string): Promise<{
   pdf_id: string | null;
   db_session_id: string;
   filename?: string;
+  messages?: Array<{
+    role: string;
+    content: string;
+    id?: string | null;
+    sourceLanguage?: 'tr' | 'en' | null;
+    translations?: Record<string, string> | null;
+    created_at?: string | null;
+  }>;
 }> {
   return sendRequest(`/files/chat/sessions/${sessionDbId}/resume`, 'POST');
 }

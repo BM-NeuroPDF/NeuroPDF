@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useSession, signOut } from 'next-auth/react'; // signOut eklendi
 import { useLanguage } from '@/context/LanguageContext';
 import { resolveApiBaseUrl } from '@/utils/api';
@@ -15,6 +15,18 @@ export default function EulaGuard({ children }: { children: React.ReactNode }) {
   const [hasScrolled, setHasScrolled] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const fetchEulaText = useCallback(async () => {
+    try {
+      const apiUrl = resolveApiBaseUrl();
+      const res = await fetch(`${apiUrl}/auth/eula?lang=${language}`);
+      if (!res.ok) throw new Error(`EULA fetch failed: ${res.status}`);
+      const text = await res.text();
+      setEulaContent(text);
+    } catch {
+      setEulaContent('Error loading agreement.');
+    }
+  }, [language]);
+
   // 1. Session Kontrolü
   useEffect(() => {
     if (status === 'authenticated' && session?.user) {
@@ -24,23 +36,10 @@ export default function EulaGuard({ children }: { children: React.ReactNode }) {
       // Eğer false ise modalı aç
       if (isAccepted === false) {
         setShowModal(true);
-        fetchEulaText();
+        void fetchEulaText();
       }
     }
-  }, [status, session]);
-
-  // 2. Metni Çek
-  const fetchEulaText = async () => {
-    try {
-      const apiUrl = resolveApiBaseUrl();
-      const res = await fetch(`${apiUrl}/auth/eula?lang=${language}`);
-      if (!res.ok) throw new Error(`EULA fetch failed: ${res.status}`);
-      const text = await res.text();
-      setEulaContent(text);
-    } catch (e) {
-      setEulaContent('Error loading agreement.');
-    }
-  };
+  }, [status, session, fetchEulaText]);
 
   // 3. Sayaç
   useEffect(() => {
@@ -69,8 +68,6 @@ export default function EulaGuard({ children }: { children: React.ReactNode }) {
       // Token'ı al
       // @ts-ignore
       const token = session?.accessToken || session?.user?.accessToken;
-
-      console.log('Token:', token); // Kontrol için
 
       // TOKEN YOKSA OTOMATİK ÇIKIŞ YAP (Hata Çözümü)
       if (!token) {

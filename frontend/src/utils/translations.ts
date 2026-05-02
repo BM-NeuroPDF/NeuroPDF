@@ -10,6 +10,9 @@ export const translations = {
     navEdit: 'Sayfa Düzenle',
     navSummarize: 'PDF Özetleme',
     navDocuments: 'Belgelerim',
+    mobilePdfPanelOpen: 'Belgeler ve sohbet panelini aç',
+    mobilePdfPanelTitle: 'Belgeler ve sohbetler',
+    mobilePdfPanelClose: 'Paneli kapat',
 
     // --- GENEL ---
     appTitle: 'Neuro-PDF',
@@ -368,6 +371,9 @@ export const translations = {
     navEdit: 'Edit Pages',
     navSummarize: 'Summarize PDF',
     navDocuments: 'Documents',
+    mobilePdfPanelOpen: 'Open documents and chat panel',
+    mobilePdfPanelTitle: 'Documents and chats',
+    mobilePdfPanelClose: 'Close panel',
 
     // --- GENERAL ---
     appTitle: 'Neuro-PDF',

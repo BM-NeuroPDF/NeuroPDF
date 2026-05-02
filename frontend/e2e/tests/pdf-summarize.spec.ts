@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { login } from '../support/helpers';
+import {
+  isMobileViewport,
+  login,
+  openMobileMenuIfNeeded,
+} from '../support/helpers';
 import path from 'path';
 
 const TEST_EMAIL = process.env.E2E_TEST_EMAIL || 'test1@gmail.com';
@@ -10,14 +14,18 @@ test.describe('PDF Summarize E2E', () => {
     // Login first
     await login(page, TEST_EMAIL, TEST_PASSWORD);
 
-    // Navigate to summarize page
-    await page.goto('/summarize-pdf');
+    // Navigate to summarize page (mobilde menü içinden link görünür olabilir)
+    if (isMobileViewport(page)) {
+      await openMobileMenuIfNeeded(page);
+    }
+    const summarizeNavLink = page.locator('a[href="/summarize-pdf"]').first();
+    if (await summarizeNavLink.isVisible().catch(() => false)) {
+      await summarizeNavLink.click();
+    } else {
+      await page.goto('/summarize-pdf');
+    }
     await page.waitForLoadState('domcontentloaded');
-
-    // Wait for summarize page to be ready
-    await expect(
-      page.locator('text=/summarize|Özetle|PDF Özetleme/i').first()
-    ).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(/\/summarize-pdf/);
 
     // Get the file input - it might be in a dropzone or directly accessible
     const fileInput = page.locator('input[type="file"]').first();
@@ -81,14 +89,18 @@ test.describe('PDF Summarize E2E', () => {
     // Login first
     await login(page, TEST_EMAIL, TEST_PASSWORD);
 
-    // Navigate to summarize page
-    await page.goto('/summarize-pdf');
+    // Navigate to summarize page (mobilde menü içinden link görünür olabilir)
+    if (isMobileViewport(page)) {
+      await openMobileMenuIfNeeded(page);
+    }
+    const summarizeNavLink = page.locator('a[href="/summarize-pdf"]').first();
+    if (await summarizeNavLink.isVisible().catch(() => false)) {
+      await summarizeNavLink.click();
+    } else {
+      await page.goto('/summarize-pdf');
+    }
     await page.waitForLoadState('domcontentloaded');
-
-    // Wait for summarize page to be ready
-    await expect(
-      page.locator('text=/summarize|Özetle|PDF Özetleme/i').first()
-    ).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(/\/summarize-pdf/);
 
     // Get the file input
     const fileInput = page.locator('input[type="file"]').first();

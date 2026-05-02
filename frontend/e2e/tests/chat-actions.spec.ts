@@ -1,5 +1,9 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
-import { login } from '../support/helpers';
+import {
+  isMobileViewport,
+  login,
+  openMobileMenuIfNeeded,
+} from '../support/helpers';
 import { proUser, standardUser } from '../fixtures/test-data';
 import path from 'path';
 import fs from 'fs';
@@ -93,12 +97,22 @@ async function waitForPdfChatSessionStarted(page: Page) {
  * Ağ seviyesinde LLM beklenmez; yalnızca chat message mock'lanır.
  */
 async function openGlobalChatFab(page: Page) {
-  // Global Chat (FAB) butonuna tıkla ve paneli aç.
-  const fabButton = page
-    .getByRole('button', { name: /AI Asistanı|Neuro AI/i })
-    .first();
-  await expect(fabButton).toBeVisible({ timeout: 15_000 });
-  await fabButton.click();
+  if (isMobileViewport(page)) {
+    // Mobilde kullanıcı önce menüyü açabilir; ardından gerçek chat tetikleyicisine basar.
+    await openMobileMenuIfNeeded(page);
+    const mobileChatTrigger = page
+      .getByRole('button', { name: /Belgelerim|Documents/i })
+      .or(page.locator('button:has(img[alt="AI Chat"])').first());
+    await expect(mobileChatTrigger).toBeVisible({ timeout: 15_000 });
+    await page.waitForTimeout(1000);
+    await mobileChatTrigger.click({ force: true });
+    return;
+  }
+
+  const desktopFab = page.getByTestId('global-chat-fab');
+  await expect(desktopFab).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(1000);
+  await desktopFab.click();
 }
 
 async function waitForProcessingToSettle(page: Page) {

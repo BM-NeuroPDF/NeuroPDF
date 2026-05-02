@@ -3,11 +3,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 describe('guestService', () => {
   const originalFetch = global.fetch;
   const originalWindow = global.window;
+  let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
-    global.fetch = vi.fn();
+    fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
   });
 
   afterEach(() => {
@@ -24,7 +26,7 @@ describe('guestService', () => {
   });
 
   it('createSession stores guest_id on success', async () => {
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({
         guest_id: 'new-guest',
@@ -40,7 +42,7 @@ describe('guestService', () => {
   });
 
   it('createSession throws when response not ok', async () => {
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 500,
       text: async () => 'err',
@@ -52,7 +54,7 @@ describe('guestService', () => {
   });
 
   it('getGuestId creates session when missing', async () => {
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({
         guest_id: 'auto',
@@ -66,9 +68,17 @@ describe('guestService', () => {
     expect(id).toBe('auto');
   });
 
+  it('getGuestId uses localStorage without creating session', async () => {
+    localStorage.setItem('guest_id', 'from-storage');
+    const { guestService } = await import('../guestService');
+    const id = await guestService.getGuestId();
+    expect(id).toBe('from-storage');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('checkUsage returns JSON on success', async () => {
     localStorage.setItem('guest_id', 'g-check');
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({
         can_use: true,
@@ -85,7 +95,7 @@ describe('guestService', () => {
 
   it('checkUsage throws when not ok', async () => {
     localStorage.setItem('guest_id', 'g1');
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 400,
       text: async () => 'bad',
@@ -99,7 +109,7 @@ describe('guestService', () => {
 
   it('incrementUsage throws on error body', async () => {
     localStorage.setItem('guest_id', 'g1');
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       json: async () => ({ detail: 'limit' }),
     });
@@ -110,7 +120,7 @@ describe('guestService', () => {
 
   it('incrementUsage falls back when response not ok and detail missing', async () => {
     localStorage.setItem('guest_id', 'g1');
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 429,
       json: async () => ({}),
@@ -124,7 +134,7 @@ describe('guestService', () => {
 
   it('incrementUsage returns on success', async () => {
     localStorage.setItem('guest_id', 'g1');
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({
         can_use: true,
@@ -141,7 +151,7 @@ describe('guestService', () => {
 
   it('clearSession clears local state', async () => {
     localStorage.setItem('guest_id', 'g-clear');
-    (global.fetch as any).mockResolvedValue({ ok: true });
+    fetchMock.mockResolvedValue({ ok: true });
     const { guestService } = await import('../guestService');
     guestService.initializeGuestId();
     await guestService.clearSession();
@@ -164,7 +174,7 @@ describe('guestService', () => {
     const prev = process.env.NEXT_PUBLIC_API_URL;
     delete process.env.NEXT_PUBLIC_API_URL;
     vi.resetModules();
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({
         guest_id: 'from-default-base',
@@ -203,7 +213,7 @@ describe('guestService', () => {
 
   it('clearSession swallows fetch errors', async () => {
     localStorage.setItem('guest_id', 'g-err');
-    (global.fetch as any).mockRejectedValue(new Error('network'));
+    fetchMock.mockRejectedValue(new Error('network'));
     const { guestService } = await import('../guestService');
     guestService.initializeGuestId();
     await expect(guestService.clearSession()).resolves.toBeUndefined();

@@ -1,13 +1,34 @@
-import { DefaultSession } from "next-auth";
+import { DefaultSession } from 'next-auth';
 
-declare module "next-auth" {
+declare module 'next-auth' {
   /**
    * Returned by `useSession`, `getSession` and received as a prop on the `SessionProvider` React Context
    */
   interface Session {
-    // Add your custom property here
+    accessToken?: string;
     apiToken?: string;
-    // And extend the user object to match your session callback
-    user: DefaultSession["user"] & { id?: string };
+    userId?: string;
+    /** Set via `update({ eula_accepted })` from the client */
+    eula_accepted?: boolean;
+    user: DefaultSession['user'] & {
+      id?: string;
+      eula_accepted?: boolean;
+      accessToken?: string;
+      apiToken?: string;
+    };
+  }
+
+  interface User {
+    accessToken?: string;
+    eula_accepted?: boolean;
+  }
+}
+
+declare module 'next-auth/jwt' {
+  interface JWT {
+    accessToken?: string;
+    apiToken?: string;
+    userId?: string;
+    eula_accepted?: boolean;
   }
 }

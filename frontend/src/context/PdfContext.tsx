@@ -12,6 +12,7 @@ import {
 } from 'react';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
+import type { Language } from '@/utils/translations';
 import {
   fetchChatSessions,
   fetchSessionMessages,
@@ -23,8 +24,13 @@ import {
 const STORAGE_KEY = 'activePdfBase64';
 
 export type Message = {
+  id?: string;
   role: 'user' | 'assistant';
   content: string;
+  i18nKey?: string;
+  i18nParams?: Record<string, string>;
+  sourceLanguage?: Language;
+  translations?: Partial<Record<Language, string>>;
 };
 
 type PdfCoreState = {
@@ -238,26 +244,55 @@ export function PdfProvider({ children }: { children: ReactNode }) {
   const restoreSession = useCallback(
     async (sessionDbId: string) => {
       try {
+        const mapIncomingMessages = (
+          sourceMessages:
+            | Array<{
+                role: string;
+                content: string;
+                id?: string | null;
+                sourceLanguage?: 'tr' | 'en' | null;
+                translations?: Record<string, string> | null;
+              }>
+            | undefined
+            | null
+        ): Message[] =>
+          (sourceMessages ?? [])
+            .filter(
+              (m) =>
+                (m.role === 'user' || m.role === 'assistant') &&
+                m.content != null
+            )
+            .map((m) => ({
+              id:
+                m.id ??
+                `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              role: m.role as 'user' | 'assistant',
+              content: String(m.content),
+              sourceLanguage:
+                m.sourceLanguage === 'en' || m.sourceLanguage === 'tr'
+                  ? m.sourceLanguage
+                  : undefined,
+              translations:
+                m.translations && typeof m.translations === 'object'
+                  ? (m.translations as Partial<Record<Language, string>>)
+                  : undefined,
+            }));
+
         const { messages } = await fetchSessionMessages(sessionDbId);
-        const ui: Message[] = (messages ?? [])
-          .filter(
-            (m) =>
-              (m.role === 'user' || m.role === 'assistant') && m.content != null
-          )
-          .map((m) => ({
-            role: m.role as 'user' | 'assistant',
-            content: String(m.content),
-          }));
-
         const resume = await resumeChatSession(sessionDbId);
+        const ui = mapIncomingMessages(messages);
+        const resumeUi = mapIncomingMessages(resume.messages);
 
-        let chatUi = ui;
+        let chatUi = ui.length > 0 ? ui : resumeUi;
         if (chatUi.length === 0) {
           const fn = resume.filename?.trim() || 'document.pdf';
           chatUi = [
             {
+              id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
               role: 'assistant',
               content: `WELCOME_PDF:${fn}`, // Use a signal format that ProGlobalChat will parse
+              sourceLanguage: 'tr',
+              translations: { tr: `WELCOME_PDF:${fn}` },
             },
           ];
         }

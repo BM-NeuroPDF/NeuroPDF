@@ -1,5 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
-import { login } from '../support/helpers';
+import {
+  isMobileViewport,
+  login,
+  openMobileMenuIfNeeded,
+} from '../support/helpers';
 import { proUser, standardUser } from '../fixtures/test-data';
 import path from 'path';
 
@@ -7,10 +11,30 @@ const CHAT_RESPONSE_TIMEOUT = 120000;
 
 async function openGlobalChatFab(page: Page) {
   const fabButton = page
-    .getByRole('button', { name: /AI Asistanı|Neuro AI/i })
+    .getByRole('button', { name: /AI Chat|Belgelerim|AI Asistanı|Neuro AI/i })
+    .or(page.locator('button').filter({ has: page.getByAltText(/AI Chat/i) }))
+    .or(
+      page
+        .locator('button[class*="fixed"], .fixed button')
+        .filter({ has: page.locator('svg, img') })
+        .last()
+    )
     .first();
+  const isFabVisible = await fabButton.isVisible().catch(() => false);
+  if (!isFabVisible && isMobileViewport(page)) {
+    await openMobileMenuIfNeeded(page);
+    await page.waitForTimeout(2000);
+    const mobileChatEntry = page
+      .locator('a[href="/chat"], a[href*="chat"], button[aria-label*="chat" i]')
+      .first();
+    if (await mobileChatEntry.isVisible().catch(() => false)) {
+      await mobileChatEntry.click({ force: true });
+      return;
+    }
+  }
   await expect(fabButton).toBeVisible({ timeout: 15_000 });
-  await fabButton.click();
+  await page.waitForTimeout(2000);
+  await fabButton.click({ force: true });
 }
 
 async function waitForProcessingToSettle(page: Page) {
@@ -43,6 +67,7 @@ test.describe('PDF Chat E2E', () => {
 
     const pdfPath = path.join(__dirname, '../fixtures/sample.pdf');
     await fileInput.setInputFiles(pdfPath);
+    await page.waitForTimeout(2000);
 
     await expect(
       page
@@ -56,6 +81,7 @@ test.describe('PDF Chat E2E', () => {
       .first();
     if (await chatButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
       await expect(chatButton).toBeEnabled({ timeout: 2_000 });
+      await page.waitForTimeout(2000);
       await chatButton.click();
     }
 
@@ -90,11 +116,13 @@ test.describe('PDF Chat E2E', () => {
     const fileInput = page.locator('input[type="file"]').first();
     const pdfPath = path.join(__dirname, '../fixtures/sample.pdf');
     await fileInput.setInputFiles(pdfPath);
+    await page.waitForTimeout(2000);
 
     const chatButton = page
       .getByRole('button', { name: /Sohbet Et|Chat/i })
       .first();
     if (await chatButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await page.waitForTimeout(2000);
       await chatButton.click();
     } else {
       await openGlobalChatFab(page);

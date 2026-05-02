@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState, useMemo } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { useDropzone, type FileRejection } from 'react-dropzone';
 import { useSession } from 'next-auth/react';
 import dynamic from 'next/dynamic';
 import { guestService } from '@/services/guestService';
@@ -66,7 +66,7 @@ export default function ExtractPdfPage() {
   };
 
   const onDrop = useCallback(
-    (acceptedFiles: File[], fileRejections: any[]) => {
+    (acceptedFiles: File[], fileRejections: FileRejection[]) => {
       clearError();
 
       if (fileRejections.length > 0) {
@@ -224,10 +224,10 @@ export default function ExtractPdfPage() {
           console.error('Counter could not be updated:', limitError);
         }
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Page Extraction Error:', e);
       setErrorType('EXTRACT_ERROR');
-      if (e?.message) setCustomErrorMsg(e.message);
+      if (e instanceof Error) setCustomErrorMsg(e.message);
     } finally {
       setExtracting(false);
     }
@@ -271,7 +271,7 @@ export default function ExtractPdfPage() {
 
       alert(`${t('saveSuccess')}\n${t('fileSize')}: ${result.size_kb} KB`);
       savePdf(fileToSave);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Save Error:', e);
       setErrorType('SAVE_ERROR');
     } finally {

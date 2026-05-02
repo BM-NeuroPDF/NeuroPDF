@@ -35,6 +35,9 @@ export default defineConfig({
         'src/app/api/**',
         /** NextAuth yapılandırması (sunucu tarafı) */
         '**/auth.config.ts',
+        /** Yalnızca runtime’da silinen tip yardımcıları (import ile kullanılır) */
+        'src/types/pdfjsWorker.ts',
+        'src/types/speechRecognition.ts',
         /** App Router sayfa bileşenleri — E2E ve entegrasyon testleriyle doğrulanır */
         'src/app/**/page.tsx',
         /** Kök sağlayıcı sarmalayıcı */
@@ -45,6 +48,7 @@ export default defineConfig({
          */
         'src/components/ProGlobalChat.tsx',
         'src/components/ClientPdfPanel.tsx',
+        'src/components/ResponsivePdfPanel.tsx',
         'src/components/auth/EulaGuard.tsx',
         /** Test dosyaları kapsama dahil edilmez */
         '**/__tests__/**',

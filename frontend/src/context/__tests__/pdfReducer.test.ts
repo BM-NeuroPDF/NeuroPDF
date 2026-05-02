@@ -37,7 +37,9 @@ describe('pdfReducer', () => {
   });
 
   it('handles unknown action type', () => {
-    const next = pdfReducer(initial, { type: 'UNKNOWN' } as any);
+    const next = pdfReducer(initial, {
+      type: 'UNKNOWN',
+    } as unknown as Parameters<typeof pdfReducer>[1]);
     expect(next).toBe(initial);
   });
 

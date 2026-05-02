@@ -82,17 +82,29 @@ def append_chat_turn(
     user_id: str,
     user_message: str,
     assistant_message: str,
+    user_metadata: Optional[dict] = None,
+    assistant_metadata: Optional[dict] = None,
 ) -> None:
     session = get_chat_session_by_ai_id(db, ai_session_id, user_id)
     if not session:
-        logger.debug("No pdf_chat_session for ai_session_id=%s user=%s", ai_session_id, user_id)
+        logger.debug(
+            "No pdf_chat_session for ai_session_id=%s user=%s", ai_session_id, user_id
+        )
         return
     db.add(
-        PdfChatMessage(session_id=session.id, role="user", content=user_message)
+        PdfChatMessage(
+            session_id=session.id,
+            role="user",
+            content=user_message,
+            metadata_json=user_metadata or None,
+        )
     )
     db.add(
         PdfChatMessage(
-            session_id=session.id, role="assistant", content=assistant_message
+            session_id=session.id,
+            role="assistant",
+            content=assistant_message,
+            metadata_json=assistant_metadata or None,
         )
     )
     session.updated_at = datetime.now(timezone.utc)

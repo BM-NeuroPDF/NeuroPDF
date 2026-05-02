@@ -2,9 +2,10 @@
 Integration tests for aiService analysis router endpoints.
 FastAPI TestClient ile tüm endpointler simüle edilerek test edilir.
 """
+
 import pytest
 import io
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -131,12 +132,17 @@ class TestChatEndpoint:
             "mode": "flash",
         }
 
-        with patch("app.services.ai_service._PDF_CHAT_SESSIONS", {"valid-session-id": mock_session}), \
-             patch("app.services.ai_service._cleanup_sessions"), \
-             patch(
+        with (
+            patch(
+                "app.services.ai_service._PDF_CHAT_SESSIONS",
+                {"valid-session-id": mock_session},
+            ),
+            patch("app.services.ai_service._cleanup_sessions"),
+            patch(
                 "app.routers.analysis.chat_over_pdf",
                 return_value=("Test AI response", []),
-            ):
+            ),
+        ):
             response = client.post(
                 "/api/v1/ai/chat",
                 json={"session_id": "valid-session-id", "message": "Özetle"},
@@ -166,7 +172,9 @@ class TestRestorePdfChatSession:
         assert response.status_code == 401
 
     def test_restore_session_ok(self, client):
-        with patch("app.services.ai_service.restore_pdf_chat_session", return_value="sid-1"):
+        with patch(
+            "app.services.ai_service.restore_pdf_chat_session", return_value="sid-1"
+        ):
             response = client.post(
                 "/api/v1/ai/chat/restore-session",
                 json={
@@ -209,3 +217,80 @@ class TestTTSEndpoint:
                 headers=HEADERS,
             )
         assert response.status_code == 500
+
+
+class TestTranslateTextEndpoint:
+    def test_translate_text_same_language_short_circuit(self, client):
+        response = client.post(
+            "/api/v1/ai/translate-text",
+            json={
+                "text": "Merhaba",
+                "source_language": "tr",
+                "target_language": "tr",
+            },
+            headers=HEADERS,
+        )
+        assert response.status_code == 200
+        assert response.json()["translation"] == "Merhaba"
+
+    def test_translate_text_empty_400(self, client):
+        response = client.post(
+            "/api/v1/ai/translate-text",
+            json={
+                "text": "   ",
+                "source_language": "tr",
+                "target_language": "en",
+            },
+            headers=HEADERS,
+        )
+        assert response.status_code == 400
+
+    def test_translate_text_calls_summarize_text(self, client):
+        with patch(
+            "app.routers.analysis.summarize_text", return_value="Hello world"
+        ) as mock_translate:
+            response = client.post(
+                "/api/v1/ai/translate-text",
+                json={
+                    "text": "Merhaba dünya",
+                    "source_language": "tr",
+                    "target_language": "en",
+                    "llm_provider": "cloud",
+                    "mode": "flash",
+                },
+                headers=HEADERS,
+            )
+        assert response.status_code == 200
+        assert response.json()["translation"] == "Hello world"
+        mock_translate.assert_called_once()
+
+    def test_translate_text_rejects_unsupported_language(self, client):
+        response = client.post(
+            "/api/v1/ai/translate-text",
+            json={
+                "text": "Merhaba",
+                "source_language": "de",
+                "target_language": "en",
+            },
+            headers=HEADERS,
+        )
+        assert response.status_code == 400
+
+    def test_translate_text_builds_turkish_instruction_branch(self, client):
+        with patch(
+            "app.routers.analysis.summarize_text", return_value="Merhaba"
+        ) as mock_translate:
+            response = client.post(
+                "/api/v1/ai/translate-text",
+                json={
+                    "text": "Hello",
+                    "source_language": "en",
+                    "target_language": "tr",
+                    "llm_provider": "cloud",
+                    "mode": "flash",
+                },
+                headers=HEADERS,
+            )
+        assert response.status_code == 200
+        _, kwargs = mock_translate.call_args
+        assert "Türkçeye çevir" in kwargs["prompt_instruction"]

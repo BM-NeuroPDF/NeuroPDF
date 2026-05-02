@@ -23,6 +23,7 @@ import html
 import io
 import re
 import os
+import uuid
 
 # jwt import removed - using get_current_user dependency instead
 from sqlalchemy.orm import Session
@@ -63,6 +64,30 @@ SECURE_SERVER_ERROR_DETAIL = (
 )
 stats_repo = StatsRepository()
 user_repo = UserRepository()
+
+
+def _normalize_message_metadata(
+    raw: object,
+    *,
+    fallback_content: str,
+    fallback_language: str,
+) -> dict:
+    metadata: dict = raw.copy() if isinstance(raw, dict) else {}
+    message_id = str(metadata.get("id") or uuid.uuid4())
+    source_language = str(
+        metadata.get("sourceLanguage")
+        or metadata.get("source_language")
+        or fallback_language
+        or "tr"
+    ).lower()
+    translations_raw = metadata.get("translations")
+    translations = translations_raw if isinstance(translations_raw, dict) else {}
+    if not translations.get(source_language):
+        translations[source_language] = fallback_content
+    metadata["id"] = message_id
+    metadata["sourceLanguage"] = source_language
+    metadata["translations"] = translations
+    return metadata
 
 
 def _raise_db_unavailable(exc: Exception) -> None:
@@ -1348,12 +1373,24 @@ async def send_chat_message(
             user_id = current_user.get("sub")
             if user_id and isinstance(result, dict) and result.get("answer"):
                 try:
+                    user_meta = _normalize_message_metadata(
+                        body.get("message_payload"),
+                        fallback_content=str(message),
+                        fallback_language=language,
+                    )
+                    assistant_meta = _normalize_message_metadata(
+                        body.get("assistant_message_payload"),
+                        fallback_content=str(result["answer"]),
+                        fallback_language=language,
+                    )
                     append_chat_turn(
                         db,
                         ai_session_id=session_id,
                         user_id=user_id,
                         user_message=message,
                         assistant_message=str(result["answer"]),
+                        user_metadata=user_meta,
+                        assistant_metadata=assistant_meta,
                     )
                 except Exception as persist_err:
                     logger.warning(
@@ -1427,6 +1464,9 @@ async def get_pdf_chat_session_messages(
                 {
                     "role": m.role,
                     "content": m.content,
+                    "id": (m.metadata_json or {}).get("id"),
+                    "sourceLanguage": (m.metadata_json or {}).get("sourceLanguage"),
+                    "translations": (m.metadata_json or {}).get("translations"),
                     "created_at": m.created_at.isoformat() if m.created_at else None,
                 }
                 for m in msgs
@@ -1505,6 +1545,17 @@ async def resume_pdf_chat_session(
         "pdf_id": session.pdf_id,
         "db_session_id": session.id,
         "filename": session.filename,
+        "messages": [
+            {
+                "role": m.role,
+                "content": m.content,
+                "id": (m.metadata_json or {}).get("id"),
+                "sourceLanguage": (m.metadata_json or {}).get("sourceLanguage"),
+                "translations": (m.metadata_json or {}).get("translations"),
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in msgs
+        ],
     }
 
 
@@ -1705,6 +1756,83 @@ async def send_general_chat_message(
         raise
     except Exception as e:
         logger.error("General chat message failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
+
+
+@router.post("/chat/translate-message")
+async def translate_chat_message(
+    body: dict = Body(...),
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase),
+    db: Session = Depends(get_db),
+):
+    """
+    Chat mesajını hedef dile çevirir (UI cache için stateless yardımcı endpoint).
+    Body: { "text": "...", "source_language": "tr|en", "target_language": "tr|en" }
+    """
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Kullanıcı kimliği bulunamadı.")
+
+    if not await user_repo.is_pro_user(
+        user_id=user_id,
+        db=db,
+        supabase=supabase if settings.USE_SUPABASE else None,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Bu özellik sadece Pro kullanıcılar için kullanılabilir.",
+        )
+
+    text_value = str(body.get("text") or "").strip()
+    source_language = str(body.get("source_language") or "tr").lower()
+    target_language = str(body.get("target_language") or "tr").lower()
+
+    if not text_value:
+        raise HTTPException(status_code=400, detail="Çevrilecek metin gereklidir.")
+    if source_language not in {"tr", "en"} or target_language not in {"tr", "en"}:
+        raise HTTPException(
+            status_code=400, detail="Sadece 'tr' ve 'en' dilleri desteklenir."
+        )
+    if source_language == target_language:
+        return {"translation": text_value}
+
+    # Kullanıcının tercih ettiği provider üzerinden çeviri dene
+    llm_provider = "local"
+    if db and user_id:
+        try:
+            llm_provider = await user_repo.get_llm_provider(
+                user_id=user_id,
+                db=db,
+                supabase=None,
+            )
+        except Exception as e:
+            logger.warning("translate-message: LLM provider alınamadı: %s", e)
+
+    mode = str(body.get("mode") or "flash")
+    if llm_provider == "local":
+        mode = "flash"
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            payload = {
+                "text": text_value,
+                "source_language": source_language,
+                "target_language": target_language,
+                "llm_provider": llm_provider,
+                "mode": mode,
+            }
+            target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/translate-text"
+            headers = get_ai_service_headers()
+            response = await client.post(target_url, json=payload, headers=headers)
+            if response.status_code != 200:
+                detail = response.json().get("detail", "Çeviri başarısız.")
+                raise HTTPException(status_code=response.status_code, detail=detail)
+            return response.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("translate-message failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=SECURE_SERVER_ERROR_DETAIL)
 
 

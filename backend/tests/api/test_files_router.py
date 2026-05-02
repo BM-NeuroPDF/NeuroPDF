@@ -226,7 +226,10 @@ class TestChatEndpoints:
         assert "session_id" in data
 
     @patch("app.routers.files.httpx.AsyncClient")
-    def test_send_chat_message(self, mock_httpx_client, override_dependencies):
+    @patch("app.routers.files.append_chat_turn")
+    def test_send_chat_message(
+        self, mock_append_chat_turn, mock_httpx_client, override_dependencies
+    ):
         """Test sending chat message"""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -238,19 +241,112 @@ class TestChatEndpoints:
         )
         mock_httpx_client.return_value = mock_client_instance
 
-        payload = {"session_id": "test-session-123", "message": "Test message"}
+        payload = {
+            "session_id": "test-session-123",
+            "message": "Test message",
+            "message_payload": {
+                "id": "msg-user-1",
+                "sourceLanguage": "tr",
+                "translations": {"tr": "Test message"},
+            },
+        }
 
         response = client.post("/files/chat/message", json=payload)
 
         assert response.status_code == 200
         data = response.json()
         assert "answer" in data
+        mock_append_chat_turn.assert_called_once()
+        kwargs = mock_append_chat_turn.call_args.kwargs
+        assert kwargs["user_metadata"]["id"] == "msg-user-1"
+        assert kwargs["user_metadata"]["translations"]["tr"] == "Test message"
+        assert kwargs["assistant_metadata"]["sourceLanguage"] == "tr"
+        assert kwargs["assistant_metadata"]["translations"]["tr"] == "Test AI response"
 
     def test_send_chat_message_missing_fields(self, override_dependencies):
         """Test send chat message with missing fields"""
         payload = {"session_id": "test-session"}
         response = client.post("/files/chat/message", json=payload)
         assert response.status_code == 400
+
+    @patch("app.routers.files.get_chat_session_by_db_id")
+    @patch("app.routers.files.get_session_messages_ordered")
+    def test_get_session_messages_includes_metadata(
+        self, mock_get_messages, mock_get_session, override_dependencies
+    ):
+        mock_get_session.return_value = MagicMock(id="row-1")
+        mock_get_messages.return_value = [
+            MagicMock(
+                role="assistant",
+                content="Merhaba",
+                metadata_json={
+                    "id": "m-1",
+                    "sourceLanguage": "tr",
+                    "translations": {"tr": "Merhaba", "en": "Hello"},
+                },
+                created_at=None,
+            )
+        ]
+
+        response = client.get("/files/chat/sessions/row-1/messages")
+        assert response.status_code == 200
+        item = response.json()["messages"][0]
+        assert item["id"] == "m-1"
+        assert item["sourceLanguage"] == "tr"
+        assert item["translations"]["en"] == "Hello"
+
+    @patch("app.routers.files.httpx.AsyncClient")
+    @patch("app.routers.files.history_for_ai_restore")
+    @patch("app.routers.files.get_session_messages_ordered")
+    @patch("app.routers.files.get_chat_session_by_db_id")
+    def test_resume_session_returns_message_metadata(
+        self,
+        mock_get_session,
+        mock_get_messages,
+        mock_history_restore,
+        mock_httpx_client,
+        override_dependencies,
+    ):
+        mock_get_session.return_value = MagicMock(
+            id="row-1",
+            ai_session_id="ai-1",
+            pdf_id=None,
+            filename="doc.pdf",
+            llm_provider="cloud",
+            mode="flash",
+            context_text="pdf text",
+        )
+        mock_get_messages.return_value = [
+            MagicMock(
+                role="assistant",
+                content="Merhaba",
+                metadata_json={
+                    "id": "a-1",
+                    "sourceLanguage": "tr",
+                    "translations": {"tr": "Merhaba", "en": "Hello"},
+                },
+                created_at=None,
+            )
+        ]
+        mock_history_restore.return_value = [
+            {"role": "assistant", "content": "Merhaba"}
+        ]
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"session_id": "ai-1"}
+        mock_client_instance = AsyncMock()
+        mock_client_instance.__aenter__.return_value.post = AsyncMock(
+            return_value=mock_response
+        )
+        mock_httpx_client.return_value = mock_client_instance
+
+        response = client.post("/files/chat/sessions/row-1/resume")
+        assert response.status_code == 200
+        item = response.json()["messages"][0]
+        assert item["id"] == "a-1"
+        assert item["sourceLanguage"] == "tr"
+        assert item["translations"]["en"] == "Hello"
 
 
 # ==========================================

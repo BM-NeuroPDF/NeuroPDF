@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import NavBar from '@/components/NavBar';
@@ -38,7 +39,13 @@ vi.mock('next/navigation', () => ({
     push: mockPush,
   }),
   usePathname: vi.fn(() => '/'),
-  Link: ({ children, href, ...props }: any) => (
+  Link: ({
+    children,
+    href,
+    ...props
+  }: React.PropsWithChildren<
+    { href: string } & Omit<React.ComponentPropsWithoutRef<'a'>, 'href'>
+  >) => (
     <a href={href} {...props}>
       {children}
     </a>
@@ -66,7 +73,7 @@ describe('NavBar', () => {
       data: null,
       status: 'unauthenticated',
       update: async () => null,
-    } as any);
+    } as unknown as ReturnType<typeof useSession>);
   });
 
   describe('Initial Render', () => {
@@ -364,7 +371,7 @@ describe('NavBar', () => {
         },
         status: 'authenticated',
         update: async () => null,
-      } as any);
+      } as unknown as ReturnType<typeof useSession>);
 
       renderWithProvider(<NavBar />);
 

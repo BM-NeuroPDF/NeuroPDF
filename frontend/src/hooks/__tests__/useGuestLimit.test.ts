@@ -14,10 +14,10 @@ describe('useGuestLimit', () => {
   });
 
   it('returns true when status is authenticated without evaluating session data', async () => {
-    (useSession as any).mockReturnValue({
+    vi.mocked(useSession).mockReturnValue({
       data: null,
       status: 'authenticated',
-    });
+    } as unknown as ReturnType<typeof useSession>);
 
     const { result } = renderHook(() => useGuestLimit());
 
@@ -28,10 +28,10 @@ describe('useGuestLimit', () => {
   });
 
   it('returns true when session is set even if status is unauthenticated', async () => {
-    (useSession as any).mockReturnValue({
+    vi.mocked(useSession).mockReturnValue({
       data: { user: { id: 'edge' } },
       status: 'unauthenticated',
-    });
+    } as unknown as ReturnType<typeof useSession>);
 
     const { result } = renderHook(() => useGuestLimit());
 
@@ -42,10 +42,10 @@ describe('useGuestLimit', () => {
   });
 
   it('returns true for authenticated users', async () => {
-    (useSession as any).mockReturnValue({
+    vi.mocked(useSession).mockReturnValue({
       data: { user: { id: 'user-123' } },
       status: 'authenticated',
-    });
+    } as unknown as ReturnType<typeof useSession>);
 
     const { result } = renderHook(() => useGuestLimit());
 
@@ -56,10 +56,10 @@ describe('useGuestLimit', () => {
   });
 
   it('returns false when session is loading', async () => {
-    (useSession as any).mockReturnValue({
+    vi.mocked(useSession).mockReturnValue({
       data: null,
       status: 'loading',
-    });
+    } as unknown as ReturnType<typeof useSession>);
 
     const { result } = renderHook(() => useGuestLimit());
 
@@ -69,17 +69,17 @@ describe('useGuestLimit', () => {
   });
 
   it('clears loading after successful guest check completes', async () => {
-    (useSession as any).mockReturnValue({
+    vi.mocked(useSession).mockReturnValue({
       data: null,
       status: 'unauthenticated',
-    });
+    } as unknown as ReturnType<typeof useSession>);
     let finishCheck: (v: {
       can_use: boolean;
       usage_count: number;
       remaining_usage: number;
       message: string;
     }) => void = () => {};
-    (guestService.checkUsage as any).mockImplementation(
+    vi.mocked(guestService.checkUsage).mockImplementation(
       () =>
         new Promise((resolve) => {
           finishCheck = resolve;
@@ -111,11 +111,11 @@ describe('useGuestLimit', () => {
   });
 
   it('checks guest usage for unauthenticated users', async () => {
-    (useSession as any).mockReturnValue({
+    vi.mocked(useSession).mockReturnValue({
       data: null,
       status: 'unauthenticated',
-    });
-    (guestService.checkUsage as any).mockResolvedValue({
+    } as unknown as ReturnType<typeof useSession>);
+    vi.mocked(guestService.checkUsage).mockResolvedValue({
       can_use: true,
       usage_count: 2,
       remaining_usage: 3,
@@ -134,11 +134,11 @@ describe('useGuestLimit', () => {
   });
 
   it('shows limit modal when guest limit is reached', async () => {
-    (useSession as any).mockReturnValue({
+    vi.mocked(useSession).mockReturnValue({
       data: null,
       status: 'unauthenticated',
-    });
-    (guestService.checkUsage as any).mockResolvedValue({
+    } as unknown as ReturnType<typeof useSession>);
+    vi.mocked(guestService.checkUsage).mockResolvedValue({
       can_use: false,
       usage_count: 5,
       remaining_usage: 0,
@@ -156,11 +156,13 @@ describe('useGuestLimit', () => {
   });
 
   it('handles API errors gracefully', async () => {
-    (useSession as any).mockReturnValue({
+    vi.mocked(useSession).mockReturnValue({
       data: null,
       status: 'unauthenticated',
-    });
-    (guestService.checkUsage as any).mockRejectedValue(new Error('API Error'));
+    } as unknown as ReturnType<typeof useSession>);
+    vi.mocked(guestService.checkUsage).mockRejectedValue(
+      new Error('API Error')
+    );
 
     const { result } = renderHook(() => useGuestLimit());
 
@@ -176,10 +178,10 @@ describe('useGuestLimit', () => {
   });
 
   it('closes limit modal', () => {
-    (useSession as any).mockReturnValue({
+    vi.mocked(useSession).mockReturnValue({
       data: null,
       status: 'unauthenticated',
-    });
+    } as unknown as ReturnType<typeof useSession>);
 
     const { result } = renderHook(() => useGuestLimit());
 
@@ -189,23 +191,29 @@ describe('useGuestLimit', () => {
   });
 
   it('redirects to login page', () => {
-    (useSession as any).mockReturnValue({
+    vi.mocked(useSession).mockReturnValue({
       data: null,
       status: 'unauthenticated',
-    });
+    } as unknown as ReturnType<typeof useSession>);
 
     const { result } = renderHook(() => useGuestLimit());
 
-    // Mock window.location
     const originalLocation = window.location;
-    delete (window as any).location;
-    window.location = { href: '' } as any;
+    const locationMock = { href: '' };
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: locationMock,
+    });
 
     result.current.redirectToLogin();
 
-    expect(window.location.href).toBe('/login');
+    expect(locationMock.href).toBe('/login');
 
-    // Restore
-    (window as unknown as { location: Location }).location = originalLocation;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: originalLocation,
+    });
   });
 });

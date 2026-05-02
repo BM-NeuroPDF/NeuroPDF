@@ -265,7 +265,7 @@ describe('LanguageContext', () => {
       act(() => {
         try {
           result.current.setLanguage('en');
-        } catch (error) {
+        } catch {
           // Hata bekleniyor, devam et
         }
       });

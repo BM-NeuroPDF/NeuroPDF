@@ -25,6 +25,10 @@ vi.mock('@/context/PdfContext', () => ({
 
 import { useUnifiedPdfDrop } from '../useUnifiedPdfDrop';
 
+type UnifiedRootProps = ReturnType<
+  ReturnType<typeof useUnifiedPdfDrop>['getRootProps']
+>;
+
 describe('useUnifiedPdfDrop branch coverage (mocked dropzone)', () => {
   const onFiles = vi.fn();
 
@@ -33,16 +37,14 @@ describe('useUnifiedPdfDrop branch coverage (mocked dropzone)', () => {
   });
 
   it('calls base onDragOverCapture and survives types access throwing', () => {
-    let rootProps: ReturnType<
-      ReturnType<typeof useUnifiedPdfDrop>['getRootProps']
-    >;
+    const captured: { root?: UnifiedRootProps } = {};
     function Probe() {
       const { getRootProps } = useUnifiedPdfDrop({
         options: {},
         onFiles,
       });
-      rootProps = getRootProps();
-      return <div {...rootProps} />;
+      captured.root = getRootProps();
+      return <div {...captured.root!} />;
     }
     render(<Probe />);
 
@@ -53,23 +55,21 @@ describe('useUnifiedPdfDrop branch coverage (mocked dropzone)', () => {
           throw new Error('types boom');
         },
       },
-    } as any;
+    } as unknown as React.DragEvent<HTMLDivElement>;
 
-    expect(() => (rootProps as any).onDragOverCapture?.(e)).not.toThrow();
+    expect(() => captured.root?.onDragOverCapture?.(e)).not.toThrow();
     expect(baseOnDragOverCapture).toHaveBeenCalled();
   });
 
   it('falls back to base onDropCapture when getData throws', () => {
-    let rootProps: ReturnType<
-      ReturnType<typeof useUnifiedPdfDrop>['getRootProps']
-    >;
+    const captured: { root?: UnifiedRootProps } = {};
     function Probe() {
       const { getRootProps } = useUnifiedPdfDrop({
         options: {},
         onFiles,
       });
-      rootProps = getRootProps();
-      return <div {...rootProps} />;
+      captured.root = getRootProps();
+      return <div {...captured.root!} />;
     }
     render(<Probe />);
 
@@ -81,23 +81,21 @@ describe('useUnifiedPdfDrop branch coverage (mocked dropzone)', () => {
           throw new Error('getData boom');
         },
       },
-    } as any;
+    } as unknown as React.DragEvent<HTMLDivElement>;
 
-    (rootProps as any).onDropCapture?.(e);
+    captured.root?.onDropCapture?.(e);
     expect(baseOnDropCapture).toHaveBeenCalledWith(e);
   });
 
   it('falls back to base onDropCapture when panel flag set but no pdf to forward', () => {
-    let rootProps: ReturnType<
-      ReturnType<typeof useUnifiedPdfDrop>['getRootProps']
-    >;
+    const captured: { root?: UnifiedRootProps } = {};
     function Probe() {
       const { getRootProps } = useUnifiedPdfDrop({
         options: {},
         onFiles,
       });
-      rootProps = getRootProps();
-      return <div {...rootProps} />;
+      captured.root = getRootProps();
+      return <div {...captured.root!} />;
     }
     render(<Probe />);
 
@@ -110,44 +108,40 @@ describe('useUnifiedPdfDrop branch coverage (mocked dropzone)', () => {
             ? JSON.stringify({ name: 'missing.pdf' })
             : '',
       },
-    } as unknown as React.DragEvent;
+    } as unknown as React.DragEvent<HTMLDivElement>;
 
-    (rootProps as any).onDropCapture?.(e);
+    captured.root?.onDropCapture?.(e);
     expect(onFiles).not.toHaveBeenCalled();
     expect(baseOnDropCapture).toHaveBeenCalled();
   });
 
   it('onDragOverCapture tolerates missing dataTransfer', () => {
-    let rootProps: ReturnType<
-      ReturnType<typeof useUnifiedPdfDrop>['getRootProps']
-    >;
+    const captured: { root?: UnifiedRootProps } = {};
     function Probe() {
       const { getRootProps } = useUnifiedPdfDrop({
         options: {},
         onFiles,
       });
-      rootProps = getRootProps();
-      return <div {...rootProps} />;
+      captured.root = getRootProps();
+      return <div {...captured.root!} />;
     }
     render(<Probe />);
-    (rootProps as any).onDragOverCapture?.({
+    captured.root?.onDragOverCapture?.({
       preventDefault: vi.fn(),
       dataTransfer: undefined,
-    });
+    } as unknown as React.DragEvent<HTMLDivElement>);
     expect(baseOnDragOverCapture).toHaveBeenCalled();
   });
 
   it('invokes base onDragOverCapture before preventDefault when present', () => {
-    let rootProps: ReturnType<
-      ReturnType<typeof useUnifiedPdfDrop>['getRootProps']
-    >;
+    const captured: { root?: UnifiedRootProps } = {};
     function Probe() {
       const { getRootProps } = useUnifiedPdfDrop({
         options: {},
         onFiles,
       });
-      rootProps = getRootProps();
-      return <div {...rootProps} />;
+      captured.root = getRootProps();
+      return <div {...captured.root!} />;
     }
     render(<Probe />);
 
@@ -155,10 +149,10 @@ describe('useUnifiedPdfDrop branch coverage (mocked dropzone)', () => {
       types: ['application/x-neuro-pdf'],
       dropEffect: 'none' as string,
     };
-    (rootProps as any).onDragOverCapture?.({
+    captured.root?.onDragOverCapture?.({
       dataTransfer: dt,
       preventDefault: vi.fn(),
-    });
+    } as unknown as React.DragEvent<HTMLDivElement>);
     expect(baseOnDragOverCapture).toHaveBeenCalled();
     expect(dt.dropEffect).toBe('copy');
   });

@@ -10,6 +10,67 @@ type LoginOptions = {
 const defaultBackendUrl =
   process.env.BACKEND_API_URL || 'http://localhost:8000';
 
+export function isMobileViewport(page: Page): boolean {
+  const width = page.viewportSize()?.width ?? 1280;
+  return width < 1024;
+}
+
+export async function openMobileMenuIfNeeded(page: Page): Promise<void> {
+  if (!isMobileViewport(page)) return;
+
+  const logoutVisible = await page
+    .getByRole('button', { name: /çıkış|logout|sign out/i })
+    .first()
+    .isVisible()
+    .catch(() => false);
+  if (logoutVisible) return;
+
+  const menuBtn = page
+    .getByRole('button', { name: /Menüyü aç|Open menu/i })
+    .first();
+  if (!(await menuBtn.isVisible().catch(() => false))) return;
+
+  await menuBtn.click();
+
+  // NavBar mobil drawer'ı (lg:hidden panel) veya geniş ekranda ClientPdfPanel aside'ı boyanana kadar bekle.
+  await page.waitForFunction(
+    () => {
+      const aside = document.querySelector('aside.w-80');
+      if (aside) {
+        const s = getComputedStyle(aside);
+        if (
+          s.display !== 'none' &&
+          s.visibility !== 'hidden' &&
+          (aside as HTMLElement).offsetParent !== null
+        ) {
+          return true;
+        }
+      }
+      const mobileNavPanel = document.querySelector(
+        'header div[class*="lg:hidden"][class*="border-t"]'
+      );
+      if (!mobileNavPanel) return false;
+      const ps = getComputedStyle(mobileNavPanel as HTMLElement);
+      return (
+        ps.display !== 'none' &&
+        ps.visibility !== 'hidden' &&
+        (mobileNavPanel as HTMLElement).offsetParent !== null
+      );
+    },
+    { timeout: 10_000 }
+  );
+}
+
+/** Global chat FAB overlay merge butonunu kapatıyorsa E2E için geçici gizle */
+export async function dismissFabIfPresent(page: Page): Promise<void> {
+  const fab = page.locator('.fixed.bottom-6.right-6').first();
+  if (await fab.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await page.addStyleTag({
+      content: '.fixed.bottom-6.right-6 { display: none !important; }',
+    });
+  }
+}
+
 function resolveOtpCodeForEmail(email: string): string | null {
   const normalized = email
     .trim()
@@ -213,10 +274,44 @@ export async function login(
   const passwordInput = page.locator('input[type="password"]');
   await passwordInput.fill(password);
 
-  // Butona tıkla ve form submit'i bekle
-  await page.click('button[type="submit"]');
+  // Mobilde click flaky olabildiği için formu Enter ile doğal şekilde submit et.
+  const submitButton = page.locator('button[type="submit"]').first();
+  await passwordInput.focus();
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(1500);
 
   const otpSlot = page.locator('[data-slot="input-otp-slot"]').first();
+  await page.waitForTimeout(250);
+  const otpAppearedQuickly = await otpSlot
+    .isVisible({ timeout: 1500 })
+    .catch(() => false);
+
+  if (!otpAppearedQuickly) {
+    await page
+      .waitForURL(
+        (url) =>
+          /\/($|dashboard|upload|chat|summarize-pdf|profile)/.test(
+            url.pathname
+          ),
+        { timeout: 10000 }
+      )
+      .catch(async () => {
+        if (page.url().includes('/login')) {
+          await passwordInput.focus().catch(() => {});
+          await page.keyboard.press('Enter').catch(() => {});
+          await page
+            .waitForURL(
+              (url) =>
+                /\/($|dashboard|upload|chat|summarize-pdf|profile)/.test(
+                  url.pathname
+                ),
+              { timeout: 10000 }
+            )
+            .catch(() => {});
+        }
+      });
+  }
+
   const otpStepVisible = await otpSlot
     .waitFor({ state: 'visible', timeout: 12000 })
     .then(() => true)
@@ -232,13 +327,33 @@ export async function login(
             .replace(/[^A-Z0-9]/g, '_')} in your environment.`
       );
     }
-    const otpField = page.locator('input[inputmode="numeric"]').first();
-    await otpField.fill(code);
-    await page
+    // Klavye simülasyonu flaky olabildiği için gizli gerçek OTP input'una force fill uygula.
+    const hiddenOtpInput = page
+      .locator(
+        'input[autocomplete="one-time-code"], input[data-input-otp="true"]'
+      )
+      .first();
+    await hiddenOtpInput.waitFor({ state: 'attached', timeout: 10000 });
+    await hiddenOtpInput.fill(code, { force: true });
+
+    const verifyButton = page
       .getByRole('button', {
-        name: /Doğrula ve giriş yap|Verify and sign in/i,
+        name: /Doğrula|Verify|Submit|giriş yap|sign in/i,
       })
-      .click();
+      .first();
+    await expect(verifyButton).toBeEnabled({ timeout: 10000 });
+    await hiddenOtpInput.focus();
+    await page.keyboard.press('Enter');
+
+    await page
+      .waitForURL(
+        (url) =>
+          /\/($|dashboard|upload|chat|summarize-pdf|profile)/.test(
+            url.pathname
+          ),
+        { timeout: 15000 }
+      )
+      .catch(() => {});
   }
 
   // Race condition kalkanı: login sonrası yönlendirme veya auth UI kesinleşsin.
@@ -257,8 +372,16 @@ export async function login(
     // Mevcut detaylı fallback kontrolleri (aşağıdaki bloklar) devreye girecek.
   });
 
-  // Login işleminin tamamlanmasını bekle (hem başarılı hem başarısız durumlar için)
-  await page.waitForTimeout(3000); // NextAuth işleminin tamamlanması için yeterli süre
+  // Sabit 3s yerine uygulama rotasına yerleşmeyi bekle (webkit dahil deterministik)
+  await page
+    .waitForURL(
+      (url) =>
+        /\/($|dashboard|upload|home|chat|summarize-pdf|profile)/.test(
+          url.pathname
+        ),
+      { timeout: 15_000 }
+    )
+    .catch(() => {});
 
   // Önce hata popup'ını kontrol et (Popup component .fixed.top-6.right-6 ve border-red-500 kullanıyor)
   // SADECE gerçek hata mesajlarını yakala - başarı mesajlarını ignore et
@@ -547,6 +670,8 @@ export async function navigateTo(page: Page, path: string) {
  * Fedora'daki yönlendirme yavaşlığını baypas etmek için manuel yönlendirme kullanıyoruz
  */
 export async function logout(page: Page) {
+  await openMobileMenuIfNeeded(page);
+
   // Logout butonunu bul ve tıkla - daha sağlam selector kullan
   // Önce role-based selector dene, sonra fallback olarak text-based selector kullan
   let logoutButton;

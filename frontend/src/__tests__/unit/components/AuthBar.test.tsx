@@ -40,7 +40,7 @@ describe('AuthBar', () => {
         data: null,
         status: 'loading',
         update: async () => null,
-      } as any);
+      } as unknown as ReturnType<typeof useSession>);
 
       renderWithProvider(<AuthBar />);
 
@@ -54,7 +54,7 @@ describe('AuthBar', () => {
         data: null,
         status: 'loading',
         update: async () => null,
-      } as any);
+      } as unknown as ReturnType<typeof useSession>);
 
       renderWithProvider(<AuthBar />);
 
@@ -70,7 +70,7 @@ describe('AuthBar', () => {
         data: null,
         status: 'unauthenticated',
         update: async () => null,
-      } as any);
+      } as unknown as ReturnType<typeof useSession>);
 
       renderWithProvider(<AuthBar />);
 
@@ -85,7 +85,7 @@ describe('AuthBar', () => {
         data: null,
         status: 'unauthenticated',
         update: async () => null,
-      } as any);
+      } as unknown as ReturnType<typeof useSession>);
 
       renderWithProvider(<AuthBar />);
 
@@ -101,7 +101,7 @@ describe('AuthBar', () => {
         data: null,
         status: 'unauthenticated',
         update: async () => null,
-      } as any);
+      } as unknown as ReturnType<typeof useSession>);
 
       renderWithProvider(<AuthBar />);
 
@@ -123,7 +123,7 @@ describe('AuthBar', () => {
         },
         status: 'authenticated',
         update: async () => null,
-      } as any);
+      } as unknown as ReturnType<typeof useSession>);
     });
 
     it('should show static profile label when authenticated', () => {
@@ -142,7 +142,7 @@ describe('AuthBar', () => {
         },
         status: 'authenticated',
         update: async () => null,
-      } as any);
+      } as unknown as ReturnType<typeof useSession>);
 
       renderWithProvider(<AuthBar />);
 
@@ -213,7 +213,7 @@ describe('AuthBar', () => {
         },
         status: 'authenticated',
         update: async () => null,
-      } as any);
+      } as unknown as ReturnType<typeof useSession>);
 
       renderWithProvider(<AuthBar />);
 
@@ -233,7 +233,7 @@ describe('AuthBar', () => {
         },
         status: 'authenticated',
         update: async () => null,
-      } as any);
+      } as unknown as ReturnType<typeof useSession>);
 
       renderWithProvider(<AuthBar />);
 
@@ -251,7 +251,7 @@ describe('AuthBar', () => {
         },
         status: 'authenticated',
         update: async () => null,
-      } as any);
+      } as unknown as ReturnType<typeof useSession>);
 
       renderWithProvider(<AuthBar />);
 
@@ -267,7 +267,7 @@ describe('AuthBar', () => {
         data: null,
         status: 'unauthenticated',
         update: async () => null,
-      } as any);
+      } as unknown as ReturnType<typeof useSession>);
 
       renderWithProvider(<AuthBar />);
 
@@ -285,7 +285,7 @@ describe('AuthBar', () => {
         },
         status: 'authenticated',
         update: async () => null,
-      } as any);
+      } as unknown as ReturnType<typeof useSession>);
 
       renderWithProvider(<AuthBar />);
 

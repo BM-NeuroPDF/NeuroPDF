@@ -14,17 +14,21 @@ describe('pdfService', () => {
   const originalFetch = global.fetch;
   const originalCreateObjectURL = window.URL.createObjectURL;
   const originalRevokeObjectURL = window.URL.revokeObjectURL;
+  let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
     getGuestId.mockResolvedValue('guest-x');
-    global.fetch = vi.fn();
+    fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
     window.URL.createObjectURL = vi.fn(() => 'blob:mock');
     window.URL.revokeObjectURL = vi.fn();
     const link = document.createElement('a');
     link.click = vi.fn();
-    vi.spyOn(document, 'createElement').mockReturnValue(link as any);
+    vi.spyOn(document, 'createElement').mockReturnValue(
+      link as HTMLAnchorElement
+    );
   });
 
   afterEach(() => {
@@ -35,7 +39,7 @@ describe('pdfService', () => {
   });
 
   it('upload sends FormData with auth token', async () => {
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({ filename: 'a.pdf', size_kb: 1, temp_id: 't1' }),
     });
@@ -47,12 +51,12 @@ describe('pdfService', () => {
       expect.stringContaining('/files/upload'),
       expect.objectContaining({ method: 'POST' })
     );
-    const call = (global.fetch as any).mock.calls[0];
+    const call = fetchMock.mock.calls[0];
     expect(call[1].headers['Authorization']).toBe('Bearer tok');
   });
 
   it('upload throws on failure', async () => {
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 400,
       json: async () => ({ detail: 'bad' }),
@@ -63,7 +67,7 @@ describe('pdfService', () => {
   });
 
   it('upload throws status message when error JSON is empty', async () => {
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 502,
       json: async () => {
@@ -79,7 +83,7 @@ describe('pdfService', () => {
 
   it('convertToText downloads blob and increments guest usage', async () => {
     vi.useFakeTimers();
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       blob: async () => new Blob(['txt'], { type: 'text/plain' }),
     });
@@ -92,7 +96,7 @@ describe('pdfService', () => {
   });
 
   it('convertToText throws status message when error JSON is null', async () => {
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 503,
       json: async () => {
@@ -107,7 +111,7 @@ describe('pdfService', () => {
   });
 
   it('convertToText throws when response not ok', async () => {
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 422,
       json: async () => ({ detail: 'conv bad' }),
@@ -122,7 +126,7 @@ describe('pdfService', () => {
   it('convertToText skips increment when logged in', async () => {
     vi.useFakeTimers();
     incrementUsage.mockClear();
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       blob: async () => new Blob(['txt']),
     });
@@ -138,7 +142,7 @@ describe('pdfService', () => {
     vi.useFakeTimers();
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     incrementUsage.mockRejectedValueOnce(new Error('increment failed'));
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       blob: async () => new Blob(['txt']),
     });
@@ -154,7 +158,7 @@ describe('pdfService', () => {
   it('mergePDFs does not increment usage when logged in', async () => {
     vi.useFakeTimers();
     incrementUsage.mockClear();
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       blob: async () => new Blob(['%PDF'], { type: 'application/pdf' }),
     });
@@ -170,7 +174,7 @@ describe('pdfService', () => {
   });
 
   it('extractPages throws on failed response', async () => {
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 400,
       json: async () => ({ detail: 'extract bad' }),
@@ -183,7 +187,7 @@ describe('pdfService', () => {
   });
 
   it('mergePDFs throws status message when error JSON is null', async () => {
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 503,
       json: async () => {
@@ -201,7 +205,7 @@ describe('pdfService', () => {
   });
 
   it('extractPages throws status message when error JSON is null', async () => {
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 502,
       json: async () => {
@@ -216,7 +220,7 @@ describe('pdfService', () => {
   });
 
   it('saveProcessed throws status message when error JSON is null', async () => {
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 400,
       json: async () => {
@@ -230,7 +234,7 @@ describe('pdfService', () => {
   });
 
   it('createPdfFromMarkdown throws status when error JSON is null', async () => {
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 418,
       json: async () => {
@@ -244,7 +248,7 @@ describe('pdfService', () => {
   });
 
   it('mergePDFs throws on failed response', async () => {
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 500,
       json: async () => ({ detail: 'merge bad' }),
@@ -262,7 +266,7 @@ describe('pdfService', () => {
   it('extractPages logs for logged-in user without guest increment', async () => {
     vi.useFakeTimers();
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       blob: async () => new Blob(['%PDF'], { type: 'application/pdf' }),
     });
@@ -281,7 +285,7 @@ describe('pdfService', () => {
     vi.useFakeTimers();
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     incrementUsage.mockRejectedValueOnce(new Error('inc'));
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       blob: async () => new Blob(['%PDF'], { type: 'application/pdf' }),
     });
@@ -298,7 +302,7 @@ describe('pdfService', () => {
     vi.useFakeTimers();
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     incrementUsage.mockRejectedValueOnce(new Error('inc'));
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       blob: async () => new Blob(['%PDF'], { type: 'application/pdf' }),
     });
@@ -316,7 +320,7 @@ describe('pdfService', () => {
 
   it('extractPages and mergePDFs call download and increment for guest', async () => {
     vi.useFakeTimers();
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       blob: async () => new Blob(['%PDF'], { type: 'application/pdf' }),
     });
@@ -342,7 +346,7 @@ describe('pdfService', () => {
   });
 
   it('saveProcessed posts file when token present', async () => {
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({ ok: true }),
     });
@@ -352,7 +356,7 @@ describe('pdfService', () => {
   });
 
   it('saveProcessed throws on failed response', async () => {
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 400,
       json: async () => ({ detail: 'save bad' }),
@@ -365,7 +369,7 @@ describe('pdfService', () => {
 
   it('createPdfFromMarkdown downloads pdf blob', async () => {
     vi.useFakeTimers();
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       blob: async () => new Blob(['%PDF'], { type: 'application/pdf' }),
     });
@@ -376,7 +380,7 @@ describe('pdfService', () => {
   });
 
   it('createPdfFromMarkdown throws on error response', async () => {
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 500,
       json: async () => ({ detail: 'nope' }),
@@ -392,8 +396,10 @@ describe('pdfService', () => {
     const click = vi.fn();
     const link = document.createElement('a');
     link.click = click;
-    vi.spyOn(document, 'createElement').mockReturnValue(link as any);
-    (global.fetch as any).mockResolvedValue({
+    vi.spyOn(document, 'createElement').mockReturnValue(
+      link as HTMLAnchorElement
+    );
+    fetchMock.mockResolvedValue({
       ok: true,
       blob: async () => new Blob(['%PDF'], { type: 'application/pdf' }),
     });
@@ -413,7 +419,7 @@ describe('pdfService', () => {
       configurable: true,
       writable: true,
     });
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({ filename: 'a.pdf', size_kb: 1, temp_id: 't1' }),
     });
@@ -435,7 +441,7 @@ describe('pdfService', () => {
       writable: true,
       configurable: true,
     });
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({ filename: 'a.pdf', size_kb: 1, temp_id: 't1' }),
     });

@@ -58,7 +58,7 @@ export default function MarkdownViewer({
       setLoading(true);
       // PDF oluştur ve indir
       await pdfService.createPdfFromMarkdown(processedMarkdown, defaultPdfName);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('❌ PDF oluşturulamadı:', err);
       setError('PDF oluşturulamadı. Lütfen tekrar deneyin.');
     } finally {

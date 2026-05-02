@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { Session } from 'next-auth';
 import { getSession, signOut } from 'next-auth/react';
 import {
   sendRequest,
@@ -10,6 +11,24 @@ import {
   getUserDocuments,
 } from '../api';
 
+function testSession(
+  overrides: Partial<Omit<Session, 'user'>> & {
+    user?: Partial<Session['user']>;
+  } = {}
+): Session {
+  const baseUser: Session['user'] = {
+    name: null,
+    email: null,
+    image: null,
+  };
+  const { user: userOverrides, ...rest } = overrides;
+  return {
+    expires: '1',
+    user: { ...baseUser, ...userOverrides },
+    ...rest,
+  } as Session;
+}
+
 // Mock dependencies
 vi.mock('next-auth/react', () => ({
   getSession: vi.fn(),
@@ -19,10 +38,12 @@ vi.mock('next-auth/react', () => ({
 describe('sendRequest', () => {
   const originalFetch = global.fetch;
   const originalLocalStorage = global.localStorage;
+  let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    global.fetch = vi.fn();
+    fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
     global.localStorage = {
       getItem: vi.fn(),
       setItem: vi.fn(),
@@ -30,7 +51,7 @@ describe('sendRequest', () => {
       clear: vi.fn(),
       length: 0,
       key: vi.fn(),
-    } as any;
+    } as Storage;
   });
 
   afterEach(() => {
@@ -38,11 +59,86 @@ describe('sendRequest', () => {
     global.localStorage = originalLocalStorage;
   });
 
-  it('sends GET request successfully', async () => {
-    (getSession as any).mockResolvedValue({
-      accessToken: 'test-token',
+  it('prefers apiToken when accessToken is absent', async () => {
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ apiToken: 'api-token-only' })
+    );
+    fetchMock.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({ ok: true }),
     });
-    (global.fetch as any).mockResolvedValue({
+    await sendRequest('/test', 'GET');
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer api-token-only',
+        }),
+      })
+    );
+  });
+
+  it('uses user.accessToken when session has no top-level tokens', async () => {
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ user: { accessToken: 'nested-access' } })
+    );
+    fetchMock.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({ ok: true }),
+    });
+    await sendRequest('/test', 'GET');
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer nested-access',
+        }),
+      })
+    );
+  });
+
+  it('uses user.apiToken as last token fallback', async () => {
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ user: { apiToken: 'nested-api' } })
+    );
+    fetchMock.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({ ok: true }),
+    });
+    await sendRequest('/test', 'GET');
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer nested-api',
+        }),
+      })
+    );
+  });
+
+  it('omits Authorization when session user has no token fields', async () => {
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ user: { id: 'user-1', name: 'Test' } })
+    );
+    fetchMock.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({ ok: true }),
+    });
+    await sendRequest('/test', 'GET');
+    const call = fetchMock.mock.calls[0];
+    const headers = call[1].headers as Record<string, string>;
+    expect(headers.Authorization).toBeUndefined();
+  });
+
+  it('sends GET request successfully', async () => {
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ accessToken: 'test-token' })
+    );
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({ data: 'test' }),
@@ -63,10 +159,10 @@ describe('sendRequest', () => {
   });
 
   it('sends POST request with JSON body', async () => {
-    (getSession as any).mockResolvedValue({
-      accessToken: 'test-token',
-    });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ accessToken: 'test-token' })
+    );
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({ success: true }),
@@ -88,9 +184,9 @@ describe('sendRequest', () => {
   });
 
   it('sends request with guest ID header', async () => {
-    (getSession as any).mockResolvedValue(null);
-    (global.localStorage.getItem as any).mockReturnValue('guest-123');
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(null);
+    vi.mocked(global.localStorage.getItem).mockReturnValue('guest-123');
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({ data: 'test' }),
@@ -109,10 +205,10 @@ describe('sendRequest', () => {
   });
 
   it('sends file upload request', async () => {
-    (getSession as any).mockResolvedValue({
-      accessToken: 'test-token',
-    });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ accessToken: 'test-token' })
+    );
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/pdf' }),
       blob: async () => new Blob(['pdf content'], { type: 'application/pdf' }),
@@ -132,44 +228,49 @@ describe('sendRequest', () => {
       })
     );
     // Should not have Content-Type header for file uploads
-    const callArgs = (global.fetch as any).mock.calls[0][1];
+    const callArgs = fetchMock.mock.calls[0][1];
     expect(callArgs.headers['Content-Type']).toBeUndefined();
   });
 
   it('handles 401 error and redirects to login', async () => {
-    (getSession as any).mockResolvedValue({
-      accessToken: 'test-token',
-    });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ accessToken: 'test-token' })
+    );
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 401,
       json: async () => ({ detail: 'Unauthorized' }),
     });
 
-    // Mock window.location
     const originalLocation = window.location;
-    delete (window as any).location;
-    window.location = { href: '' } as any;
+    const locationMock = { href: '' };
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: locationMock,
+    });
 
     await expect(sendRequest('/test', 'GET')).rejects.toThrow(
       'Oturum süreniz dolmuş'
     );
 
-    // signOut should be called
     expect(signOut).toHaveBeenCalledWith({
       callbackUrl: '/login',
       redirect: true,
     });
 
-    // Restore
-    (window as unknown as { location: Location }).location = originalLocation;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: originalLocation,
+    });
   });
 
   it('handles error response with detail string', async () => {
-    (getSession as any).mockResolvedValue({
-      accessToken: 'test-token',
-    });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ accessToken: 'test-token' })
+    );
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 400,
       json: async () => ({ detail: 'Bad request' }),
@@ -179,10 +280,10 @@ describe('sendRequest', () => {
   });
 
   it('handles error response with detail array', async () => {
-    (getSession as any).mockResolvedValue({
-      accessToken: 'test-token',
-    });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ accessToken: 'test-token' })
+    );
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 422,
       json: async () => ({
@@ -195,11 +296,26 @@ describe('sendRequest', () => {
     );
   });
 
-  it('handles error response without detail', async () => {
-    (getSession as any).mockResolvedValue({
-      accessToken: 'test-token',
+  it('422 detail array only includes items with string msg', async () => {
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ accessToken: 'test-token' })
+    );
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: async () => ({
+        detail: [{ msg: 'Valid' }, { foo: 'bar' }, null, { msg: 1 }],
+      }),
     });
-    (global.fetch as any).mockResolvedValue({
+
+    await expect(sendRequest('/test', 'GET')).rejects.toThrow('Valid');
+  });
+
+  it('handles error response without detail', async () => {
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ accessToken: 'test-token' })
+    );
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 500,
       json: async () => ({}),
@@ -209,20 +325,20 @@ describe('sendRequest', () => {
   });
 
   it('handles network errors', async () => {
-    (getSession as any).mockResolvedValue({
-      accessToken: 'test-token',
-    });
-    (global.fetch as any).mockRejectedValue(new Error('Network error'));
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ accessToken: 'test-token' })
+    );
+    fetchMock.mockRejectedValue(new Error('Network error'));
 
     await expect(sendRequest('/test', 'GET')).rejects.toThrow('Network error');
   });
 
   it('returns blob for non-JSON responses', async () => {
-    (getSession as any).mockResolvedValue({
-      accessToken: 'test-token',
-    });
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ accessToken: 'test-token' })
+    );
     const blob = new Blob(['binary data'], { type: 'application/pdf' });
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/pdf' }),
       blob: async () => blob,
@@ -234,8 +350,8 @@ describe('sendRequest', () => {
   });
 
   it('works without session token', async () => {
-    (getSession as any).mockResolvedValue(null);
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(null);
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({ data: 'test' }),
@@ -244,15 +360,15 @@ describe('sendRequest', () => {
     const result = await sendRequest('/test', 'GET');
 
     expect(result).toEqual({ data: 'test' });
-    const callArgs = (global.fetch as any).mock.calls[0][1];
+    const callArgs = fetchMock.mock.calls[0][1];
     expect(callArgs.headers['Authorization']).toBeUndefined();
   });
 
   it('handles invalid JSON response gracefully', async () => {
-    (getSession as any).mockResolvedValue({
-      accessToken: 'test-token',
-    });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ accessToken: 'test-token' })
+    );
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 500,
       json: async () => {
@@ -264,9 +380,9 @@ describe('sendRequest', () => {
   });
 
   it('maps 503 and 504 to temporary DB message', async () => {
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
     for (const status of [503, 504]) {
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: false,
         status,
         json: async () => ({}),
@@ -278,8 +394,8 @@ describe('sendRequest', () => {
   });
 
   it('rewrites chat endpoints to app proxy paths', async () => {
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
@@ -292,10 +408,10 @@ describe('sendRequest', () => {
   });
 
   it('uses user.accessToken when top-level token missing', async () => {
-    (getSession as any).mockResolvedValue({
-      user: { accessToken: 'from-user' },
-    });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ user: { accessToken: 'from-user' } })
+    );
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
@@ -312,8 +428,8 @@ describe('sendRequest', () => {
   });
 
   it('throws with stringified detail when detail is an object', async () => {
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 400,
       json: async () => ({ detail: { nested: true } }),
@@ -324,20 +440,24 @@ describe('sendRequest', () => {
   });
 
   it('redirects via window.location when signOut throws on 401', async () => {
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 401,
       json: async () => ({}),
     });
-    (signOut as any).mockRejectedValue(new Error('signOut failed'));
+    vi.mocked(signOut).mockRejectedValue(new Error('signOut failed'));
     const hrefSetter = vi.fn();
+    let hrefValue = '';
     const originalDesc = Object.getOwnPropertyDescriptor(window, 'location');
     Object.defineProperty(window, 'location', {
       configurable: true,
       value: {
-        href: '',
+        get href() {
+          return hrefValue;
+        },
         set href(v: string) {
+          hrefValue = v;
           hrefSetter(v);
         },
         assign: vi.fn(),
@@ -351,17 +471,17 @@ describe('sendRequest', () => {
   });
 
   it('maps TypeError fetch failed to temporary DB message', async () => {
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
     const err = new TypeError('fetch failed');
-    (global.fetch as any).mockRejectedValue(err);
+    fetchMock.mockRejectedValue(err);
     await expect(sendRequest('/test', 'GET')).rejects.toThrow(
       'Veritabanı bağlantısı geçici'
     );
   });
 
   it('maps TypeError socket hang up to temporary DB message', async () => {
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
-    (global.fetch as any).mockRejectedValue(new TypeError('socket hang up'));
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
+    fetchMock.mockRejectedValue(new TypeError('socket hang up'));
     await expect(sendRequest('/test', 'GET')).rejects.toThrow(
       'Veritabanı bağlantısı geçici'
     );
@@ -369,9 +489,9 @@ describe('sendRequest', () => {
 
   it('rethrows TypeError when message does not match network patterns', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
     const err = new TypeError('unrelated failure');
-    (global.fetch as any).mockRejectedValue(err);
+    fetchMock.mockRejectedValue(err);
     await expect(sendRequest('/test', 'GET')).rejects.toThrow(
       'unrelated failure'
     );
@@ -387,14 +507,40 @@ describe('sendRequest', () => {
       configurable: true,
       value: { ...prevLoc, protocol: 'https:' },
     });
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
     });
     await sendRequest('/only-path', 'GET');
     expect(global.fetch).toHaveBeenCalledWith('/only-path', expect.any(Object));
+    process.env.NEXT_PUBLIC_API_URL = prevEnv;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: prevLoc,
+    });
+  });
+
+  it('uses HTTPS env base when browser is https and env is HTTPS (strips trailing slash)', async () => {
+    const prevEnv = process.env.NEXT_PUBLIC_API_URL;
+    process.env.NEXT_PUBLIC_API_URL = 'https://api.example.com/';
+    const prevLoc = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...prevLoc, protocol: 'https:' },
+    });
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
+    fetchMock.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({}),
+    });
+    await sendRequest('/secure-path', 'GET');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.example.com/secure-path',
+      expect.any(Object)
+    );
     process.env.NEXT_PUBLIC_API_URL = prevEnv;
     Object.defineProperty(window, 'location', {
       configurable: true,
@@ -410,8 +556,8 @@ describe('sendRequest', () => {
       configurable: true,
       value: { ...prevLoc, protocol: 'https:' },
     });
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
@@ -429,18 +575,18 @@ describe('sendRequest', () => {
   });
 
   it('maps Error with econnreset message to temporary DB message', async () => {
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
-    (global.fetch as any).mockRejectedValue(new Error('ECONNRESET upstream'));
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
+    fetchMock.mockRejectedValue(new Error('ECONNRESET upstream'));
     await expect(sendRequest('/test', 'GET')).rejects.toThrow(
       'Veritabanı bağlantısı geçici'
     );
   });
 
   it('uses apiToken when accessToken is missing on session', async () => {
-    (getSession as any).mockResolvedValue({
-      apiToken: 'api-only-token',
-    });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ apiToken: 'api-only-token' })
+    );
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
@@ -457,10 +603,10 @@ describe('sendRequest', () => {
   });
 
   it('uses user.apiToken when nested token fields are used', async () => {
-    (getSession as any).mockResolvedValue({
-      user: { apiToken: 'nested-api' },
-    });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ user: { apiToken: 'nested-api' } })
+    );
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
@@ -479,8 +625,8 @@ describe('sendRequest', () => {
   it('defaults base URL to localhost when env is blank', async () => {
     const prev = process.env.NEXT_PUBLIC_API_URL;
     process.env.NEXT_PUBLIC_API_URL = '   ';
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
@@ -494,8 +640,8 @@ describe('sendRequest', () => {
   });
 
   it('rewrites chat start and general start endpoints to proxy', async () => {
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
@@ -512,9 +658,33 @@ describe('sendRequest', () => {
     );
   });
 
+  it('rewrites chat message, general message, and translate-message to proxy', async () => {
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
+    fetchMock.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({}),
+    });
+    await sendRequest('/files/chat/message', 'POST', {});
+    await sendRequest('/files/chat/general/message', 'POST', {});
+    await sendRequest('/files/chat/translate-message', 'POST', {});
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/proxy/chat/message'),
+      expect.any(Object)
+    );
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/proxy/chat/general/message'),
+      expect.any(Object)
+    );
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/proxy/chat/translate-message'),
+      expect.any(Object)
+    );
+  });
+
   it('rewrites chat sessions list and nested session paths to proxy', async () => {
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({ messages: [] }),
@@ -532,17 +702,17 @@ describe('sendRequest', () => {
   });
 
   it('omits X-Guest-ID header when window is undefined', async () => {
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
     const prevWindow = global.window;
     vi.stubGlobal('window', undefined);
     try {
-      (global.fetch as any).mockResolvedValue({
+      fetchMock.mockResolvedValue({
         ok: true,
         headers: new Headers({ 'content-type': 'application/json' }),
         json: async () => ({}),
       });
       await sendRequest('/no-guest', 'GET');
-      const headers = (global.fetch as any).mock.calls[0][1].headers;
+      const headers = fetchMock.mock.calls[0][1].headers;
       expect(headers['X-Guest-ID']).toBeUndefined();
     } finally {
       global.window = prevWindow;
@@ -550,8 +720,8 @@ describe('sendRequest', () => {
   });
 
   it('skips signOut on 401 when window is undefined', async () => {
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 401,
       json: async () => ({}),
@@ -570,10 +740,10 @@ describe('sendRequest', () => {
 
   it('treats TypeError with empty message like unrelated failure', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
     const err = new TypeError();
     err.message = '';
-    (global.fetch as any).mockRejectedValue(err);
+    fetchMock.mockRejectedValue(err);
     await expect(sendRequest('/test', 'GET')).rejects.toThrow();
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();
@@ -582,8 +752,8 @@ describe('sendRequest', () => {
   it('uses empty string when NEXT_PUBLIC_API_URL is undefined', async () => {
     const prev = process.env.NEXT_PUBLIC_API_URL;
     delete process.env.NEXT_PUBLIC_API_URL;
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
@@ -597,8 +767,8 @@ describe('sendRequest', () => {
   });
 
   it('maps TypeError NetworkError to temporary DB message', async () => {
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
-    (global.fetch as any).mockRejectedValue(
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
+    fetchMock.mockRejectedValue(
       new TypeError('NetworkError when attempting to fetch resource.')
     );
     await expect(sendRequest('/test', 'GET')).rejects.toThrow(
@@ -607,8 +777,8 @@ describe('sendRequest', () => {
   });
 
   it('swrFetcher and file helpers delegate to sendRequest', async () => {
-    (getSession as any).mockResolvedValue({ accessToken: 't' });
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({ sessions: [] }),
@@ -618,12 +788,12 @@ describe('sendRequest', () => {
     await fetchSessionMessages('sid');
     await resumeChatSession('sid');
     await getUserDocuments();
-    (global.fetch as any).mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/pdf' }),
       blob: async () => new Blob(['x']),
     });
     await fetchStoredPdfBlob('pid');
-    expect(global.fetch.mock.calls.length).toBeGreaterThan(5);
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(5);
   });
 });

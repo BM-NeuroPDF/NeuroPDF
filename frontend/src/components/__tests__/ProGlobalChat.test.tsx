@@ -100,18 +100,24 @@ describe('ProGlobalChat', () => {
         volume: 1,
       }))
     );
-    (useRouter as any).mockReturnValue({ push: mockPush });
-    (useSession as any).mockReturnValue({
+    vi.mocked(useRouter).mockReturnValue({
+      push: mockPush,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSession).mockReturnValue({
       data: mockSession,
       status: 'authenticated',
-    });
-    (useLanguage as any).mockReturnValue(mockUseLanguage);
-    (usePdf as any).mockReturnValue(mockUsePdf);
-    (sendRequest as any).mockResolvedValue({ role: 'pro' });
+    } as unknown as ReturnType<typeof useSession>);
+    vi.mocked(useLanguage).mockReturnValue(
+      mockUseLanguage as ReturnType<typeof useLanguage>
+    );
+    vi.mocked(usePdf).mockReturnValue(
+      mockUsePdf as unknown as ReturnType<typeof usePdf>
+    );
+    vi.mocked(sendRequest).mockResolvedValue({ role: 'pro' });
   });
 
   it('renders FAB when user is Pro', async () => {
-    (sendRequest as any).mockResolvedValue({ role: 'pro' });
+    vi.mocked(sendRequest).mockResolvedValue({ role: 'pro' });
 
     render(<ProGlobalChat />);
 
@@ -122,7 +128,7 @@ describe('ProGlobalChat', () => {
   });
 
   it('shows FAB for non-Pro user and opens Pro required modal on click', async () => {
-    (sendRequest as any).mockResolvedValue({ role: 'standard' });
+    vi.mocked(sendRequest).mockResolvedValue({ role: 'standard' });
 
     render(<ProGlobalChat />);
 
@@ -139,10 +145,10 @@ describe('ProGlobalChat', () => {
   });
 
   it('shows FAB for unauthenticated user and redirects to pricing on click', async () => {
-    (useSession as any).mockReturnValue({
+    vi.mocked(useSession).mockReturnValue({
       data: null,
       status: 'unauthenticated',
-    });
+    } as unknown as ReturnType<typeof useSession>);
 
     render(<ProGlobalChat />);
 
@@ -156,7 +162,7 @@ describe('ProGlobalChat', () => {
   });
 
   it('expands chat panel when icon is clicked (Pro user)', async () => {
-    (sendRequest as any).mockResolvedValue({ role: 'pro' });
+    vi.mocked(sendRequest).mockResolvedValue({ role: 'pro' });
 
     const { rerender } = render(<ProGlobalChat />);
 
@@ -164,7 +170,10 @@ describe('ProGlobalChat', () => {
     fireEvent.click(screen.getByRole('button', { name: /navDocuments/i }));
 
     // Simulate context updating panel open state (real PdfProvider would do this)
-    (usePdf as any).mockReturnValue({ ...mockUsePdf, proChatPanelOpen: true });
+    vi.mocked(usePdf).mockReturnValue({
+      ...mockUsePdf,
+      proChatPanelOpen: true,
+    } as unknown as ReturnType<typeof usePdf>);
     rerender(<ProGlobalChat />);
 
     await waitFor(() => {
@@ -175,7 +184,7 @@ describe('ProGlobalChat', () => {
   });
 
   it('initializes chat session when expanded (Pro user)', async () => {
-    (sendRequest as any)
+    vi.mocked(sendRequest)
       .mockResolvedValueOnce({ role: 'pro' })
       .mockResolvedValueOnce({ session_id: 'test-session-123' });
 
@@ -185,7 +194,10 @@ describe('ProGlobalChat', () => {
 
     const button = screen.getByRole('button', { name: /navDocuments/i });
     fireEvent.click(button);
-    (usePdf as any).mockReturnValue({ ...mockUsePdf, proChatPanelOpen: true });
+    vi.mocked(usePdf).mockReturnValue({
+      ...mockUsePdf,
+      proChatPanelOpen: true,
+    } as unknown as ReturnType<typeof usePdf>);
     rerender(<ProGlobalChat />);
 
     await waitFor(() => {
@@ -201,7 +213,7 @@ describe('ProGlobalChat', () => {
   });
 
   it('sends message when form is submitted', async () => {
-    (sendRequest as any)
+    vi.mocked(sendRequest)
       .mockResolvedValueOnce({ role: 'pro' })
       .mockResolvedValueOnce({ session_id: 'test-session-123' })
       .mockResolvedValueOnce({ answer: 'Test response' });
@@ -210,12 +222,12 @@ describe('ProGlobalChat', () => {
 
     await waitForRoleFetch();
     fireEvent.click(screen.getByRole('button', { name: /navDocuments/i }));
-    (usePdf as any).mockReturnValue({
+    vi.mocked(usePdf).mockReturnValue({
       ...mockUsePdf,
       proChatPanelOpen: true,
       generalSessionId: 'test-session-123',
       generalChatMessages: [{ role: 'assistant', content: 'Hello' }],
-    });
+    } as unknown as ReturnType<typeof usePdf>);
     rerender(<ProGlobalChat />);
 
     await waitFor(() => {
@@ -245,7 +257,7 @@ describe('ProGlobalChat', () => {
   });
 
   it('handles API errors gracefully', async () => {
-    (sendRequest as any)
+    vi.mocked(sendRequest)
       .mockResolvedValueOnce({ role: 'pro' })
       .mockRejectedValueOnce(new Error('API Error'));
 
@@ -253,7 +265,7 @@ describe('ProGlobalChat', () => {
 
     await waitForRoleFetch();
     fireEvent.click(screen.getByRole('button', { name: /navDocuments/i }));
-    (usePdf as any).mockReturnValue({
+    vi.mocked(usePdf).mockReturnValue({
       ...mockUsePdf,
       proChatPanelOpen: true,
       generalChatMessages: [
@@ -262,7 +274,7 @@ describe('ProGlobalChat', () => {
           content: 'chatInitError',
         },
       ],
-    });
+    } as unknown as ReturnType<typeof usePdf>);
     rerender(<ProGlobalChat />);
 
     await waitFor(() => {
@@ -271,20 +283,74 @@ describe('ProGlobalChat', () => {
   });
 
   it('uses PDF chat session when available', async () => {
-    (usePdf as any).mockReturnValue({
+    vi.mocked(usePdf).mockReturnValue({
       ...mockUsePdf,
       sessionId: 'pdf-session-123',
       chatMessages: [{ role: 'assistant', content: 'PDF chat ready' }],
       setChatMessages: vi.fn(),
       isChatActive: true,
       proChatPanelOpen: true,
-    });
-    (sendRequest as any).mockResolvedValue({ role: 'pro' });
+    } as unknown as ReturnType<typeof usePdf>);
+    vi.mocked(sendRequest).mockResolvedValue({ role: 'pro' });
 
     render(<ProGlobalChat />);
 
     await waitFor(() => {
       expect(screen.getByText('PDF chat ready')).toBeInTheDocument();
+    });
+  });
+
+  it('runs assistant translation only after response flow settles and avoids duplicate translate spam', async () => {
+    type GeneralChatResult = {
+      answer: string;
+      client_actions: unknown[];
+    };
+    let resolveChat: ((value: GeneralChatResult) => void) | null = null;
+    const pendingChat = new Promise<GeneralChatResult>((resolve) => {
+      resolveChat = resolve;
+    });
+
+    vi.mocked(sendRequest).mockImplementation((endpoint: string) => {
+      if (endpoint === '/files/user/stats')
+        return Promise.resolve({ role: 'pro' });
+      if (endpoint === '/files/chat/general/message') return pendingChat;
+      if (endpoint === '/files/chat/translate-message') {
+        return Promise.resolve({ translation: 'translated' });
+      }
+      return Promise.resolve({ session_id: 'test-session-123' });
+    });
+
+    const { rerender } = render(<ProGlobalChat />);
+    await waitForRoleFetch();
+
+    fireEvent.click(screen.getByRole('button', { name: /navDocuments/i }));
+    vi.mocked(usePdf).mockReturnValue({
+      ...mockUsePdf,
+      proChatPanelOpen: true,
+      generalSessionId: 'test-session-123',
+      generalChatMessages: [{ role: 'assistant', content: 'Hello' }],
+    } as unknown as ReturnType<typeof usePdf>);
+    rerender(<ProGlobalChat />);
+
+    const input = await screen.findByPlaceholderText(/chatPlaceholder/i);
+    fireEvent.change(input, { target: { value: 'Test message' } });
+    fireEvent.submit(input.closest('form') as HTMLFormElement);
+
+    await waitFor(() => {
+      const translateCalls = vi
+        .mocked(sendRequest)
+        .mock.calls.filter(([url]) => url === '/files/chat/translate-message');
+      expect(translateCalls.length).toBe(1);
+    });
+
+    expect(resolveChat).not.toBeNull();
+    resolveChat!({ answer: 'Assistant answer', client_actions: [] });
+
+    await waitFor(() => {
+      const translateCalls = vi
+        .mocked(sendRequest)
+        .mock.calls.filter(([url]) => url === '/files/chat/translate-message');
+      expect(translateCalls.length).toBe(2);
     });
   });
 });

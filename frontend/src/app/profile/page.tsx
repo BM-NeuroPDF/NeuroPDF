@@ -30,7 +30,7 @@ export default function ProfilePage() {
 
   // Modal State'leri
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [, setIsDeleting] = useState(false);
 
   // Avatar Modal State'leri
   const [showImageModal, setShowImageModal] = useState(false);
@@ -55,7 +55,7 @@ export default function ProfilePage() {
   const [loadingLlm, setLoadingLlm] = useState(false);
 
   useEffect(() => {
-    savePdf(null as any);
+    savePdf(null);
   }, [savePdf]);
 
   useEffect(() => {
@@ -69,9 +69,11 @@ export default function ProfilePage() {
   const fetchUserAvatar = useCallback(async () => {
     if (!user) return;
     const uid = user.id || 'me';
-    const token = (session as any)?.accessToken;
     try {
-      const blob = await sendRequest(`/api/v1/user/${uid}/avatar`, 'GET') as Blob;
+      const blob = (await sendRequest(
+        `/api/v1/user/${uid}/avatar`,
+        'GET'
+      )) as Blob;
       setAvatarSrc((prev) => {
         if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
         return URL.createObjectURL(blob);
@@ -81,7 +83,7 @@ export default function ProfilePage() {
       console.warn('Avatar getirme hatası:', e);
     }
     setAvatarSrc(user.image ?? null);
-  }, [user, session]);
+  }, [user]);
 
   const userId = user?.id ?? null;
 
@@ -123,7 +125,6 @@ export default function ProfilePage() {
       formData.append('file', file);
 
       const userId = user?.id || 'me';
-      const token = (session as any)?.accessToken;
 
       await sendRequest(
         `/api/v1/user/${userId}/avatar`,
@@ -170,7 +171,6 @@ export default function ProfilePage() {
 
     try {
       const userId = user?.id || 'me';
-      const token = (session as any)?.accessToken;
 
       let resData;
 
@@ -260,7 +260,7 @@ export default function ProfilePage() {
     try {
       await sendRequest('/auth/delete-account', 'DELETE');
       await signOut({ callbackUrl: '/' });
-    } catch (error) {
+    } catch {
       alert(t('deleteAccountError') || 'Hata oluştu.');
       setIsDeleting(false);
     }

@@ -8,13 +8,20 @@ from pydantic import BaseModel, Field
 from ..tasks import pdf_tasks
 from ..services import ai_service, pdf_service
 from ..services.tts_manager import text_to_speech
-from ..services.llm_manager import CloudMode, LLMProvider, summarize_text, chat_over_pdf, general_chat as llm_general_chat
+from ..services.llm_manager import (
+    CloudMode,
+    LLMProvider,
+    summarize_text,
+    chat_over_pdf,
+    general_chat as llm_general_chat,
+)
 from ..deps import verify_api_key
 
 router = APIRouter(
     prefix="/api/v1/ai",
     tags=["AI Analysis"],
 )
+
 
 @router.post("/summarize-sync")
 async def summarize_synchronous(
@@ -86,7 +93,9 @@ async def summarize_synchronous(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Özetleme işlemi başarısız: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Özetleme işlemi başarısız: {str(e)}"
+        )
 
 
 class AsyncTaskRequest(BaseModel):
@@ -227,14 +236,20 @@ async def chat_about_pdf(
         ai_service._cleanup_sessions()
         session = ai_service._PDF_CHAT_SESSIONS.get(req.session_id)
         if not session:
-            raise HTTPException(status_code=404, detail="Sohbet oturumu bulunamadı veya süresi dolmuş.")
+            raise HTTPException(
+                status_code=404, detail="Sohbet oturumu bulunamadı veya süresi dolmuş."
+            )
 
         pdf_text = session["text"]
         filename = session["filename"]
         history = session["history"]
 
         MAX_CONTEXT_CHARS = 45000
-        pdf_context = pdf_text[:MAX_CONTEXT_CHARS] if len(pdf_text) > MAX_CONTEXT_CHARS else pdf_text
+        pdf_context = (
+            pdf_text[:MAX_CONTEXT_CHARS]
+            if len(pdf_text) > MAX_CONTEXT_CHARS
+            else pdf_text
+        )
 
         history_text = ""
         for turn in history[-10:]:
@@ -266,7 +281,7 @@ async def chat_about_pdf(
             mode=mode,
             history=history[-10:] if history else None,
             tool_context=tool_ctx,
-            language=req.language, # Dili geçir
+            language=req.language,  # Dili geçir
         )
 
         history.append({"role": "user", "content": req.message})
@@ -283,6 +298,7 @@ async def chat_about_pdf(
         raise
     except Exception as e:
         import traceback
+
         error_trace = traceback.format_exc()
         error_msg = str(e) if e else "Bilinmeyen hata"
         print(f"❌ Chat About PDF Error: {error_msg}")
@@ -313,6 +329,7 @@ async def generate_speech(
 # ==========================================
 # GENEL CHAT (PDF Gerektirmez - Pro Kullanıcılar İçin)
 # ==========================================
+
 
 @router.post("/chat/general/start", response_model=StartChatResponse)
 async def start_general_chat(
@@ -346,7 +363,9 @@ async def general_chat(
         ai_service._cleanup_sessions()
         session = ai_service._GENERAL_CHAT_SESSIONS.get(req.session_id)
         if not session:
-            raise HTTPException(status_code=404, detail="Sohbet oturumu bulunamadı veya süresi dolmuş.")
+            raise HTTPException(
+                status_code=404, detail="Sohbet oturumu bulunamadı veya süresi dolmuş."
+            )
 
         history = session["history"]
 
@@ -368,7 +387,7 @@ async def general_chat(
             mode=mode,
             history=history[-10:] if history else None,
             tool_context=None,
-            language=req.language, # Dili geçir
+            language=req.language,  # Dili geçir
         )
 
         history.append({"role": "user", "content": req.message})
@@ -385,10 +404,60 @@ async def general_chat(
         raise
     except Exception as e:
         import traceback
+
         error_trace = traceback.format_exc()
         print(f"❌ General Chat Error: {str(e)}")
         print(f"Traceback: {error_trace}")
         raise HTTPException(status_code=500, detail=f"Genel sohbet hatası: {str(e)}")
+
+
+class TranslateTextRequest(BaseModel):
+    text: str
+    source_language: str = "tr"
+    target_language: str = "en"
+    llm_provider: LLMProvider = "cloud"
+    mode: CloudMode = "flash"
+
+
+@router.post("/translate-text")
+async def translate_text(
+    req: TranslateTextRequest,
+    _: bool = Depends(verify_api_key),
+):
+    text = (req.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Metin boş olamaz.")
+
+    if req.source_language not in {"tr", "en"} or req.target_language not in {
+        "tr",
+        "en",
+    }:
+        raise HTTPException(status_code=400, detail="Sadece 'tr' ve 'en' desteklenir.")
+
+    if req.source_language == req.target_language:
+        return {"translation": text}
+
+    if req.target_language == "en":
+        instruction = (
+            "Translate the following text to English. "
+            "Return only the translation, preserve meaning and tone, and do not add extra commentary."
+        )
+    else:
+        instruction = (
+            "Aşağıdaki metni Türkçeye çevir. "
+            "Sadece çeviriyi döndür; anlamı ve tonu koru, ek açıklama ekleme."
+        )
+
+    translation = await asyncio.to_thread(
+        summarize_text,
+        text=text,
+        prompt_instruction=instruction,
+        llm_provider=req.llm_provider,
+        mode=req.mode,
+        language=req.target_language,
+    )
+
+    return {"translation": translation}
 
 
 @router.get("/health")

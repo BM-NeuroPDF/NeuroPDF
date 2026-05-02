@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { login, logout } from '../support/helpers';
+import { login, logout, openMobileMenuIfNeeded } from '../support/helpers';
 
 const TEST_EMAIL = process.env.E2E_TEST_EMAIL || 'test1@gmail.com';
 const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD || 'Test1234.';
@@ -24,6 +24,9 @@ test.describe('Authentication Flow', () => {
       'text=/İstatistiklerim|Genel Bakış|My Stats|Global Stats/i'
     );
     await expect(statsText.first()).toBeVisible();
+
+    // Mobil görünümde logout butonu hamburger menü içinde olabilir.
+    await openMobileMenuIfNeeded(page);
 
     // Logout
     await logout(page);

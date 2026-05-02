@@ -13,7 +13,7 @@ import { InputOTP6 } from '@/components/ui/input-otp';
 import { resolveApiBaseUrl } from '@/utils/api';
 
 export default function LoginPage() {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const router = useRouter();
   const { t } = useLanguage();
   const { savePdf } = usePdf();
@@ -28,8 +28,8 @@ export default function LoginPage() {
   const [otp, setOtp] = useState('');
 
   useEffect(() => {
-    savePdf(null as any);
-  }, []);
+    savePdf(null);
+  }, [savePdf]);
 
   useEffect(() => {
     if (status === 'authenticated') {
