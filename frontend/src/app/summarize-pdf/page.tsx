@@ -15,22 +15,13 @@ import { getMaxUploadBytes } from '@/app/config/fileLimits';
 import Popup from '@/components/ui/Popup';
 import { usePopup } from '@/hooks/usePopup';
 import { useSummaryAudio } from '@/hooks/useSummaryAudio';
-import { translations } from '@/utils/translations';
 import { SummarizeDropzone } from '@/components/SummarizeDropzone';
+import { SummaryAudioPlayer } from '@/components/SummaryAudioPlayer';
+import { SummaryResultPanel } from '@/components/SummaryResultPanel';
 
 const PdfViewer = dynamic(() => import('@/components/PdfViewer'), {
   ssr: false,
 });
-const MarkdownViewer = dynamic(() => import('@/components/MarkdownViewer'), {
-  ssr: false,
-});
-
-const formatTime = (seconds: number) => {
-  if (!seconds || isNaN(seconds)) return '00:00';
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
-};
 
 export default function SummarizePdfPage() {
   const { data: session, status } = useSession();
@@ -357,292 +348,41 @@ export default function SummarizePdfPage() {
         </div>
       )}
 
-      {/* Özet Sonucu ve Aksiyonlar */}
       {summary && (
-        <div className="mt-6 space-y-6">
-          <div className="container-card p-6 border border-gray-300 dark:border-[var(--container-border)] shadow-xl">
-            <h3 className="text-xl mb-4 font-semibold border-b border-[var(--navbar-border)] pb-2">
-              {t('summaryResultTitle') || 'Özet Sonucu'}
-            </h3>
-            <MarkdownViewer markdown={summary} height={400} />
-          </div>
-
-          <div className="container-card p-6 border border-gray-300 dark:border-[var(--container-border)] shadow-xl space-y-4">
-            <h3
-              className="text-xl font-bold flex items-center gap-2"
-              style={{ color: 'var(--foreground)' }}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="w-6 h-6 text-green-500"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              {t('processSuccess') || 'İşlem Başarılı'}
-            </h3>
-
-            {/* BUTON GRUBU */}
-            <div className="flex gap-4 flex-wrap items-center mt-4 pb-2">
-              <button
-                onClick={handleDownloadPdf}
-                className="btn-primary flex items-center gap-2 shadow-md hover:scale-105"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M12 12.75l-3-3m0 0l3-3m-3 3h7.5"
-                  />
-                </svg>
-                {t('downloadPdf') || 'PDF Olarak İndir'}
-              </button>
-
-              {session ? (
-                <button
-                  onClick={() => void requestAudio()}
-                  disabled={audioLoading}
-                  className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all shadow-md hover:scale-105 ${
-                    audioUrl || audioLoading
-                      ? 'bg-[var(--button-bg)] text-white'
-                      : 'bg-[var(--container-bg)] border border-[var(--navbar-border)] text-[var(--foreground)] hover:bg-[var(--button-bg)] hover:text-white'
-                  }`}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={1.5}
-                    stroke="currentColor"
-                    className="w-5 h-5"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z"
-                    />
-                  </svg>
-                  {audioLoading
-                    ? t('loading') || 'Hazırlanıyor...'
-                    : t('listenSummary') || 'Özeti Dinle'}
-                </button>
-              ) : (
-                <div className="relative group">
-                  <button
-                    disabled
-                    className="flex items-center gap-2 px-6 py-3 rounded-xl font-semibold bg-gray-200 dark:bg-gray-800 text-gray-400 cursor-not-allowed"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={1.5}
-                      stroke="currentColor"
-                      className="w-5 h-5"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
-                      />
-                    </svg>
-                    {t('listenSummary') || 'Özeti Dinle'}
-                  </button>
-                </div>
-              )}
-
-              {/* SOHBET ET — yalnızca Pro kullanıcılar; standart kullanıcılar /pricing'e yönlendirilir */}
-              {session && (
-                <button
-                  onClick={() => {
-                    if (isProUser) setProChatOpen(true);
-                    else router.push('/pricing');
-                  }}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all shadow-md hover:scale-105 bg-indigo-600 hover:bg-indigo-700 text-white"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={1.5}
-                    stroke="currentColor"
-                    className="w-5 h-5"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.159 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"
-                    />
-                  </svg>
-                  {isProUser
-                    ? t('chatButton' as keyof typeof translations.tr) ||
-                      'Sohbet Et'
-                    : t('upgradeToChat' as keyof typeof translations.tr) ||
-                      "Sohbet için Pro'ya geç"}
-                </button>
-              )}
-
-              <button
-                onClick={handleNew}
-                className="btn-primary flex items-center gap-2 shadow-md hover:scale-105"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M12 4.5v15m7.5-7.5h-15"
-                  />
-                </svg>
-                {t('newProcess') || 'Yeni İşlem'}
-              </button>
-            </div>
-
-            {/* OYNATICI ALANI */}
-            {audioUrl && (
-              <div className="bg-[var(--background)] p-4 rounded-xl border border-[var(--navbar-border)] animate-in fade-in slide-in-from-top-4 duration-500 relative">
-                {/* Time Line */}
-                <div className="flex items-center gap-3 mb-2">
-                  <span className="text-xs font-mono opacity-70 w-10 text-right">
-                    {formatTime(currentTime)}
-                  </span>
-                  <input
-                    type="range"
-                    min="0"
-                    max={duration || 0}
-                    value={currentTime}
-                    onChange={seek}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-[var(--button-bg)]"
-                  />
-                  <span className="text-xs font-mono opacity-70 w-10">
-                    {formatTime(duration)}
-                  </span>
-                </div>
-                {/* Kontroller */}
-                <div className="flex justify-center items-center gap-6">
-                  <button
-                    onClick={() => skipBy(-10)}
-                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={1.5}
-                      stroke="currentColor"
-                      className="w-6 h-6"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M15 19l-7-7 7-7"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={togglePlay}
-                    className="w-12 h-12 flex items-center justify-center rounded-full bg-[var(--button-bg)] text-white hover:scale-110 transition shadow-lg"
-                  >
-                    {isPlaying ? (
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth={1.5}
-                        stroke="currentColor"
-                        className="w-6 h-6"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M15.75 5.25v13.5m-7.5-13.5v13.5"
-                        />
-                      </svg>
-                    ) : (
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth={1.5}
-                        stroke="currentColor"
-                        className="w-6 h-6 ml-1"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"
-                        />
-                      </svg>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => skipBy(10)}
-                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={1.5}
-                      stroke="currentColor"
-                      className="w-6 h-6"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </button>
-                </div>
-
-                {/* İNDİRME BUTONU */}
-                {session && audioBlob && (
-                  <button
-                    onClick={downloadAudio}
-                    title={t('downloadAudio') || 'Sesi İndir (MP3)'}
-                    className="absolute bottom-4 right-4 text-gray-400 hover:text-[var(--button-bg)] hover:bg-gray-100 dark:hover:bg-gray-700 p-2 rounded-full transition-all"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={2}
-                      stroke="currentColor"
-                      className="w-5 h-5"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M12 12.75l-3-3m0 0 3-3m-3 3h7.5"
-                      />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+        <SummaryResultPanel
+          summary={summary}
+          file={file}
+          userRole={userRole}
+          onNew={handleNew}
+          onDownloadPdf={() => void handleDownloadPdf()}
+          onStartChat={
+            session
+              ? () => {
+                  if (isProUser) setProChatOpen(true);
+                  else router.push('/pricing');
+                }
+              : undefined
+          }
+          onRequestAudio={session ? () => void requestAudio() : undefined}
+          audioUrl={audioUrl}
+          audioLoading={audioLoading}
+          audioPlayer={
+            audioUrl ? (
+              <SummaryAudioPlayer
+                isPlaying={isPlaying}
+                currentTime={currentTime}
+                duration={duration}
+                audioLoading={audioLoading}
+                onTogglePlay={togglePlay}
+                onSeek={seek}
+                onSkip={skipBy}
+                onDownload={session && audioBlob ? downloadAudio : undefined}
+                t={t}
+              />
+            ) : null
+          }
+          t={t}
+        />
       )}
 
       <UsageLimitModal
