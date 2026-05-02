@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import Client
+from ..redis_client import invalidate_stats_caches_for_user
 from .contracts import StatsRepoProtocol
 from .dto import GlobalStatsDTO, UserStatsDTO
 
@@ -51,6 +52,7 @@ class StatsRepository(StatsRepoProtocol):
                         .eq("user_id", user_id)
                         .execute()
                     )
+                    invalidate_stats_caches_for_user(user_id)
                     return
 
                 new_data = {
@@ -60,6 +62,7 @@ class StatsRepository(StatsRepoProtocol):
                     "last_activity": now_iso,
                 }
                 supabase.table("user_stats").insert(new_data).execute()
+                invalidate_stats_caches_for_user(user_id)
                 return
 
             if db is not None:
@@ -113,6 +116,7 @@ class StatsRepository(StatsRepoProtocol):
                         },
                     )
                 db.commit()
+                invalidate_stats_caches_for_user(user_id)
         except Exception as e:
             logger.error("increment_usage failed: %s", e, exc_info=True)
             if db is not None:

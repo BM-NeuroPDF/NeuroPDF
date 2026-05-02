@@ -55,6 +55,14 @@ from ..models import UserStatsResponse, User
 from ..repositories.stats_repo import StatsRepository
 from ..repositories.user_repo import UserRepository
 from ..rate_limit import check_rate_limit
+from ..redis_client import (
+    GLOBAL_STATS_CACHE_KEY,
+    GLOBAL_STATS_CACHE_TTL_SEC,
+    USER_STATS_CACHE_TTL_SEC,
+    stats_cache_get_json,
+    stats_cache_set_json,
+    user_stats_cache_key,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -2524,6 +2532,24 @@ async def get_user_stats(
         user_id = current_user.get("sub")
         if not user_id:
             raise HTTPException(status_code=401, detail="User ID not found")
+
+        cache_key = user_stats_cache_key(user_id)
+        cached = stats_cache_get_json(cache_key)
+        if cached is not None and isinstance(cached, dict):
+            try:
+                logger.info(
+                    "user_stats cache hit user_id=%s key=%s",
+                    user_id,
+                    cache_key,
+                )
+                return UserStatsResponse(
+                    summary_count=int(cached.get("summary_count", 0)),
+                    tools_count=int(cached.get("tools_count", 0)),
+                    role=str(cached.get("role", "Standart")),
+                )
+            except Exception:
+                logger.debug("user_stats cache parse failed, refetching", exc_info=True)
+
         user_stats = await stats_repo.get_user_stats(
             user_id=user_id,
             db=db,
@@ -2541,11 +2567,21 @@ async def get_user_stats(
         else:
             role_name = "Standart"
 
-        return UserStatsResponse(
+        body = UserStatsResponse(
             summary_count=user_stats.summary_count,
             tools_count=user_stats.tools_count,
             role=role_name,  # Admin, Pro veya Standart dönecek
         )
+        stats_cache_set_json(
+            cache_key,
+            {
+                "summary_count": body.summary_count,
+                "tools_count": body.tools_count,
+                "role": body.role,
+            },
+            USER_STATS_CACHE_TTL_SEC,
+        )
+        return body
 
     except Exception as e:
         print(f"❌ İstatistik hatası: {str(e)}")
@@ -2567,13 +2603,26 @@ async def get_global_stats(
     Auth gerektirmez (Public).
     """
     try:
+        cached = stats_cache_get_json(GLOBAL_STATS_CACHE_KEY)
+        if cached is not None and isinstance(cached, dict):
+            logger.info("global_stats cache hit key=%s", GLOBAL_STATS_CACHE_KEY)
+            return {
+                "total_users": int(cached.get("total_users", 0)),
+                "total_processed": int(cached.get("total_processed", 0)),
+                "total_ai_summaries": int(cached.get("total_ai_summaries", 0)),
+            }
+
         global_stats = await stats_repo.get_global_stats(db=db, supabase=supabase)
 
-        return {
+        payload = {
             "total_users": global_stats.total_users,
             "total_processed": global_stats.total_processed,
             "total_ai_summaries": global_stats.total_ai_summaries,
         }
+        stats_cache_set_json(
+            GLOBAL_STATS_CACHE_KEY, payload, GLOBAL_STATS_CACHE_TTL_SEC
+        )
+        return payload
 
     except Exception as e:
         print(f"❌ Global stats error: {str(e)}")

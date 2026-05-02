@@ -2,6 +2,8 @@
 Unit tests for files.py router endpoints
 """
 
+import logging
+
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from fastapi.testclient import TestClient
@@ -551,6 +553,14 @@ class TestFileManagementEndpoints:
 
 
 class TestStatsRepositoryShimEndpoints:
+    @pytest.fixture(autouse=True)
+    def _bypass_stats_redis_cache(self):
+        with (
+            patch("app.routers.files.stats_cache_get_json", return_value=None),
+            patch("app.routers.files.stats_cache_set_json"),
+        ):
+            yield
+
     @patch("app.routers.files.stats_repo.get_user_stats", new_callable=AsyncMock)
     def test_get_user_stats_maps_pro_role_from_dto(
         self, mock_get_user_stats, override_dependencies
@@ -636,6 +646,117 @@ class TestStatsRepositoryShimEndpoints:
             "total_processed": 0,
             "total_ai_summaries": 0,
         }
+
+    @patch("app.routers.files.stats_repo.get_user_stats", new_callable=AsyncMock)
+    def test_get_user_stats_second_request_uses_cache_without_repo(
+        self, mock_get_user_stats, override_dependencies
+    ):
+        mock_get_user_stats.return_value = UserStatsDTO(
+            summary_count=9, tools_count=1, role_name_db="pro user"
+        )
+        cached_payload = {
+            "summary_count": 3,
+            "tools_count": 4,
+            "role": "Pro",
+        }
+
+        with (
+            patch(
+                "app.routers.files.stats_cache_get_json",
+                side_effect=[None, cached_payload],
+            ),
+            patch("app.routers.files.stats_cache_set_json") as mock_set_cache,
+        ):
+            r1 = client.get("/files/user/stats")
+            r2 = client.get("/files/user/stats")
+
+        assert r1.status_code == 200
+        assert r1.json()["summary_count"] == 9
+        assert mock_get_user_stats.await_count == 1
+        mock_set_cache.assert_called_once()
+
+        assert r2.status_code == 200
+        assert r2.json() == cached_payload
+        assert mock_get_user_stats.await_count == 1
+
+    @patch("app.routers.files.stats_repo.get_user_stats", new_callable=AsyncMock)
+    def test_get_user_stats_second_request_logs_cache_hit(
+        self, mock_get_user_stats, override_dependencies, caplog
+    ):
+        mock_get_user_stats.return_value = UserStatsDTO(
+            summary_count=1, tools_count=1, role_name_db="pro user"
+        )
+        cached_payload = {
+            "summary_count": 3,
+            "tools_count": 4,
+            "role": "Pro",
+        }
+        caplog.set_level(logging.INFO)
+        with (
+            patch(
+                "app.routers.files.stats_cache_get_json",
+                side_effect=[None, cached_payload],
+            ),
+            patch("app.routers.files.stats_cache_set_json"),
+        ):
+            client.get("/files/user/stats")
+            client.get("/files/user/stats")
+        assert any("user_stats cache hit" in r.message for r in caplog.records)
+
+    @patch("app.routers.files.stats_repo.get_global_stats", new_callable=AsyncMock)
+    def test_get_global_stats_second_request_uses_cache_without_repo(
+        self, mock_get_global_stats, override_dependencies
+    ):
+        dto = GlobalStatsDTO(total_users=2, total_processed=100, total_ai_summaries=40)
+        mock_get_global_stats.return_value = dto
+        cached = {
+            "total_users": 99,
+            "total_processed": 1,
+            "total_ai_summaries": 1,
+        }
+
+        with (
+            patch(
+                "app.routers.files.stats_cache_get_json",
+                side_effect=[None, cached],
+            ),
+            patch("app.routers.files.stats_cache_set_json") as mock_set,
+        ):
+            r1 = client.get("/files/global-stats")
+            r2 = client.get("/files/global-stats")
+
+        assert r1.status_code == 200
+        assert r1.json() == {
+            "total_users": 2,
+            "total_processed": 100,
+            "total_ai_summaries": 40,
+        }
+        assert mock_get_global_stats.await_count == 1
+        mock_set.assert_called_once()
+
+        assert r2.status_code == 200
+        assert r2.json() == cached
+        assert mock_get_global_stats.await_count == 1
+
+    @patch("app.routers.files.stats_repo.get_global_stats", new_callable=AsyncMock)
+    def test_get_global_stats_second_request_logs_cache_hit(
+        self, mock_get_global_stats, override_dependencies, caplog
+    ):
+        mock_get_global_stats.return_value = GlobalStatsDTO(
+            total_users=1, total_processed=2, total_ai_summaries=3
+        )
+        cached = {"total_users": 9, "total_processed": 8, "total_ai_summaries": 7}
+        caplog.set_level(logging.INFO)
+        with (
+            patch(
+                "app.routers.files.stats_cache_get_json",
+                side_effect=[None, cached],
+            ),
+            patch("app.routers.files.stats_cache_set_json"),
+        ):
+            client.get("/files/global-stats")
+            client.get("/files/global-stats")
+        assert any("global_stats cache hit" in r.message for r in caplog.records)
 
     @pytest.mark.asyncio
     @patch("app.routers.files.stats_repo.increment_usage", new_callable=AsyncMock)
