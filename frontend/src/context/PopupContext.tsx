@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { createContext, useContext, useState } from "react";
-import Popup from "@/components/ui/Popup";
+import { createContext, useContext, useState } from 'react';
+import Popup from '@/components/ui/Popup';
 
-type PopupType = "success" | "error" | "info";
+type PopupType = 'success' | 'error' | 'info';
 
 interface PopupItem {
   id: number;
@@ -19,13 +19,13 @@ interface PopupContextType {
 
 const PopupContext = createContext<PopupContextType | null>(null);
 
-export function PopupProvider({ children }: { children: React.ReactNode }) {
+let popupIdCounter = 0;
 
+export function PopupProvider({ children }: { children: React.ReactNode }) {
   const [popups, setPopups] = useState<PopupItem[]>([]);
 
   const showPopup = (type: PopupType, message: string) => {
-
-    const id = Date.now();
+    const id = ++popupIdCounter;
 
     setPopups((prev) => [...prev, { id, type, message }]);
 
@@ -34,9 +34,9 @@ export function PopupProvider({ children }: { children: React.ReactNode }) {
     }, 3000);
   };
 
-  const showSuccess = (msg: string) => showPopup("success", msg);
-  const showError = (msg: string) => showPopup("error", msg);
-  const showInfo = (msg: string) => showPopup("info", msg);
+  const showSuccess = (msg: string) => showPopup('success', msg);
+  const showError = (msg: string) => showPopup('error', msg);
+  const showInfo = (msg: string) => showPopup('info', msg);
 
   return (
     <PopupContext.Provider value={{ showSuccess, showError, showInfo }}>
@@ -55,13 +55,12 @@ export function PopupProvider({ children }: { children: React.ReactNode }) {
           />
         ))}
       </div>
-
     </PopupContext.Provider>
   );
 }
 
 export function usePopup() {
   const context = useContext(PopupContext);
-  if (!context) throw new Error("usePopup must be used inside PopupProvider");
+  if (!context) throw new Error('usePopup must be used inside PopupProvider');
   return context;
 }
