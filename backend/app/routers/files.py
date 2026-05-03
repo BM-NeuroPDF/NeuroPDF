@@ -436,6 +436,7 @@ def _build_reportlab_document(doc: SimpleDocTemplate, story: list) -> None:
 # ==========================================
 @router.post("/summarize")
 async def summarize_file(
+    request: Request,
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -517,45 +518,47 @@ async def summarize_file(
 
         # Local LLM için daha uzun timeout (gemma2:9b tek adımda ~7 dk sürebilir)
         timeout_duration = 600.0 if provider_string == "local" else 120.0
-        async with httpx.AsyncClient(
-            timeout=timeout_duration, follow_redirects=True
-        ) as client:
-            headers = get_ai_service_headers()
-            params = {
-                "llm_provider": provider_string,
-                "pdf_hash": pdf_hash,
-                "language": language,
-            }
-            response = await client.post(
-                ai_service_url, files=files, params=params, headers=headers
+        client = request.app.state.ai_http_client
+        headers = get_ai_service_headers()
+        params = {
+            "llm_provider": provider_string,
+            "pdf_hash": pdf_hash,
+            "language": language,
+        }
+        response = await client.post(
+            ai_service_url,
+            files=files,
+            params=params,
+            headers=headers,
+            timeout=timeout_duration,
+        )
+
+        if response.status_code != 200:
+            print(f"❌ AI Service Error: {response.text}")
+            raise HTTPException(
+                status_code=response.status_code, detail="AI Servisi hatası"
             )
 
-            if response.status_code != 200:
-                print(f"❌ AI Service Error: {response.text}")
-                raise HTTPException(
-                    status_code=response.status_code, detail="AI Servisi hatası"
-                )
+        result = response.json()
 
-            result = response.json()
+        # ✅ OPTİMİZASYON: Kullanıcı istatistikleri ve cache kaydetme arka planda yapılsın
+        # Response'u hemen döndür, kullanıcıyı bekletme
 
-            # ✅ OPTİMİZASYON: Kullanıcı istatistikleri ve cache kaydetme arka planda yapılsın
-            # Response'u hemen döndür, kullanıcıyı bekletme
+        # Kullanıcı istatistiklerini arka planda güncelle (non-blocking)
+        background_tasks.add_task(increment_user_usage_task, user_id, "summary")
 
-            # Kullanıcı istatistiklerini arka planda güncelle (non-blocking)
-            background_tasks.add_task(increment_user_usage_task, user_id, "summary")
-
-            # Cache'i arka planda kaydet (non-blocking)
-            # Not: DB session'ı background task'ta kullanmak için yeni session oluşturulmalı
-            if db is not None:
-                summary_text = result.get("summary")
-                # DB session'ı background task'ta kullanmak için yeni session oluştur
-                background_tasks.add_task(
-                    save_summarize_cache_background,
-                    pdf_hash,
-                    summary_text,
-                    llm_choice_id,
-                    user_id,
-                )
+        # Cache'i arka planda kaydet (non-blocking)
+        # Not: DB session'ı background task'ta kullanmak için yeni session oluşturulmalı
+        if db is not None:
+            summary_text = result.get("summary")
+            # DB session'ı background task'ta kullanmak için yeni session oluştur
+            background_tasks.add_task(
+                save_summarize_cache_background,
+                pdf_hash,
+                summary_text,
+                llm_choice_id,
+                user_id,
+            )
 
         # ✅ Response'u hemen döndür (kullanıcı bekletilmez)
         return {
@@ -606,14 +609,18 @@ async def summarize_for_guest(
         # Misafir kullanıcılar için default: local (KVKK için güvenli)
         llm_provider = "local"
 
-        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-            files = {"file": (file.filename, file_content, "application/pdf")}
-            headers = get_ai_service_headers()
-            params = {"llm_provider": llm_provider, "language": language}
-            response = await client.post(
-                ai_service_url, files=files, params=params, headers=headers
-            )
-            response.raise_for_status()
+        client = request.app.state.ai_http_client
+        files = {"file": (file.filename, file_content, "application/pdf")}
+        headers = get_ai_service_headers()
+        params = {"llm_provider": llm_provider, "language": language}
+        response = await client.post(
+            ai_service_url,
+            files=files,
+            params=params,
+            headers=headers,
+            timeout=60.0,
+        )
+        response.raise_for_status()
 
         result = response.json()
 
@@ -631,6 +638,7 @@ async def summarize_for_guest(
 
 @router.post("/summarize-start/{file_id}")
 async def trigger_summarize_task(
+    request: Request,
     file_id: int,
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_supabase),
@@ -678,12 +686,12 @@ async def trigger_summarize_task(
 
         ai_service_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/summarize-async"
 
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            headers = get_ai_service_headers()
-            response = await client.post(
-                ai_service_url, json=task_data, headers=headers, timeout=10
-            )
-            response.raise_for_status()
+        client = request.app.state.ai_http_client
+        headers = get_ai_service_headers()
+        response = await client.post(
+            ai_service_url, json=task_data, headers=headers, timeout=10
+        )
+        response.raise_for_status()
 
         # İSTATİSTİK (Async olduğu için burada sayıyoruz)
         await increment_user_usage_task(user_id, "summary")
@@ -1082,6 +1090,7 @@ def get_user_llm_choice(db: Session, user_id: str):
 
 @router.post("/chat/start-from-text")
 async def start_chat_from_text(
+    request: Request,
     body: dict = Body(...),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -1140,50 +1149,48 @@ async def start_chat_from_text(
             raise HTTPException(status_code=400, detail="PDF text gereklidir.")
 
         # AI Service'e PDF text'ini gönder
-        async with httpx.AsyncClient() as client:
-            target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/start-from-text"
-            payload = {
-                "pdf_text": normalized_pdf_text,
-                "filename": filename,
-                "llm_provider": llm_provider,  # DB'den gelen değeri kullan (body override yok)
-                "mode": mode,
-            }
-            if pdf_id_meta and user_id:
-                payload["pdf_id"] = pdf_id_meta
-                payload["user_id"] = user_id
-            headers = get_ai_service_headers()
-            response = await client.post(
-                target_url, json=payload, headers=headers, timeout=60.0
+        client = request.app.state.ai_http_client
+        target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/start-from-text"
+        payload = {
+            "pdf_text": normalized_pdf_text,
+            "filename": filename,
+            "llm_provider": llm_provider,  # DB'den gelen değeri kullan (body override yok)
+            "mode": mode,
+        }
+        if pdf_id_meta and user_id:
+            payload["pdf_id"] = pdf_id_meta
+            payload["user_id"] = user_id
+        headers = get_ai_service_headers()
+        response = await client.post(
+            target_url, json=payload, headers=headers, timeout=60.0
+        )
+
+        if response.status_code != 200:
+            print(f"❌ AI Service Hatası: {response.text}")
+            raise HTTPException(
+                status_code=502, detail="Yapay zeka servisi başlatılamadı."
             )
 
-            if response.status_code != 200:
-                print(f"❌ AI Service Hatası: {response.text}")
-                raise HTTPException(
-                    status_code=502, detail="Yapay zeka servisi başlatılamadı."
-                )
+        data = response.json()
+        print(f"✅ Chat Oturumu Başladı (Text'ten): {data['session_id']}")
 
-            data = response.json()
-            print(f"✅ Chat Oturumu Başladı (Text'ten): {data['session_id']}")
-
-            out: dict = {"session_id": data["session_id"], "filename": filename}
-            if pdf_id_meta:
-                out["pdf_id"] = pdf_id_meta
-            if user_id and db:
-                ctx = (
-                    None if pdf_id_meta else truncate_context_text(normalized_pdf_text)
-                )
-                db_row = create_pdf_chat_session_record(
-                    db,
-                    user_id=user_id,
-                    ai_session_id=data["session_id"],
-                    filename=filename,
-                    llm_provider=llm_provider,
-                    mode=mode,
-                    pdf_id=pdf_id_meta,
-                    context_text=ctx,
-                )
-                out["db_session_id"] = db_row.id
-            return out
+        out: dict = {"session_id": data["session_id"], "filename": filename}
+        if pdf_id_meta:
+            out["pdf_id"] = pdf_id_meta
+        if user_id and db:
+            ctx = None if pdf_id_meta else truncate_context_text(normalized_pdf_text)
+            db_row = create_pdf_chat_session_record(
+                db,
+                user_id=user_id,
+                ai_session_id=data["session_id"],
+                filename=filename,
+                llm_provider=llm_provider,
+                mode=mode,
+                pdf_id=pdf_id_meta,
+                context_text=ctx,
+            )
+            out["db_session_id"] = db_row.id
+        return out
 
     except (OperationalError, PendingRollbackError) as e:
         _raise_db_unavailable(e)
@@ -1196,6 +1203,7 @@ async def start_chat_from_text(
 
 @router.post("/chat/start")  # 👈 {file_id} kaldırıldı
 async def start_chat_session(
+    request: Request,
     file: UploadFile = File(...),  # 👈 Direkt dosyayı alıyoruz
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -1245,53 +1253,51 @@ async def start_chat_session(
             logger.warning(f"Chat start PDF text extract failed: {e}", exc_info=True)
             pdf_text = ""
 
-        async with httpx.AsyncClient() as client:
-            target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/start-from-text"
-            payload = {
-                "pdf_text": pdf_text or " ",
-                "filename": file.filename,
-                "llm_provider": llm_provider,
-                "mode": mode,
-                "pdf_id": pdf_row.id,
-                "user_id": user_id,
-                "language": language,
-            }
-            headers = get_ai_service_headers()
-            print(
-                f"📡 AI Service (start-from-text): {target_url} (llm_provider: {llm_provider})"
-            )
-            response = await client.post(
-                target_url, json=payload, headers=headers, timeout=60.0
-            )
+        client = request.app.state.ai_http_client
+        target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/start-from-text"
+        payload = {
+            "pdf_text": pdf_text or " ",
+            "filename": file.filename,
+            "llm_provider": llm_provider,
+            "mode": mode,
+            "pdf_id": pdf_row.id,
+            "user_id": user_id,
+            "language": language,
+        }
+        headers = get_ai_service_headers()
+        print(
+            f"📡 AI Service (start-from-text): {target_url} (llm_provider: {llm_provider})"
+        )
+        response = await client.post(
+            target_url, json=payload, headers=headers, timeout=60.0
+        )
 
-            if response.status_code != 200:
-                print(f"❌ AI Service Hatası: {response.text}")
-                raise HTTPException(
-                    status_code=502, detail="Yapay zeka servisi başlatılamadı."
-                )
-
-            data = response.json()
-            print(
-                f"✅ Chat Oturumu Başladı: {data['session_id']} (pdf_id={pdf_row.id})"
+        if response.status_code != 200:
+            print(f"❌ AI Service Hatası: {response.text}")
+            raise HTTPException(
+                status_code=502, detail="Yapay zeka servisi başlatılamadı."
             )
 
-            db_row = create_pdf_chat_session_record(
-                db,
-                user_id=user_id,
-                ai_session_id=data["session_id"],
-                filename=file.filename or "document.pdf",
-                llm_provider=llm_provider,
-                mode=mode,
-                pdf_id=pdf_row.id,
-                context_text=None,
-            )
+        data = response.json()
+        print(f"✅ Chat Oturumu Başladı: {data['session_id']} (pdf_id={pdf_row.id})")
 
-            return {
-                "session_id": data["session_id"],
-                "filename": file.filename,
-                "pdf_id": pdf_row.id,
-                "db_session_id": db_row.id,
-            }
+        db_row = create_pdf_chat_session_record(
+            db,
+            user_id=user_id,
+            ai_session_id=data["session_id"],
+            filename=file.filename or "document.pdf",
+            llm_provider=llm_provider,
+            mode=mode,
+            pdf_id=pdf_row.id,
+            context_text=None,
+        )
+
+        return {
+            "session_id": data["session_id"],
+            "filename": file.filename,
+            "pdf_id": pdf_row.id,
+            "db_session_id": db_row.id,
+        }
 
     except (OperationalError, PendingRollbackError) as e:
         _raise_db_unavailable(e)
@@ -1307,6 +1313,7 @@ async def start_chat_session(
 # ==========================================
 @router.post("/chat/message")
 async def send_chat_message(
+    request: Request,
     body: dict = Body(...),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -1324,81 +1331,81 @@ async def send_chat_message(
 
     try:
         # AI Service'e ilet (/chat)
-        async with httpx.AsyncClient(timeout=240.0) as client:
-            payload = {
-                "session_id": session_id,
-                "message": message,
-                "language": language,
-            }
-            target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat"
-            headers = get_ai_service_headers()
-            response = await client.post(target_url, json=payload, headers=headers)
+        client = request.app.state.ai_http_client
+        payload = {
+            "session_id": session_id,
+            "message": message,
+            "language": language,
+        }
+        target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat"
+        headers = get_ai_service_headers()
+        response = await client.post(
+            target_url, json=payload, headers=headers, timeout=240.0
+        )
 
-            if response.status_code != 200:
-                # Response'u parse etmeyi dene
-                try:
-                    error_detail = response.json().get("detail", "AI hatası")
-                except Exception:
-                    error_detail = (
-                        response.text or f"AI Service hatası: {response.status_code}"
-                    )
-
-                print(f"❌ AI Service Hatası ({response.status_code}): {error_detail}")
-
-                # Gemini quota/rate limit hatası için daha kullanıcı dostu mesaj
-                if response.status_code == 429:
-                    error_lower = error_detail.lower()
-                    if (
-                        "quota" in error_lower
-                        or "gemini" in error_lower
-                        or "rate limit" in error_lower
-                    ):
-                        # Quota aşıldıysa Local LLM öner
-                        if "quota" in error_lower and "exceeded" in error_lower:
-                            raise HTTPException(
-                                status_code=429,
-                                detail="Gemini API günlük kotası aşıldı. Lütfen profil sayfasından Local LLM'e geçin veya yarın tekrar deneyin.",
-                            )
-                        else:
-                            # Rate limit (çok fazla istek) - kısa süre bekle
-                            raise HTTPException(
-                                status_code=429,
-                                detail="Gemini API çok yoğun. Lütfen birkaç dakika sonra tekrar deneyin veya Local LLM kullanmayı deneyin.",
-                            )
-                raise HTTPException(
-                    status_code=response.status_code, detail=error_detail
+        if response.status_code != 200:
+            # Response'u parse etmeyi dene
+            try:
+                error_detail = response.json().get("detail", "AI hatası")
+            except Exception:
+                error_detail = (
+                    response.text or f"AI Service hatası: {response.status_code}"
                 )
 
-            result = response.json()
-            user_id = current_user.get("sub")
-            if user_id and isinstance(result, dict) and result.get("answer"):
-                try:
-                    user_meta = _normalize_message_metadata(
-                        body.get("message_payload"),
-                        fallback_content=str(message),
-                        fallback_language=language,
-                    )
-                    assistant_meta = _normalize_message_metadata(
-                        body.get("assistant_message_payload"),
-                        fallback_content=str(result["answer"]),
-                        fallback_language=language,
-                    )
-                    append_chat_turn(
-                        db,
-                        ai_session_id=session_id,
-                        user_id=user_id,
-                        user_message=message,
-                        assistant_message=str(result["answer"]),
-                        user_metadata=user_meta,
-                        assistant_metadata=assistant_meta,
-                    )
-                except Exception as persist_err:
-                    logger.warning(
-                        "Chat mesajı kalıcı kayıt atlandı: %s",
-                        persist_err,
-                        exc_info=True,
-                    )
-            return result
+            print(f"❌ AI Service Hatası ({response.status_code}): {error_detail}")
+
+            # Gemini quota/rate limit hatası için daha kullanıcı dostu mesaj
+            if response.status_code == 429:
+                error_lower = error_detail.lower()
+                if (
+                    "quota" in error_lower
+                    or "gemini" in error_lower
+                    or "rate limit" in error_lower
+                ):
+                    # Quota aşıldıysa Local LLM öner
+                    if "quota" in error_lower and "exceeded" in error_lower:
+                        raise HTTPException(
+                            status_code=429,
+                            detail="Gemini API günlük kotası aşıldı. Lütfen profil sayfasından Local LLM'e geçin veya yarın tekrar deneyin.",
+                        )
+                    else:
+                        # Rate limit (çok fazla istek) - kısa süre bekle
+                        raise HTTPException(
+                            status_code=429,
+                            detail="Gemini API çok yoğun. Lütfen birkaç dakika sonra tekrar deneyin veya Local LLM kullanmayı deneyin.",
+                        )
+            raise HTTPException(status_code=response.status_code, detail=error_detail)
+
+        result = response.json()
+        user_id = current_user.get("sub")
+        if user_id and isinstance(result, dict) and result.get("answer"):
+            try:
+                user_meta = _normalize_message_metadata(
+                    body.get("message_payload"),
+                    fallback_content=str(message),
+                    fallback_language=language,
+                )
+                assistant_meta = _normalize_message_metadata(
+                    body.get("assistant_message_payload"),
+                    fallback_content=str(result["answer"]),
+                    fallback_language=language,
+                )
+                append_chat_turn(
+                    db,
+                    ai_session_id=session_id,
+                    user_id=user_id,
+                    user_message=message,
+                    assistant_message=str(result["answer"]),
+                    user_metadata=user_meta,
+                    assistant_metadata=assistant_meta,
+                )
+            except Exception as persist_err:
+                logger.warning(
+                    "Chat mesajı kalıcı kayıt atlandı: %s",
+                    persist_err,
+                    exc_info=True,
+                )
+        return result
 
     except httpx.ReadTimeout:
         raise HTTPException(
@@ -1478,6 +1485,7 @@ async def get_pdf_chat_session_messages(
 
 @router.post("/chat/sessions/{session_db_id}/resume")
 async def resume_pdf_chat_session(
+    request: Request,
     session_db_id: str,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -1519,19 +1527,21 @@ async def resume_pdf_chat_session(
             "user_id": user_id,
         }
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/restore-session"
-            headers = get_ai_service_headers()
-            response = await client.post(target_url, json=payload, headers=headers)
-            if response.status_code != 200:
-                detail = response.text
-                try:
-                    detail = response.json().get("detail", detail)
-                except Exception:
-                    pass
-                raise HTTPException(
-                    status_code=502, detail=f"AI oturum yükleme hatası: {detail}"
-                )
+        client = request.app.state.ai_http_client
+        target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/restore-session"
+        headers = get_ai_service_headers()
+        response = await client.post(
+            target_url, json=payload, headers=headers, timeout=60.0
+        )
+        if response.status_code != 200:
+            detail = response.text
+            try:
+                detail = response.json().get("detail", detail)
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=502, detail=f"AI oturum yükleme hatası: {detail}"
+            )
     except (OperationalError, PendingRollbackError) as e:
         _raise_db_unavailable(e)
     except HTTPException:
@@ -1586,6 +1596,7 @@ async def download_stored_pdf(
 
 @router.post("/chat/general/start")
 async def start_general_chat(
+    request: Request,
     body: dict = Body(...),
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_supabase),
@@ -1599,32 +1610,20 @@ async def start_general_chat(
     if not user_id:
         raise HTTPException(status_code=401, detail="Kullanıcı kimliği bulunamadı.")
 
-    # Pro kullanıcı kontrolü
-    if not await user_repo.is_pro_user(
+    is_pro, llm_provider = await user_repo.get_user_role_and_llm_provider(
         user_id=user_id,
         db=db,
         supabase=supabase if settings.USE_SUPABASE else None,
-    ):
+    )
+    if not is_pro:
         raise HTTPException(
             status_code=403,
             detail="Bu özellik sadece Pro kullanıcılar için kullanılabilir.",
         )
 
     try:
-        # Kullanıcının LLM tercihini DB'den al (öncelik DB'deki tercih)
-        if db and user_id:
-            try:
-                llm_provider = await user_repo.get_llm_provider(
-                    user_id=user_id,
-                    db=db,
-                    supabase=None,
-                )
-            except Exception as e:
-                print(f"⚠️ LLM provider alınamadı, default kullanılıyor: {e}")
-                llm_provider = "local"
-        else:
-            # Fallback: body'den al veya default local
-            llm_provider = body.get("llm_provider", "local")
+        if not db:
+            llm_provider = body.get("llm_provider", llm_provider)
         print(f"📊 Genel Chat - Kullanıcı LLM Tercihi (DB'den): {llm_provider}")
 
         # Mode belirleme: cloud ise flash/pro, local ise flash (mode parametresi local için geçersiz)
@@ -1633,19 +1632,19 @@ async def start_general_chat(
             mode = "flash"  # Local LLM için mode parametresi kullanılmaz ama tutarlılık için
 
         # AI Service'e ilet (query parameters olarak gönder)
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            params = {"llm_provider": llm_provider, "mode": mode}
-            target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/general/start"
-            headers = get_ai_service_headers()
-            response = await client.post(target_url, params=params, headers=headers)
+        client = request.app.state.ai_http_client
+        params = {"llm_provider": llm_provider, "mode": mode}
+        target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/general/start"
+        headers = get_ai_service_headers()
+        response = await client.post(
+            target_url, params=params, headers=headers, timeout=60.0
+        )
 
-            if response.status_code != 200:
-                error_detail = response.json().get("detail", "AI hatası")
-                raise HTTPException(
-                    status_code=response.status_code, detail=error_detail
-                )
+        if response.status_code != 200:
+            error_detail = response.json().get("detail", "AI hatası")
+            raise HTTPException(status_code=response.status_code, detail=error_detail)
 
-            return response.json()  # {"session_id": "..."}
+        return response.json()  # {"session_id": "..."}
 
     except httpx.TimeoutException:
         logger.error(
@@ -1674,6 +1673,7 @@ async def start_general_chat(
 
 @router.post("/chat/general/message")
 async def send_general_chat_message(
+    request: Request,
     body: dict = Body(...),
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_supabase),
@@ -1687,12 +1687,12 @@ async def send_general_chat_message(
     if not user_id:
         raise HTTPException(status_code=401, detail="Kullanıcı kimliği bulunamadı.")
 
-    # Pro kullanıcı kontrolü
-    if not await user_repo.is_pro_user(
+    is_pro, _llm_unused = await user_repo.get_user_role_and_llm_provider(
         user_id=user_id,
         db=db,
         supabase=supabase if settings.USE_SUPABASE else None,
-    ):
+    )
+    if not is_pro:
         raise HTTPException(
             status_code=403,
             detail="Bu özellik sadece Pro kullanıcılar için kullanılabilir.",
@@ -1707,45 +1707,45 @@ async def send_general_chat_message(
 
     try:
         # AI Service'e ilet
-        async with httpx.AsyncClient(timeout=240.0) as client:
-            payload = {
-                "session_id": session_id,
-                "message": message,
-                "language": language,
-            }
-            target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/general"
-            headers = get_ai_service_headers()
-            response = await client.post(target_url, json=payload, headers=headers)
+        client = request.app.state.ai_http_client
+        payload = {
+            "session_id": session_id,
+            "message": message,
+            "language": language,
+        }
+        target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/general"
+        headers = get_ai_service_headers()
+        response = await client.post(
+            target_url, json=payload, headers=headers, timeout=240.0
+        )
 
-            if response.status_code != 200:
-                error_detail = response.json().get("detail", "AI hatası")
-                # Gemini quota/rate limit hatası için daha kullanıcı dostu mesaj
-                if response.status_code == 429:
-                    error_lower = error_detail.lower()
-                    if (
-                        "quota" in error_lower
-                        or "gemini" in error_lower
-                        or "rate limit" in error_lower
-                    ):
-                        # Quota aşıldıysa Local LLM öner
-                        if "quota" in error_lower and "exceeded" in error_lower:
-                            raise HTTPException(
-                                status_code=429,
-                                detail="Gemini API günlük kotası aşıldı. Lütfen profil sayfasından Local LLM'e geçin veya yarın tekrar deneyin.",
-                            )
-                        else:
-                            # Rate limit (çok fazla istek) - kısa süre bekle
-                            raise HTTPException(
-                                status_code=429,
-                                detail="Gemini API çok yoğun. Lütfen birkaç dakika sonra tekrar deneyin veya Local LLM kullanmayı deneyin.",
-                            )
-                raise HTTPException(
-                    status_code=response.status_code, detail=error_detail
-                )
+        if response.status_code != 200:
+            error_detail = response.json().get("detail", "AI hatası")
+            # Gemini quota/rate limit hatası için daha kullanıcı dostu mesaj
+            if response.status_code == 429:
+                error_lower = error_detail.lower()
+                if (
+                    "quota" in error_lower
+                    or "gemini" in error_lower
+                    or "rate limit" in error_lower
+                ):
+                    # Quota aşıldıysa Local LLM öner
+                    if "quota" in error_lower and "exceeded" in error_lower:
+                        raise HTTPException(
+                            status_code=429,
+                            detail="Gemini API günlük kotası aşıldı. Lütfen profil sayfasından Local LLM'e geçin veya yarın tekrar deneyin.",
+                        )
+                    else:
+                        # Rate limit (çok fazla istek) - kısa süre bekle
+                        raise HTTPException(
+                            status_code=429,
+                            detail="Gemini API çok yoğun. Lütfen birkaç dakika sonra tekrar deneyin veya Local LLM kullanmayı deneyin.",
+                        )
+            raise HTTPException(status_code=response.status_code, detail=error_detail)
 
-            return (
-                response.json()
-            )  # {"answer": "...", "llm_provider": "...", "mode": "..."}
+        return (
+            response.json()
+        )  # {"answer": "...", "llm_provider": "...", "mode": "..."}
 
     except httpx.ReadTimeout:
         raise HTTPException(
@@ -1761,6 +1761,7 @@ async def send_general_chat_message(
 
 @router.post("/chat/translate-message")
 async def translate_chat_message(
+    request: Request,
     body: dict = Body(...),
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_supabase),
@@ -1774,11 +1775,12 @@ async def translate_chat_message(
     if not user_id:
         raise HTTPException(status_code=401, detail="Kullanıcı kimliği bulunamadı.")
 
-    if not await user_repo.is_pro_user(
+    is_pro, llm_provider = await user_repo.get_user_role_and_llm_provider(
         user_id=user_id,
         db=db,
         supabase=supabase if settings.USE_SUPABASE else None,
-    ):
+    )
+    if not is_pro:
         raise HTTPException(
             status_code=403,
             detail="Bu özellik sadece Pro kullanıcılar için kullanılabilir.",
@@ -1797,38 +1799,28 @@ async def translate_chat_message(
     if source_language == target_language:
         return {"translation": text_value}
 
-    # Kullanıcının tercih ettiği provider üzerinden çeviri dene
-    llm_provider = "local"
-    if db and user_id:
-        try:
-            llm_provider = await user_repo.get_llm_provider(
-                user_id=user_id,
-                db=db,
-                supabase=None,
-            )
-        except Exception as e:
-            logger.warning("translate-message: LLM provider alınamadı: %s", e)
-
     mode = str(body.get("mode") or "flash")
     if llm_provider == "local":
         mode = "flash"
 
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            payload = {
-                "text": text_value,
-                "source_language": source_language,
-                "target_language": target_language,
-                "llm_provider": llm_provider,
-                "mode": mode,
-            }
-            target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/translate-text"
-            headers = get_ai_service_headers()
-            response = await client.post(target_url, json=payload, headers=headers)
-            if response.status_code != 200:
-                detail = response.json().get("detail", "Çeviri başarısız.")
-                raise HTTPException(status_code=response.status_code, detail=detail)
-            return response.json()
+        client = request.app.state.ai_http_client
+        payload = {
+            "text": text_value,
+            "source_language": source_language,
+            "target_language": target_language,
+            "llm_provider": llm_provider,
+            "mode": mode,
+        }
+        target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/translate-text"
+        headers = get_ai_service_headers()
+        response = await client.post(
+            target_url, json=payload, headers=headers, timeout=120.0
+        )
+        if response.status_code != 200:
+            detail = response.json().get("detail", "Çeviri başarısız.")
+            raise HTTPException(status_code=response.status_code, detail=detail)
+        return response.json()
     except HTTPException:
         raise
     except Exception as e:

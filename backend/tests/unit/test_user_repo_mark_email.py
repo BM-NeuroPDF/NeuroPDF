@@ -139,3 +139,98 @@ class TestUserRepoIsProUser:
         db = MagicMock()
         db.execute.side_effect = RuntimeError("db error")
         assert await repo.is_pro_user("u1", db=db, supabase=None) is False
+
+
+@pytest.mark.asyncio
+class TestUserRepoGetUserRoleAndLlmProvider:
+    async def test_empty_user_id(self):
+        repo = UserRepository()
+        assert await repo.get_user_role_and_llm_provider(
+            "", db=MagicMock(), supabase=None
+        ) == (False, "local")
+
+    async def test_db_pro_and_cloud(self):
+        repo = UserRepository()
+        db = MagicMock()
+        db.execute.return_value.mappings.return_value.first.return_value = {
+            "role_name": "Pro User",
+            "llm_choice_id": 1,
+        }
+        assert await repo.get_user_role_and_llm_provider(
+            "u1", db=db, supabase=None
+        ) == (True, "cloud")
+
+    async def test_db_standart_and_local(self):
+        repo = UserRepository()
+        db = MagicMock()
+        db.execute.return_value.mappings.return_value.first.return_value = {
+            "role_name": "Standart",
+            "llm_choice_id": 0,
+        }
+        assert await repo.get_user_role_and_llm_provider(
+            "u1", db=db, supabase=None
+        ) == (False, "local")
+
+    async def test_db_null_llm_choice_defaults_local(self):
+        repo = UserRepository()
+        db = MagicMock()
+        db.execute.return_value.mappings.return_value.first.return_value = {
+            "role_name": "Standart",
+            "llm_choice_id": None,
+        }
+        assert await repo.get_user_role_and_llm_provider(
+            "u1", db=db, supabase=None
+        ) == (False, "local")
+
+    async def test_db_no_row(self):
+        repo = UserRepository()
+        db = MagicMock()
+        db.execute.return_value.mappings.return_value.first.return_value = None
+        assert await repo.get_user_role_and_llm_provider(
+            "u1", db=db, supabase=None
+        ) == (False, "local")
+
+    async def test_db_execute_raises(self):
+        repo = UserRepository()
+        db = MagicMock()
+        db.execute.side_effect = RuntimeError("db error")
+        assert await repo.get_user_role_and_llm_provider(
+            "u1", db=db, supabase=None
+        ) == (False, "local")
+
+    @patch("app.repositories.user_repo.settings.USE_SUPABASE", True)
+    async def test_supabase_only_pro_cloud(self):
+        repo = UserRepository()
+        sb = MagicMock()
+        sb.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
+            {"llm_choice_id": 1, "user_roles": [{"name": "Pro"}]}
+        ]
+        assert await repo.get_user_role_and_llm_provider(
+            "u1", db=None, supabase=sb
+        ) == (True, "cloud")
+
+    @patch("app.repositories.user_repo.settings.USE_SUPABASE", True)
+    async def test_supabase_only_empty_data(self):
+        repo = UserRepository()
+        sb = MagicMock()
+        sb.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
+        assert await repo.get_user_role_and_llm_provider(
+            "u1", db=None, supabase=sb
+        ) == (False, "local")
+
+    @patch("app.repositories.user_repo.settings.USE_SUPABASE", True)
+    async def test_db_null_role_supabase_fills_pro(self):
+        repo = UserRepository()
+        db = MagicMock()
+        db.execute.return_value.mappings.return_value.first.return_value = {
+            "role_name": None,
+            "llm_choice_id": 0,
+        }
+        sb = MagicMock()
+        sb.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
+            {"user_roles": [{"name": "Pro"}]}
+        ]
+        assert await repo.get_user_role_and_llm_provider("u1", db=db, supabase=sb) == (
+            True,
+            "local",
+        )

@@ -46,6 +46,13 @@ class UserRepoProtocol(Protocol):
         supabase: Optional[Client],
     ) -> bool: ...
 
+    async def get_user_role_and_llm_provider(
+        self,
+        user_id: str,
+        db: Optional[Session],
+        supabase: Optional[Client],
+    ) -> tuple[bool, str]: ...
+
     async def mark_email_as_verified(
         self,
         user_id: str,

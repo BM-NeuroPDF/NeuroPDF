@@ -23,6 +23,17 @@ client = TestClient(app)
 
 
 @pytest.fixture
+def mock_ai_http_client():
+    """Replace lifespan AI HTTP client with an AsyncMock for router tests."""
+    mock_client = AsyncMock()
+    previous = getattr(app.state, "ai_http_client", None)
+    app.state.ai_http_client = mock_client
+    yield mock_client
+    if previous is not None:
+        app.state.ai_http_client = previous
+
+
+@pytest.fixture
 def mock_supabase():
     """Mock Supabase client"""
     mock = MagicMock()
@@ -69,14 +80,13 @@ def override_dependencies(mock_supabase, mock_db, mock_user):
 class TestSummarizeFile:
     """Test /files/summarize endpoint"""
 
-    @patch("app.routers.files.httpx.AsyncClient")
     @patch("app.routers.files.check_summarize_cache")
     @patch("app.routers.files.get_user_llm_choice")
     def test_summarize_file_success(
         self,
         mock_get_llm_choice,
         mock_check_cache,
-        mock_httpx_client,
+        mock_ai_http_client,
         override_dependencies,
         sample_pdf,
         mock_supabase,
@@ -95,11 +105,7 @@ class TestSummarizeFile:
             "pdf_text": "Test PDF text",
         }
 
-        mock_client_instance = AsyncMock()
-        mock_client_instance.__aenter__.return_value.post = AsyncMock(
-            return_value=mock_response
-        )
-        mock_httpx_client.return_value = mock_client_instance
+        mock_ai_http_client.post = AsyncMock(return_value=mock_response)
 
         # Mock user model
         mock_user_obj = MagicMock()
@@ -168,13 +174,12 @@ class TestSummarizeFile:
 class TestChatEndpoints:
     """Test chat-related endpoints"""
 
-    @patch("app.routers.files.httpx.AsyncClient")
     @patch(
         "app.repositories.user_repo.UserRepository.get_llm_provider",
         new_callable=AsyncMock,
     )
     def test_start_chat_from_text(
-        self, mock_get_provider, mock_httpx_client, override_dependencies, mock_db
+        self, mock_get_provider, mock_ai_http_client, override_dependencies, mock_db
     ):
         """Test starting chat session from text"""
         mock_get_provider.return_value = "cloud"
@@ -183,11 +188,7 @@ class TestChatEndpoints:
         mock_response.status_code = 200
         mock_response.json.return_value = {"session_id": "test-session-123"}
 
-        mock_client_instance = AsyncMock()
-        mock_client_instance.__aenter__.return_value.post = AsyncMock(
-            return_value=mock_response
-        )
-        mock_httpx_client.return_value = mock_client_instance
+        mock_ai_http_client.post = AsyncMock(return_value=mock_response)
 
         payload = {"pdf_text": "Test PDF content", "filename": "test.pdf"}
 
@@ -198,13 +199,12 @@ class TestChatEndpoints:
         assert "session_id" in data
         assert data["session_id"] == "test-session-123"
 
-    @patch("app.routers.files.httpx.AsyncClient")
     @patch(
         "app.repositories.user_repo.UserRepository.get_llm_provider",
         new_callable=AsyncMock,
     )
     def test_start_chat_session(
-        self, mock_get_provider, mock_httpx_client, override_dependencies, sample_pdf
+        self, mock_get_provider, mock_ai_http_client, override_dependencies, sample_pdf
     ):
         """Test starting chat session with file upload"""
         mock_get_provider.return_value = "cloud"
@@ -213,11 +213,7 @@ class TestChatEndpoints:
         mock_response.status_code = 200
         mock_response.json.return_value = {"session_id": "test-session-456"}
 
-        mock_client_instance = AsyncMock()
-        mock_client_instance.__aenter__.return_value.post = AsyncMock(
-            return_value=mock_response
-        )
-        mock_httpx_client.return_value = mock_client_instance
+        mock_ai_http_client.post = AsyncMock(return_value=mock_response)
 
         files = {"file": ("test.pdf", sample_pdf, "application/pdf")}
 
@@ -227,21 +223,16 @@ class TestChatEndpoints:
         data = response.json()
         assert "session_id" in data
 
-    @patch("app.routers.files.httpx.AsyncClient")
     @patch("app.routers.files.append_chat_turn")
     def test_send_chat_message(
-        self, mock_append_chat_turn, mock_httpx_client, override_dependencies
+        self, mock_append_chat_turn, mock_ai_http_client, override_dependencies
     ):
         """Test sending chat message"""
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"answer": "Test AI response"}
 
-        mock_client_instance = AsyncMock()
-        mock_client_instance.__aenter__.return_value.post = AsyncMock(
-            return_value=mock_response
-        )
-        mock_httpx_client.return_value = mock_client_instance
+        mock_ai_http_client.post = AsyncMock(return_value=mock_response)
 
         payload = {
             "session_id": "test-session-123",
@@ -297,7 +288,6 @@ class TestChatEndpoints:
         assert item["sourceLanguage"] == "tr"
         assert item["translations"]["en"] == "Hello"
 
-    @patch("app.routers.files.httpx.AsyncClient")
     @patch("app.routers.files.history_for_ai_restore")
     @patch("app.routers.files.get_session_messages_ordered")
     @patch("app.routers.files.get_chat_session_by_db_id")
@@ -306,7 +296,7 @@ class TestChatEndpoints:
         mock_get_session,
         mock_get_messages,
         mock_history_restore,
-        mock_httpx_client,
+        mock_ai_http_client,
         override_dependencies,
     ):
         mock_get_session.return_value = MagicMock(
@@ -337,11 +327,7 @@ class TestChatEndpoints:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"session_id": "ai-1"}
-        mock_client_instance = AsyncMock()
-        mock_client_instance.__aenter__.return_value.post = AsyncMock(
-            return_value=mock_response
-        )
-        mock_httpx_client.return_value = mock_client_instance
+        mock_ai_http_client.post = AsyncMock(return_value=mock_response)
 
         response = client.post("/files/chat/sessions/row-1/resume")
         assert response.status_code == 200
@@ -360,25 +346,20 @@ class TestGeneralChatEndpoints:
     """Test general chat endpoints (Pro users)"""
 
     @patch(
-        "app.repositories.user_repo.UserRepository.is_pro_user",
+        "app.repositories.user_repo.UserRepository.get_user_role_and_llm_provider",
         new_callable=AsyncMock,
     )
-    @patch("app.routers.files.httpx.AsyncClient")
     def test_start_general_chat_success(
-        self, mock_httpx_client, mock_check_pro, override_dependencies, mock_supabase
+        self, mock_role_llm, mock_ai_http_client, override_dependencies, mock_supabase
     ):
         """Test starting general chat for Pro user"""
-        mock_check_pro.return_value = True
+        mock_role_llm.return_value = (True, "cloud")
 
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"session_id": "general-session-123"}
 
-        mock_client_instance = AsyncMock()
-        mock_client_instance.__aenter__.return_value.post = AsyncMock(
-            return_value=mock_response
-        )
-        mock_httpx_client.return_value = mock_client_instance
+        mock_ai_http_client.post = AsyncMock(return_value=mock_response)
 
         payload = {"llm_provider": "cloud", "mode": "flash"}
 
@@ -389,14 +370,14 @@ class TestGeneralChatEndpoints:
         assert "session_id" in data
 
     @patch(
-        "app.repositories.user_repo.UserRepository.is_pro_user",
+        "app.repositories.user_repo.UserRepository.get_user_role_and_llm_provider",
         new_callable=AsyncMock,
     )
     def test_start_general_chat_not_pro(
-        self, mock_check_pro, override_dependencies, mock_supabase
+        self, mock_role_llm, override_dependencies, mock_supabase
     ):
         """Test starting general chat for non-Pro user"""
-        mock_check_pro.return_value = False
+        mock_role_llm.return_value = (False, "local")
 
         payload = {"llm_provider": "cloud"}
 
@@ -406,25 +387,20 @@ class TestGeneralChatEndpoints:
         assert "Pro" in response.json()["detail"]
 
     @patch(
-        "app.repositories.user_repo.UserRepository.is_pro_user",
+        "app.repositories.user_repo.UserRepository.get_user_role_and_llm_provider",
         new_callable=AsyncMock,
     )
-    @patch("app.routers.files.httpx.AsyncClient")
     def test_send_general_chat_message(
-        self, mock_httpx_client, mock_check_pro, override_dependencies, mock_supabase
+        self, mock_role_llm, mock_ai_http_client, override_dependencies, mock_supabase
     ):
         """Test sending general chat message"""
-        mock_check_pro.return_value = True
+        mock_role_llm.return_value = (True, "cloud")
 
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"answer": "General AI response"}
 
-        mock_client_instance = AsyncMock()
-        mock_client_instance.__aenter__.return_value.post = AsyncMock(
-            return_value=mock_response
-        )
-        mock_httpx_client.return_value = mock_client_instance
+        mock_ai_http_client.post = AsyncMock(return_value=mock_response)
 
         payload = {"session_id": "general-session-123", "message": "Hello"}
 
@@ -806,33 +782,33 @@ class TestStatsRepositoryShimEndpoints:
 
 class TestUserRepositoryShimEndpoints:
     @patch(
-        "app.repositories.user_repo.UserRepository.is_pro_user",
+        "app.repositories.user_repo.UserRepository.get_user_role_and_llm_provider",
         new_callable=AsyncMock,
     )
     def test_is_pro_user_delegation_in_general_chat_start(
-        self, mock_is_pro_user, override_dependencies
+        self, mock_role_llm, override_dependencies
     ):
-        mock_is_pro_user.return_value = False
+        mock_role_llm.return_value = (False, "local")
 
         response = client.post("/files/chat/general/start", json={"mode": "flash"})
 
         assert response.status_code == 403
-        mock_is_pro_user.assert_awaited_once()
+        mock_role_llm.assert_awaited_once()
 
     @patch(
-        "app.repositories.user_repo.UserRepository.is_pro_user",
+        "app.repositories.user_repo.UserRepository.get_user_role_and_llm_provider",
         new_callable=AsyncMock,
     )
     def test_is_pro_user_delegation_in_general_chat_message(
-        self, mock_is_pro_user, override_dependencies
+        self, mock_role_llm, override_dependencies
     ):
-        mock_is_pro_user.return_value = False
+        mock_role_llm.return_value = (False, "local")
 
         payload = {"session_id": "general-session-123", "message": "Hello"}
         response = client.post("/files/chat/general/message", json=payload)
 
         assert response.status_code == 403
-        mock_is_pro_user.assert_awaited_once()
+        mock_role_llm.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_get_llm_provider_returns_cloud_when_db_says_1(self, mock_db):

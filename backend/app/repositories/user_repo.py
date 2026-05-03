@@ -15,6 +15,108 @@ logger = logging.getLogger(__name__)
 
 
 class UserRepository(UserRepoProtocol):
+    async def get_user_role_and_llm_provider(
+        self,
+        user_id: str,
+        db: Optional[Session],
+        supabase: Optional[Client],
+    ) -> tuple[bool, str]:
+        """
+        Tek SQL (yerel DB) veya tek Supabase isteği ile Pro bayrağı ve LLM sağlayıcı
+        ('local' | 'cloud') döndürür. is_pro_user + get_llm_provider ile aynı semantik.
+        """
+        if not user_id:
+            return (False, "local")
+        is_pro = False
+        llm_provider = "local"
+        try:
+            if db is not None:
+                row = (
+                    db.execute(
+                        text(
+                            """
+                            SELECT ur.name AS role_name, u.llm_choice_id
+                            FROM users u
+                            LEFT JOIN user_roles ur ON ur.id = u.role_id
+                            WHERE u.id = :user_id
+                            LIMIT 1
+                            """
+                        ),
+                        {"user_id": user_id},
+                    )
+                    .mappings()
+                    .first()
+                )
+                if row:
+                    lic = row.get("llm_choice_id")
+                    if lic is not None:
+                        llm_provider = "cloud" if int(lic) == 1 else "local"
+                    rn = row.get("role_name")
+                    if rn:
+                        rn_l = str(rn).lower()
+                        is_pro = "pro" in rn_l or rn_l == "pro"
+
+                if not is_pro and settings.USE_SUPABASE and supabase is not None:
+                    is_pro = await self._is_pro_user_supabase_only(user_id, supabase)
+
+                return (is_pro, llm_provider)
+
+            if settings.USE_SUPABASE and supabase is not None:
+                user_response = (
+                    supabase.table("users")
+                    .select("llm_choice_id, user_roles(name)")
+                    .eq("id", user_id)
+                    .execute()
+                )
+                if not user_response.data:
+                    return (False, "local")
+                u = user_response.data[0]
+                lic = u.get("llm_choice_id", 0) or 0
+                llm_provider = "cloud" if int(lic) == 1 else "local"
+                roles_data = u.get("user_roles")
+                if isinstance(roles_data, list) and len(roles_data) > 0:
+                    role_name = str(roles_data[0].get("name", "")).lower()
+                elif isinstance(roles_data, dict):
+                    role_name = str(roles_data.get("name", "")).lower()
+                else:
+                    role_name = ""
+                is_pro = "pro" in role_name or role_name == "pro"
+                return (is_pro, llm_provider)
+
+        except Exception as e:
+            logger.warning(
+                "get_user_role_and_llm_provider failed for %s: %s",
+                user_id,
+                e,
+                exc_info=True,
+            )
+        return (False, "local")
+
+    async def _is_pro_user_supabase_only(self, user_id: str, supabase: Client) -> bool:
+        try:
+            user_response = (
+                supabase.table("users")
+                .select("user_roles(name)")
+                .eq("id", user_id)
+                .execute()
+            )
+            if not user_response.data:
+                return False
+            user_data = user_response.data[0]
+            roles_data = user_data.get("user_roles")
+            if isinstance(roles_data, list) and len(roles_data) > 0:
+                role_name = str(roles_data[0].get("name", "")).lower()
+            elif isinstance(roles_data, dict):
+                role_name = str(roles_data.get("name", "")).lower()
+            else:
+                return False
+            return "pro" in role_name or role_name == "pro"
+        except Exception as e:
+            logger.warning(
+                "Supabase pro check failed for %s: %s", user_id, e, exc_info=True
+            )
+            return False
+
     async def get_llm_provider(
         self,
         user_id: str,

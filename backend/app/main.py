@@ -1,5 +1,8 @@
 # backend/app/main.py
 import os
+from contextlib import asynccontextmanager
+
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,11 +14,23 @@ from app.routers import auth, guest, files, user_avatar_routes
 # Security scheme for Swagger UI
 security_scheme = HTTPBearer(bearerFormat="JWT", scheme_name="Bearer")
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    client = httpx.AsyncClient(timeout=60, follow_redirects=True)
+    app.state.ai_http_client = client
+    try:
+        yield
+    finally:
+        await client.aclose()
+
+
 app = FastAPI(
     title=settings.API_NAME,
     description="PDF Project API with Supabase",
     version="1.0.0",
     swagger_ui_init_oauth={"clientId": "api-client", "appName": "NeuroPDF API"},
+    lifespan=lifespan,
 )
 
 

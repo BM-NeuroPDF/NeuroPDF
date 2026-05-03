@@ -130,6 +130,18 @@ def create_test_database():
 # ==========================================
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _enter_app_lifespan():
+    """
+    `TestClient(app)` without context manager does not run FastAPI lifespan.
+    Enter once per session so `app.state.ai_http_client` exists for routers.
+    """
+    ctx = TestClient(app)
+    ctx.__enter__()
+    yield
+    ctx.__exit__(None, None, None)
+
+
 @pytest.fixture(scope="session")
 def test_db_engine():
     """
