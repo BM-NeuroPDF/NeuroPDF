@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 from typing import List, Optional
 from pypdf import PdfReader, PdfWriter
 from pydantic import BaseModel
+import asyncio
 import httpx
 import hashlib
 import html
@@ -26,7 +27,7 @@ import os
 import uuid
 
 # jwt import removed - using get_current_user dependency instead
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, PendingRollbackError
 
@@ -1244,14 +1245,21 @@ async def start_chat_session(
         mode = "pro" if llm_provider == "cloud" else "flash"
         print(f"📊 Kullanıcı LLM Tercihi: {llm_provider}")
 
-        pdf_row = save_pdf_to_db(db, user_id, file_content, file.filename)
-        try:
-            pdf_text = await run_in_threadpool(
-                _extract_text_from_pdf_bytes, file_content
-            )
-        except Exception as e:
-            logger.warning(f"Chat start PDF text extract failed: {e}", exc_info=True)
-            pdf_text = ""
+        async def _extract_text_safe() -> str:
+            try:
+                return await run_in_threadpool(
+                    _extract_text_from_pdf_bytes, file_content
+                )
+            except Exception as e:
+                logger.warning(
+                    "Chat start PDF text extract failed: %s", e, exc_info=True
+                )
+                return ""
+
+        pdf_row, pdf_text = await asyncio.gather(
+            run_in_threadpool(save_pdf_to_db, db, user_id, file_content, file.filename),
+            _extract_text_safe(),
+        )
 
         client = request.app.state.ai_http_client
         target_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/chat/start-from-text"
@@ -1462,10 +1470,36 @@ async def get_pdf_chat_session_messages(
         user_id = current_user.get("sub")
         if not user_id:
             raise HTTPException(status_code=401, detail="Oturum gerekli.")
-        session = get_chat_session_by_db_id(db, session_db_id, user_id)
+
+        if isinstance(db, Session):
+            bind = db.get_bind()
+
+            def _session_row() -> object:
+                sm = sessionmaker(bind=bind, expire_on_commit=False)
+                s = sm()
+                try:
+                    return get_chat_session_by_db_id(s, session_db_id, user_id)
+                finally:
+                    s.close()
+
+            def _session_messages() -> list:
+                sm = sessionmaker(bind=bind, expire_on_commit=False)
+                s = sm()
+                try:
+                    return get_session_messages_ordered(s, session_db_id, user_id)
+                finally:
+                    s.close()
+
+            session, msgs = await asyncio.gather(
+                run_in_threadpool(_session_row),
+                run_in_threadpool(_session_messages),
+            )
+        else:
+            session = get_chat_session_by_db_id(db, session_db_id, user_id)
+            msgs = get_session_messages_ordered(db, session_db_id, user_id)
+
         if not session:
             raise HTTPException(status_code=404, detail="Oturum bulunamadı.")
-        msgs = get_session_messages_ordered(db, session_db_id, user_id)
         return {
             "messages": [
                 {
