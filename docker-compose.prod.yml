@@ -38,6 +38,7 @@ services:
       - ./aiService/.env
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
 
+  # Postgres: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB — backend/.env (örnek: backend/.env.example)
   db:
     image: postgres:16-alpine
     restart: unless-stopped
