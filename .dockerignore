@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules
+npm-debug.log*
+frontend/.next
+frontend/node_modules
+frontend/coverage
+frontend/test-results
+frontend/playwright-report
+
+# Python
+__pycache__
+*.py[cod]
+*.pyo
+.pytest_cache
+.venv
+venv
+htmlcov
+.coverage*
+backend/tests
+aiService/tests
+
+# IDE
+.idea
+.vscode
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml

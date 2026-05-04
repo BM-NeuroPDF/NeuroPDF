@@ -12,6 +12,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Adım 4: Uygulama kodunu kopyala
 COPY . .
 
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+USER appuser
+
 # Adım 5: Backend portunu aç (FastAPI için örnek 8000)
 EXPOSE 8000
 

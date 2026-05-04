@@ -14,4 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Uygulamanın geri kalan kodunu kopyala
 COPY . .
 
-# (Not: 'command' docker-compose.yml dosyasında belirtildiği için burada CMD'ye gerek yok)
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+USER appuser
+
+EXPOSE 8001
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]

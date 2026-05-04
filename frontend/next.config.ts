@@ -24,6 +24,7 @@ const maxUploadMb = readMbEnv(
 const maxUploadBytes = Math.floor(maxUploadMb * 1024 * 1024);
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   outputFileTracingRoot: path.join(__dirname),
 
   experimental: {
