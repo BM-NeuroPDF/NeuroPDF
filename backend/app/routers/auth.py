@@ -1,5 +1,6 @@
 import logging
 import hashlib
+import hmac
 import uuid
 from datetime import datetime, timezone
 
@@ -18,9 +19,11 @@ from ..core.redis_otp import (
 )
 from ..schemas import auth as auth_schemas
 from ..services import auth_service
-from ..services.email_service import send_login_otp_email
+from ..services.email_service import send_deletion_otp_email, send_login_otp_email
 from ..utils import helpers
+from ..utils.client_ip import get_client_ip
 from ..db import get_supabase, get_db
+from ..redis_client import redis_client
 from ..deps import get_current_user as get_current_user_dep
 from ..rate_limit import (
     check_rate_limit,
@@ -36,6 +39,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 user_repo = UserRepository()
+
+
+def _sha256_hex_equals_legacy_stored(candidate_hex: str, stored_pw: str) -> bool:
+    """Constant-time compare for legacy SHA-256 hex passwords (length mismatch → false)."""
+    try:
+        return hmac.compare_digest(candidate_hex, str(stored_pw))
+    except ValueError:
+        return False
 
 
 @router.post("/google", response_model=auth_schemas.AuthOut)
@@ -331,7 +342,9 @@ def register_user(
         try:
             auth_service.create_user_avatar(new_id, payload.username)
         except Exception as e:
-            logger.warning(f"Avatar creation failed (non-critical): {e}")
+            logger.warning(
+                "register_user: avatar creation failed (non-critical): %s", e
+            )
 
         jwt_user = {**user, "email": payload.email, "eula_accepted": True}
         token = security.create_jwt(jwt_user)
@@ -416,7 +429,7 @@ def register_user(
     try:
         auth_service.create_user_avatar(new_id, payload.username)
     except Exception as e:
-        logger.warning(f"Avatar creation failed (non-critical): {e}")
+        logger.warning("register_user: avatar creation failed (non-critical): %s", e)
 
     token = security.create_jwt(
         {
@@ -461,7 +474,7 @@ async def login(
         request, "auth:login", settings.RATE_LIMIT_AUTH_PER_MINUTE, 60
     ):
         log_rate_limit_exceeded(
-            ip_address=request.client.host if request.client else None,
+            ip_address=get_client_ip(request),
             endpoint="/auth/login",
             request=request,
         )
@@ -479,7 +492,7 @@ async def login(
         if not auth_res.data:
             log_failed_login(
                 email=payload.email,
-                ip_address=request.client.host if request.client else None,
+                ip_address=get_client_ip(request),
                 request=request,
             )
             raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -493,7 +506,8 @@ async def login(
         if stored_pw and stored_pw.startswith("$2b$"):
             is_valid = security.verify_password(payload.password, stored_pw)
         elif stored_pw:
-            if hashlib.sha256(payload.password.encode()).hexdigest() == stored_pw:
+            digest = hashlib.sha256(payload.password.encode()).hexdigest()
+            if _sha256_hex_equals_legacy_stored(digest, stored_pw):
                 is_valid = True
                 supabase.table("user_auth").update(
                     {"password_hash": security.hash_password(payload.password)}
@@ -502,7 +516,7 @@ async def login(
         if not is_valid:
             log_failed_login(
                 email=payload.email,
-                ip_address=request.client.host if request.client else None,
+                ip_address=get_client_ip(request),
                 request=request,
             )
             raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -526,7 +540,7 @@ async def login(
         if not auth_row:
             log_failed_login(
                 email=payload.email,
-                ip_address=request.client.host if request.client else None,
+                ip_address=get_client_ip(request),
                 request=request,
             )
             raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -537,7 +551,8 @@ async def login(
         if stored_pw and stored_pw.startswith("$2b$"):
             is_valid = security.verify_password(payload.password, stored_pw)
         elif stored_pw:
-            if hashlib.sha256(payload.password.encode()).hexdigest() == stored_pw:
+            digest = hashlib.sha256(payload.password.encode()).hexdigest()
+            if _sha256_hex_equals_legacy_stored(digest, str(stored_pw)):
                 is_valid = True
                 db.execute(
                     text("UPDATE user_auth SET password_hash = :pw WHERE id = :id"),
@@ -551,7 +566,7 @@ async def login(
         if not is_valid:
             log_failed_login(
                 email=payload.email,
-                ip_address=request.client.host if request.client else None,
+                ip_address=get_client_ip(request),
                 request=request,
             )
             raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -611,7 +626,7 @@ async def verify_2fa(
         request, "auth:verify2fa", settings.RATE_LIMIT_AUTH_PER_MINUTE, 60
     ):
         log_rate_limit_exceeded(
-            ip_address=request.client.host if request.client else None,
+            ip_address=get_client_ip(request),
             endpoint="/auth/verify-2fa",
             request=request,
         )
@@ -619,7 +634,7 @@ async def verify_2fa(
 
     if is_2fa_verify_locked(request):
         log_rate_limit_exceeded(
-            ip_address=request.client.host if request.client else None,
+            ip_address=get_client_ip(request),
             endpoint="/auth/verify-2fa-locked",
             request=request,
         )
@@ -713,7 +728,7 @@ async def verify_2fa(
     log_successful_login(
         user_id=str(user_id),
         email=email,
-        ip_address=request.client.host if request.client else None,
+        ip_address=get_client_ip(request),
         request=request,
     )
 
@@ -846,16 +861,73 @@ def get_me(
     }
 
 
-@router.delete("/delete-account")
-def delete_account(
-    current_user: dict = Depends(get_current_user_dep),
-    supabase: Client = Depends(get_supabase),
-    db: Session = Depends(get_db),
-):
-    uid = current_user["sub"]
+DELETION_OTP_TTL_SECONDS = 600
+
+
+def _deletion_otp_redis_key(user_id: str) -> str:
+    return f"deletion_otp:{user_id}"
+
+
+def _set_deletion_otp_in_redis(user_id: str, otp_hash: str) -> None:
+    if redis_client is None:
+        raise RedisOtpUnavailable()
+    redis_client.setex(
+        _deletion_otp_redis_key(user_id), DELETION_OTP_TTL_SECONDS, otp_hash
+    )
+
+
+def _get_deletion_otp_from_redis(user_id: str) -> str | None:
+    if redis_client is None:
+        return None
+    try:
+        raw = redis_client.get(_deletion_otp_redis_key(user_id))
+    except Exception:
+        logger.warning("deletion_otp: GET failed", exc_info=True)
+        return None
+    if raw is None:
+        return None
+    return raw.decode() if isinstance(raw, bytes) else str(raw)
+
+
+def _delete_deletion_otp_from_redis(user_id: str) -> None:
+    if redis_client is None:
+        return
+    try:
+        redis_client.delete(_deletion_otp_redis_key(user_id))
+    except Exception:
+        logger.warning("deletion_otp: DEL failed", exc_info=True)
+
+
+def _primary_auth_provider(user_id: str, supabase: Client, db: Session) -> str:
     if settings.USE_SUPABASE:
-        # cascade should delete user_stats, pdfs, user_auth, user_settings if setup correctly in PostgreSQL
-        # if not, we must delete them manually via REST API here:
+        auth_res = (
+            supabase.table("user_auth")
+            .select("provider")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        return auth_res.data[0]["provider"] if auth_res.data else "local"
+    row = (
+        db.execute(
+            text(
+                """
+                SELECT provider FROM user_auth
+                WHERE user_id = :uid
+                ORDER BY id ASC
+                LIMIT 1
+                """
+            ),
+            {"uid": user_id},
+        )
+        .mappings()
+        .first()
+    )
+    return row["provider"] if row else "local"
+
+
+def _execute_account_deletion(uid: str, supabase: Client, db: Session) -> dict:
+    if settings.USE_SUPABASE:
         supabase.table("user_auth").delete().eq("user_id", uid).execute()
         supabase.table("user_settings").delete().eq("user_id", uid).execute()
         supabase.table("user_stats").delete().eq("user_id", uid).execute()
@@ -866,5 +938,155 @@ def delete_account(
         if user:
             db.delete(user)
             db.commit()
-
     return {"message": "Deleted"}
+
+
+def _verify_password_for_account_deletion(
+    user_id: str,
+    password: str,
+    supabase: Client,
+    db: Session,
+) -> None:
+    """Require local password confirmation before destructive account deletion."""
+    if settings.USE_SUPABASE:
+        auth_res = (
+            supabase.table("user_auth")
+            .select("password_hash")
+            .eq("user_id", user_id)
+            .eq("provider", "local")
+            .limit(1)
+            .execute()
+        )
+        if not auth_res.data:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Account deletion requires a local password. "
+                    "OAuth-only accounts are not supported on this endpoint."
+                ),
+            )
+        stored_pw = auth_res.data[0].get("password_hash")
+    else:
+        row = (
+            db.execute(
+                text(
+                    """
+                    SELECT password_hash FROM user_auth
+                    WHERE user_id = :uid AND provider = 'local'
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """
+                ),
+                {"uid": user_id},
+            )
+            .mappings()
+            .first()
+        )
+        if not row:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Account deletion requires a local password. "
+                    "OAuth-only accounts are not supported on this endpoint."
+                ),
+            )
+        stored_pw = row["password_hash"]
+
+    if not stored_pw:
+        raise HTTPException(
+            status_code=400,
+            detail="No password set for this account. Cannot verify deletion.",
+        )
+
+    if stored_pw.startswith("$2b$") or stored_pw.startswith("$2a$"):
+        if not security.verify_password(password, str(stored_pw)):
+            raise HTTPException(status_code=401, detail="Invalid password")
+    else:
+        digest = hashlib.sha256(password.encode()).hexdigest()
+        if not _sha256_hex_equals_legacy_stored(digest, str(stored_pw)):
+            raise HTTPException(status_code=401, detail="Invalid password")
+
+
+@router.post("/request-deletion-otp", response_model=auth_schemas.DeletionOtpSentOut)
+def request_deletion_otp(
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user_dep),
+    supabase: Client = Depends(get_supabase),
+    db: Session = Depends(get_db),
+):
+    uid = str(current_user["sub"])
+    provider = _primary_auth_provider(uid, supabase, db)
+    if provider == "local":
+        raise HTTPException(
+            status_code=400,
+            detail="Password required for local accounts",
+        )
+    email = current_user.get("email")
+    if not email or not str(email).strip():
+        raise HTTPException(
+            status_code=400,
+            detail="No email address on session for OTP delivery",
+        )
+    email_str = str(email).strip()
+    plain_otp = security.generate_six_digit_otp(email_str)
+    otp_hash = security.hash_password(plain_otp)
+    try:
+        _set_deletion_otp_in_redis(uid, otp_hash)
+    except RedisOtpUnavailable:
+        logger.warning("request_deletion_otp: Redis unavailable")
+        raise HTTPException(
+            status_code=503,
+            detail="Could not send verification code. Please try again later.",
+        ) from None
+    except Exception:
+        logger.exception("request_deletion_otp: unexpected Redis error")
+        raise HTTPException(
+            status_code=503,
+            detail="Could not send verification code. Please try again later.",
+        ) from None
+
+    background_tasks.add_task(send_deletion_otp_email, email_str, plain_otp)
+    return auth_schemas.DeletionOtpSentOut()
+
+
+@router.post("/verify-and-delete")
+def verify_and_delete(
+    body: auth_schemas.VerifyAndDeleteAccountIn,
+    current_user: dict = Depends(get_current_user_dep),
+    supabase: Client = Depends(get_supabase),
+    db: Session = Depends(get_db),
+):
+    uid = str(current_user["sub"])
+    provider = _primary_auth_provider(uid, supabase, db)
+    if provider == "local":
+        pw = (body.password or "").strip()
+        if not pw:
+            raise HTTPException(status_code=400, detail="Password required")
+        _verify_password_for_account_deletion(uid, pw, supabase, db)
+    else:
+        otp_code = body.otp
+        if not otp_code or not str(otp_code).strip():
+            raise HTTPException(status_code=400, detail="OTP required")
+        otp_input = str(otp_code).replace(" ", "").strip()
+        if len(otp_input) != 6 or not otp_input.isdigit():
+            raise HTTPException(status_code=401, detail="Invalid or expired OTP")
+        stored = _get_deletion_otp_from_redis(uid)
+        if not stored:
+            raise HTTPException(status_code=401, detail="Invalid or expired OTP")
+        if not security.verify_password(otp_input, str(stored)):
+            raise HTTPException(status_code=401, detail="Invalid or expired OTP")
+        _delete_deletion_otp_from_redis(uid)
+
+    return _execute_account_deletion(uid, supabase, db)
+
+
+@router.delete("/delete-account")
+def delete_account(
+    body: auth_schemas.DeleteAccountIn,
+    current_user: dict = Depends(get_current_user_dep),
+    supabase: Client = Depends(get_supabase),
+    db: Session = Depends(get_db),
+):
+    uid = str(current_user["sub"])
+    _verify_password_for_account_deletion(uid, body.password, supabase, db)
+    return _execute_account_deletion(uid, supabase, db)

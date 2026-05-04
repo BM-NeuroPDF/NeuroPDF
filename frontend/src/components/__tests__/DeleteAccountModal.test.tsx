@@ -56,85 +56,240 @@ describe('DeleteAccountModal', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('calls onClose when cancel clicked', () => {
+  it('calls onClose when cancel clicked', async () => {
+    mockedSendRequest.mockResolvedValue({ provider: 'local' });
     const { onClose } = setup();
+    await waitFor(() => {
+      expect(mockedSendRequest).toHaveBeenCalledWith('/auth/me', 'GET');
+    });
     fireEvent.click(screen.getByText('cancel'));
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('deletes account and signs out on confirm', async () => {
-    mockedSendRequest.mockResolvedValue(undefined);
+  it('local: verify-and-delete with password after acknowledge', async () => {
+    mockedSendRequest.mockImplementation(
+      async (endpoint, method, body, _f, opts) => {
+        if (endpoint === '/auth/me' && method === 'GET') {
+          return { provider: 'local' };
+        }
+        if (endpoint === '/auth/verify-and-delete' && method === 'POST') {
+          expect(body).toEqual({ password: 'correct-password' });
+          expect(opts).toEqual({ skipAuthRedirectOn401: true });
+          return { message: 'Deleted' };
+        }
+        throw new Error(`unexpected ${endpoint} ${method}`);
+      }
+    );
     mockedSignOut.mockResolvedValue(undefined);
     const { onClose } = setup();
 
+    await waitFor(() => {
+      expect(
+        screen.getByPlaceholderText('deleteAccountPasswordPlaceholder')
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.change(
+      screen.getByPlaceholderText('deleteAccountPasswordPlaceholder'),
+      { target: { value: 'correct-password' } }
+    );
+    fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByText('confirmDelete'));
 
     await waitFor(() => {
       expect(mockedSendRequest).toHaveBeenCalledWith(
-        '/auth/delete-account',
-        'DELETE'
+        '/auth/verify-and-delete',
+        'POST',
+        { password: 'correct-password' },
+        false,
+        { skipAuthRedirectOn401: true }
       );
     });
     expect(onClose).toHaveBeenCalled();
     expect(mockedSignOut).toHaveBeenCalledWith({ callbackUrl: '/' });
   });
 
-  it('alerts on delete failure and allows retry', async () => {
-    mockedSendRequest.mockRejectedValue(new Error('fail'));
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-
+  it('local: delete stays disabled until password is entered', async () => {
+    mockedSendRequest.mockResolvedValue({ provider: 'local' });
     setup();
 
+    await waitFor(() => {
+      expect(
+        screen.getByPlaceholderText('deleteAccountPasswordPlaceholder')
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(screen.getByText('confirmDelete').closest('button')).toBeDisabled();
+
+    expect(
+      mockedSendRequest.mock.calls.filter(
+        (c) => c[0] === '/auth/verify-and-delete'
+      )
+    ).toHaveLength(0);
+  });
+
+  it('local: shows inline error when acknowledge missing', async () => {
+    mockedSendRequest.mockResolvedValue({ provider: 'local' });
+    setup();
+
+    await waitFor(() => {
+      expect(
+        screen.getByPlaceholderText('deleteAccountPasswordPlaceholder')
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.change(
+      screen.getByPlaceholderText('deleteAccountPasswordPlaceholder'),
+      { target: { value: 'pw' } }
+    );
     fireEvent.click(screen.getByText('confirmDelete'));
 
     await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalled();
+      expect(
+        screen.getByText('deleteAccountAcknowledgeRequired')
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('local: shows API error on verify failure without signing out', async () => {
+    mockedSendRequest.mockImplementation(async (endpoint, method) => {
+      if (endpoint === '/auth/me' && method === 'GET') {
+        return { provider: 'local' };
+      }
+      if (endpoint === '/auth/verify-and-delete' && method === 'POST') {
+        throw new Error('Invalid password');
+      }
+      throw new Error('unexpected');
+    });
+    setup();
+
+    await waitFor(() => {
+      expect(
+        screen.getByPlaceholderText('deleteAccountPasswordPlaceholder')
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.change(
+      screen.getByPlaceholderText('deleteAccountPasswordPlaceholder'),
+      { target: { value: 'pw' } }
+    );
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByText('confirmDelete'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Invalid password')).toBeInTheDocument();
     });
     expect(mockedSignOut).not.toHaveBeenCalled();
-
-    alertSpy.mockRestore();
   });
 
-  it('does not call API when session has no user', () => {
-    setup({
-      session: null,
-    });
-    fireEvent.click(screen.getByText('confirmDelete'));
-    expect(mockedSendRequest).not.toHaveBeenCalled();
-  });
-
-  it('ignores duplicate confirm while request is in flight', async () => {
+  it('oauth: request OTP then verify-and-delete', async () => {
     mockedSendRequest.mockImplementation(
-      () => new Promise((resolve) => setTimeout(resolve, 200))
+      async (endpoint, method, body, _f, opts) => {
+        if (endpoint === '/auth/me' && method === 'GET') {
+          return { provider: 'google' };
+        }
+        if (endpoint === '/auth/request-deletion-otp' && method === 'POST') {
+          return { message: 'OTP sent' };
+        }
+        if (endpoint === '/auth/verify-and-delete' && method === 'POST') {
+          expect(body).toEqual({ otp: '888777' });
+          expect(opts).toEqual({ skipAuthRedirectOn401: true });
+          return { message: 'Deleted' };
+        }
+        throw new Error(`unexpected ${endpoint}`);
+      }
     );
     mockedSignOut.mockResolvedValue(undefined);
-    setup();
-
-    const confirmBtn = screen.getByText('confirmDelete');
-    fireEvent.click(confirmBtn);
-    fireEvent.click(confirmBtn);
+    const { onClose } = setup();
 
     await waitFor(() => {
-      expect(mockedSendRequest).toHaveBeenCalledTimes(1);
+      expect(screen.getByText('deleteAccountSendCode')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('deleteAccountSendCode'));
+
+    await waitFor(() => {
+      expect(mockedSendRequest).toHaveBeenCalledWith(
+        '/auth/request-deletion-otp',
+        'POST',
+        {}
+      );
+    });
+
+    fireEvent.change(
+      screen.getByPlaceholderText('deleteAccountOtpPlaceholder'),
+      {
+        target: { value: '888777' },
+      }
+    );
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByText('confirmDelete'));
+
+    await waitFor(() => {
+      expect(mockedSendRequest).toHaveBeenCalledWith(
+        '/auth/verify-and-delete',
+        'POST',
+        { otp: '888777' },
+        false,
+        { skipAuthRedirectOn401: true }
+      );
+    });
+    expect(onClose).toHaveBeenCalled();
+    expect(mockedSignOut).toHaveBeenCalledWith({ callbackUrl: '/' });
+  });
+
+  it('oauth: shows error when request-deletion-otp fails', async () => {
+    mockedSendRequest.mockImplementation(async (endpoint, method) => {
+      if (endpoint === '/auth/me' && method === 'GET') {
+        return { provider: 'google' };
+      }
+      if (endpoint === '/auth/request-deletion-otp' && method === 'POST') {
+        throw new Error('Password required for local accounts');
+      }
+      throw new Error('unexpected');
+    });
+    setup();
+
+    await waitFor(() => {
+      expect(screen.getByText('deleteAccountSendCode')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('deleteAccountSendCode'));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Password required for local accounts')
+      ).toBeInTheDocument();
     });
   });
 
-  it('uses copy fallbacks when t returns empty', () => {
-    const tEmpty = (() => '') as ComponentProps<typeof DeleteAccountModal>['t'];
-    setup({ t: tEmpty });
+  it('does not call verify when session has no user', async () => {
+    mockedSendRequest.mockResolvedValue({ provider: 'local' });
+    setup({ session: null });
+
+    await waitFor(() => {
+      expect(mockedSendRequest).toHaveBeenCalledWith('/auth/me', 'GET');
+    });
+    fireEvent.click(screen.getByText('confirmDelete'));
     expect(
-      screen.getByText('Hesabınızı Silmek İstiyor musunuz?')
-    ).toBeInTheDocument();
-    expect(screen.getByText('Bu işlem geri alınamaz.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Vazgeç/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Sil$/i })).toBeInTheDocument();
+      mockedSendRequest.mock.calls.filter(
+        (c) => c[0] === '/auth/verify-and-delete'
+      )
+    ).toHaveLength(0);
   });
 
-  it('uses Turkish fallbacks when t returns empty for errors', async () => {
-    mockedSendRequest.mockRejectedValue(new Error('fail'));
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-    const tEmpty = (() => '') as ComponentProps<typeof DeleteAccountModal>['t'];
+  it('shows provider load error from /auth/me', async () => {
+    mockedSendRequest.mockRejectedValue(new Error('network down'));
+    setup();
 
+    await waitFor(() => {
+      expect(screen.getByText('network down')).toBeInTheDocument();
+    });
+  });
+
+  it('uses copy fallbacks when t returns empty', async () => {
+    mockedSendRequest.mockResolvedValue({ provider: 'local' });
+    const tEmpty = (() => '') as ComponentProps<typeof DeleteAccountModal>['t'];
     render(
       <DeleteAccountModal
         isOpen
@@ -144,11 +299,10 @@ describe('DeleteAccountModal', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /Sil/i }));
-
     await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith('Hata oluştu.');
+      expect(
+        screen.getByText('Hesabınızı Silmek İstiyor musunuz?')
+      ).toBeInTheDocument();
     });
-    alertSpy.mockRestore();
   });
 });

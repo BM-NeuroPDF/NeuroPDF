@@ -58,7 +58,7 @@ class LoginIn(BaseModel):
 
 class Verify2FAIn(BaseModel):
     temp_token: str
-    otp_code: str = Field(..., min_length=1, max_length=32)
+    otp_code: str = Field(..., min_length=6, max_length=6)
 
     @field_validator("otp_code", mode="before")
     @classmethod
@@ -70,3 +70,35 @@ class Verify2FAIn(BaseModel):
 
 class AcceptEulaIn(BaseModel):
     accepted: bool
+
+
+class DeleteAccountIn(BaseModel):
+    password: str = Field(..., min_length=1)
+
+
+class VerifyAndDeleteAccountIn(BaseModel):
+    password: str | None = None
+    otp: str | None = Field(None, min_length=6, max_length=6)
+
+    @field_validator("password", mode="before")
+    @classmethod
+    def normalize_password(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @field_validator("otp", mode="before")
+    @classmethod
+    def normalize_otp(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.replace(" ", "").strip()
+            return s if s else None
+        return str(v)
+
+
+class DeletionOtpSentOut(BaseModel):
+    message: str = "OTP sent"

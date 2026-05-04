@@ -232,6 +232,25 @@ describe('sendRequest', () => {
     expect(callArgs.headers['Content-Type']).toBeUndefined();
   });
 
+  it('on 401 with skipAuthRedirectOn401 throws detail without signOut', async () => {
+    vi.mocked(getSession).mockResolvedValue(
+      testSession({ accessToken: 'test-token' })
+    );
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ detail: 'Invalid password' }),
+    });
+
+    await expect(
+      sendRequest('/auth/verify-and-delete', 'POST', { password: 'x' }, false, {
+        skipAuthRedirectOn401: true,
+      })
+    ).rejects.toThrow('Invalid password');
+
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
   it('handles 401 error and redirects to login', async () => {
     vi.mocked(getSession).mockResolvedValue(
       testSession({ accessToken: 'test-token' })

@@ -48,6 +48,15 @@ const handleTokenExpired = async () => {
 /** JSON body for non-multipart requests */
 export type SendRequestJsonBody = Record<string, unknown>;
 
+export type SendRequestOptions = {
+  /**
+   * When true, 401 responses throw with the API error message without signing out.
+   * Use for step-up flows (e.g. wrong password on account deletion) where 401 is not
+   * an expired session.
+   */
+  skipAuthRedirectOn401?: boolean;
+};
+
 function readSessionBearerToken(session: Session | null): string | null {
   if (!session) return null;
   return (
@@ -72,7 +81,8 @@ export const sendRequest = async (
   endpoint: string,
   method: string = 'GET',
   body: FormData | SendRequestJsonBody | null = null,
-  isFileUpload: boolean = false
+  isFileUpload: boolean = false,
+  options?: SendRequestOptions
 ) => {
   const baseUrl = resolveBaseUrl();
   // Chat akışlarında rewrite kaynaklı ECONNRESET'i azaltmak için
@@ -148,6 +158,23 @@ export const sendRequest = async (
     if (!response.ok) {
       // ✅ Token expire kontrolü (401 Unauthorized)
       if (response.status === 401) {
+        if (options?.skipAuthRedirectOn401) {
+          const errorData401 = (await response.json().catch(() => ({}))) as {
+            detail?: unknown;
+          };
+          let msg401 = 'Hata: 401';
+          if (
+            errorData401.detail !== undefined &&
+            errorData401.detail !== null
+          ) {
+            if (typeof errorData401.detail === 'string') {
+              msg401 = errorData401.detail;
+            } else {
+              msg401 = JSON.stringify(errorData401.detail);
+            }
+          }
+          throw new Error(msg401);
+        }
         // Token expire olduğunda kullanıcıyı login sayfasına yönlendir
         await handleTokenExpired();
         // Yönlendirme yapıldıktan sonra hata fırlatma (kullanıcı zaten yönlendirildi)

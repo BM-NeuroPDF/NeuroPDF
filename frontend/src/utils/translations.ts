@@ -268,6 +268,23 @@ export const translations = {
     deleteAccountConfirm:
       'Hesabınızı ve tüm verilerinizi kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!',
     deleteAccountError: 'Hesap silinirken bir hata oluştu.',
+    deleteAccountPasswordLabel: 'Şifrenizi doğrulayın',
+    deleteAccountPasswordPlaceholder: 'Hesap şifreniz',
+    deleteAccountPasswordRequired: 'Hesabı silmek için şifrenizi girin.',
+    deleteAccountAcknowledge:
+      'Hesabımı ve verilerimi kalıcı olarak silmek istediğimi onaylıyorum.',
+    deleteAccountAcknowledgeRequired:
+      'Devam etmek için onay kutusunu işaretleyin.',
+    deleteAccountSendCode: 'Doğrulama kodu gönder',
+    deleteAccountOtpSentHint:
+      'E-posta adresinize bir doğrulama kodu gönderdik. Kodu aşağıya girin.',
+    deleteAccountOtpLabel: 'E-posta doğrulama kodu',
+    deleteAccountOtpPlaceholder: '6 haneli kod',
+    deleteAccountResendInSeconds: 'Tekrar gönder ({n}s)',
+    deleteAccountResendCode: 'Kodu tekrar gönder',
+    deleteAccountLoadingProfile: 'Hesap bilgisi yükleniyor…',
+    deleteAccountSendCodeFirst: 'Önce doğrulama kodu gönderin.',
+    deleteAccountOtpInvalid: 'Geçerli bir 6 haneli kod girin.',
     deletingAccount: 'Hesap Siliniyor...',
     pleaseWait: 'Verileriniz temizleniyor, lütfen bekleyin...',
     cancel: 'Vazgeç',
@@ -625,6 +642,23 @@ export const translations = {
     deleteAccountConfirm:
       'Are you sure you want to permanently delete your account and all data? This action cannot be undone!',
     deleteAccountError: 'An error occurred while deleting the account.',
+    deleteAccountPasswordLabel: 'Confirm your password',
+    deleteAccountPasswordPlaceholder: 'Account password',
+    deleteAccountPasswordRequired: 'Enter your password to delete the account.',
+    deleteAccountAcknowledge:
+      'I confirm that I want to permanently delete my account and all data.',
+    deleteAccountAcknowledgeRequired:
+      'Please check the confirmation box to continue.',
+    deleteAccountSendCode: 'Send verification code',
+    deleteAccountOtpSentHint:
+      'We sent a verification code to your email. Enter it below.',
+    deleteAccountOtpLabel: 'Email verification code',
+    deleteAccountOtpPlaceholder: '6-digit code',
+    deleteAccountResendInSeconds: 'Resend code ({n}s)',
+    deleteAccountResendCode: 'Resend code',
+    deleteAccountLoadingProfile: 'Loading account…',
+    deleteAccountSendCodeFirst: 'Send a verification code first.',
+    deleteAccountOtpInvalid: 'Enter a valid 6-digit code.',
     deletingAccount: 'Deleting Account...',
     pleaseWait: 'Clearing your data, please wait...',
     cancel: 'Cancel',
