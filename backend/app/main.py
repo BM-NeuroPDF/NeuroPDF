@@ -1,5 +1,4 @@
 # backend/app/main.py
-import os
 from contextlib import asynccontextmanager
 
 import httpx
@@ -107,29 +106,10 @@ app.add_middleware(
 )
 
 
-# Security Headers Middleware
+# Security Headers Middleware (exceptions propagate to FastAPI handlers)
 @app.middleware("http")
 async def add_security_headers(request, call_next):
-    import logging
-
-    logger = logging.getLogger(__name__)
-
-    try:
-        response = await call_next(request)
-    except (OperationalError, PendingRollbackError):
-        raise
-    except Exception as e:
-        # Log the exception for debugging
-        logger.error(f"Unhandled exception in {request.url.path}: {e}", exc_info=True)
-        # Always show error details in development
-        is_dev = (
-            os.getenv("ENVIRONMENT", "").lower() in ["development", "dev"]
-            or os.getenv("DEBUG", "").lower() == "true"
-        )
-        response = JSONResponse(
-            status_code=500,
-            content={"detail": str(e) if is_dev else "Internal server error"},
-        )
+    response = await call_next(request)
 
     # CORS header'ları her zaman ekle (hata durumunda bile)
     origin = request.headers.get("origin")
@@ -169,7 +149,13 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Detailed health check"""
+    """Liveness: no auth, no DB (Docker / load balancers)."""
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def health_ready():
+    """Readiness: database connectivity (optional ops probe)."""
     from sqlalchemy import text
 
     from app.config import settings

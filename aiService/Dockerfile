@@ -2,7 +2,10 @@
 FROM python:3.13.2-slim
 
 # Zemberek'in çalışması için Java (JRE) KURULUMU
-RUN apt-get update && apt-get install -y default-jre && apt-get clean
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends default-jre curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Çalışma dizinini ayarla
 WORKDIR /app

@@ -2,6 +2,10 @@
 # Python backend için 3.11 slim tabanlı imaj
 FROM python:3.13.2-slim
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 # Adım 2: Çalışma dizini
 WORKDIR /app
 

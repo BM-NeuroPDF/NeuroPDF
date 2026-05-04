@@ -12,7 +12,14 @@ services:
     environment:
       - NODE_ENV=production
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   backend:
     build:
@@ -24,8 +31,16 @@ services:
     env_file:
       - ./backend/.env
     depends_on:
-      - db
-      - redis_cache
+      db:
+        condition: service_healthy
+      redis_cache:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   aiservice:
     build:
@@ -37,6 +52,15 @@ services:
     env_file:
       - ./aiService/.env
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    depends_on:
+      redis_cache:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   # Postgres: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB — backend/.env (örnek: backend/.env.example)
   db:
@@ -46,6 +70,11 @@ services:
       - postgres_data:/var/lib/postgresql/data
     env_file:
       - ./backend/.env
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis_cache:
     image: redis:7-alpine
@@ -53,6 +82,11 @@ services:
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
