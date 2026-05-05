@@ -227,7 +227,7 @@ class TestChatEndpoints:
         data = response.json()
         assert "session_id" in data
 
-    @patch("app.routers.files._legacy.append_chat_turn")
+    @patch("app.routers.files.routes_chat.append_chat_turn")
     def test_send_chat_message(
         self, mock_append_chat_turn, mock_ai_http_client, override_dependencies
     ):
@@ -266,8 +266,8 @@ class TestChatEndpoints:
         response = client.post("/files/chat/message", json=payload)
         assert response.status_code == 400
 
-    @patch("app.routers.files._legacy.get_chat_session_by_db_id")
-    @patch("app.routers.files._legacy.get_session_messages_ordered")
+    @patch("app.routers.files.routes_chat.get_chat_session_by_db_id")
+    @patch("app.routers.files.routes_chat.get_session_messages_ordered")
     def test_get_session_messages_includes_metadata(
         self, mock_get_messages, mock_get_session, override_dependencies
     ):
@@ -292,9 +292,9 @@ class TestChatEndpoints:
         assert item["sourceLanguage"] == "tr"
         assert item["translations"]["en"] == "Hello"
 
-    @patch("app.routers.files._legacy.history_for_ai_restore")
-    @patch("app.routers.files._legacy.get_session_messages_ordered")
-    @patch("app.routers.files._legacy.get_chat_session_by_db_id")
+    @patch("app.routers.files.routes_chat.history_for_ai_restore")
+    @patch("app.routers.files.routes_chat.get_session_messages_ordered")
+    @patch("app.routers.files.routes_chat.get_chat_session_by_db_id")
     def test_resume_session_returns_message_metadata(
         self,
         mock_get_session,
@@ -751,7 +751,9 @@ class TestStatsRepositoryShimEndpoints:
         )
 
     @pytest.mark.asyncio
-    @patch("app.routers.files._legacy.stats_repo.increment_usage", new_callable=AsyncMock)
+    @patch(
+        "app.routers.files._legacy.stats_repo.increment_usage", new_callable=AsyncMock
+    )
     @patch("app.routers.files.settings.SUPABASE_URL", "http://test")
     @patch("app.routers.files.settings.USE_SUPABASE", True)
     async def test_increment_user_usage_task_uses_supabase(
@@ -759,7 +761,9 @@ class TestStatsRepositoryShimEndpoints:
     ):
         from app.routers.files import increment_user_usage_task
 
-        with patch("app.routers.files._legacy.get_supabase", return_value=mock_supabase):
+        with patch(
+            "app.routers.files._legacy.get_supabase", return_value=mock_supabase
+        ):
             await increment_user_usage_task("user-1", "summary")
 
         mock_increment_usage.assert_awaited_once_with(
@@ -770,7 +774,9 @@ class TestStatsRepositoryShimEndpoints:
         )
 
     @pytest.mark.asyncio
-    @patch("app.routers.files._legacy.stats_repo.increment_usage", new_callable=AsyncMock)
+    @patch(
+        "app.routers.files._legacy.stats_repo.increment_usage", new_callable=AsyncMock
+    )
     @patch("app.routers.files.settings.USE_SUPABASE", False)
     async def test_increment_user_usage_task_uses_local_db(self, mock_increment_usage):
         mock_session = MagicMock()

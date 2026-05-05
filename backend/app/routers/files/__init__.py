@@ -23,6 +23,7 @@ PUBLIC_LIMITS = {
 
 from .routes_pdf_tools import router as routes_pdf_tools_router
 from .routes_summarize import router as routes_summarize_router
+from .routes_chat import router as routes_chat_router
 from .routes_user import (
     get_global_stats,
     get_llm_choice,
@@ -35,6 +36,7 @@ _composite_router = APIRouter(prefix="/files", tags=["files"])
 _composite_router.include_router(routes_user_router)
 _composite_router.include_router(routes_pdf_tools_router)
 _composite_router.include_router(routes_summarize_router)
+_composite_router.include_router(routes_chat_router)
 _composite_router.include_router(_legacy_module.router)
 
 from ._legacy import *  # noqa: F401,F403

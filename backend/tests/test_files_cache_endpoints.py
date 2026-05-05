@@ -93,7 +93,7 @@ class TestFilesListCache:
 
 
 class TestChatCache:
-    @patch("app.routers.files._legacy.list_user_chat_sessions")
+    @patch("app.routers.files.routes_chat.list_user_chat_sessions")
     @patch("app.routers.files._legacy.stats_cache_set_json")
     @patch("app.routers.files._legacy.stats_cache_get_json")
     def test_chat_sessions_cache_miss_then_hit(
@@ -122,8 +122,8 @@ class TestChatCache:
         assert r2.json() == {"sessions": []}
         assert mock_list_sessions.call_count == 1
 
-    @patch("app.routers.files._legacy.get_session_messages_ordered")
-    @patch("app.routers.files._legacy.get_chat_session_by_db_id")
+    @patch("app.routers.files.routes_chat.get_session_messages_ordered")
+    @patch("app.routers.files.routes_chat.get_chat_session_by_db_id")
     @patch("app.routers.files._legacy.stats_cache_set_json")
     @patch("app.routers.files._legacy.stats_cache_get_json")
     def test_chat_messages_cache_miss_then_hit(
@@ -153,7 +153,7 @@ class TestChatCache:
         assert mock_get_messages.call_count == 1
 
     @patch("app.routers.files._legacy.stats_cache_delete_keys")
-    @patch("app.routers.files._legacy.append_chat_turn")
+    @patch("app.routers.files.routes_chat.append_chat_turn")
     def test_send_message_invalidates_message_and_session_caches(
         self,
         _mock_append_turn,
