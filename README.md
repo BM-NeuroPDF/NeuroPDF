@@ -222,3 +222,4 @@ Docker ile toplu script: `./scripts/run-tests.sh`. Strateji ve sayılar: [docs/t
 ## Lisans ve katkı
 
 Lisans: proje kökündeki `LICENSE` (varsa). Issue ve pull request’ler memnuniyetle karşılanır.
+# test
