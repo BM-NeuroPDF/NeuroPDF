@@ -1,33 +1,39 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendDir = path.join(__dirname, 'frontend');
 
-/**
- * Paths relative to `frontend/` for ESLint (cwd = frontend).
- * @param {string[]} files - staged paths from repo root, e.g. frontend/src/app/page.tsx
- */
 function toFrontendRelative(files) {
   return files.map((f) => path.relative(frontendDir, path.resolve(__dirname, f)));
 }
 
-/** Minimal shell quoting for paths with spaces/special chars */
 function shellQuote(p) {
   if (!/[\s'"\\$`]/.test(p)) return p;
-  return `'${p.replace(/'/g, `'\\''`)}'`;
+  return `'${p.replace(/'/g, `'\\''`)}'\``;
+}
+
+function chunkArray(arr, size) {
+  const chunks = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size));
+  }
+  return chunks;
 }
 
 export default {
   'frontend/**/*.{js,jsx,ts,tsx}': (filenames) => {
     if (filenames.length === 0) return [];
     const rel = toFrontendRelative(filenames);
-    const eslintArgs = rel.map(shellQuote).join(' ');
     const prettierArgs = filenames.map((f) => shellQuote(path.resolve(__dirname, f))).join(' ');
-    return [
-      `sh -c 'cd ${shellQuote(frontendDir)} && npx eslint --fix ${eslintArgs}'`,
-      `npx prettier --write ${prettierArgs}`,
-    ];
+    
+    // ESLint'i 50'şer dosyalık chunk'lara böl
+    const chunks = chunkArray(rel, 50);
+    const eslintCmds = chunks.map((chunk) => {
+      const args = chunk.map(shellQuote).join(' ');
+      return `sh -c 'cd ${shellQuote(frontendDir)} && npx eslint --fix --max-warnings=0 ${args}'`;
+    });
+    
+    return [...eslintCmds, `npx prettier --write ${prettierArgs}`];
   },
   'frontend/**/*.{css,json,md}': (filenames) => {
     if (filenames.length === 0) return [];

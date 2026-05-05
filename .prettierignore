@@ -21,3 +21,5 @@ yarn.lock
 frontend/audit.json
 frontend/tsconfig.ts-prune.json
 frontend/tsconfig.typecheck.json
+frontend/tsconfig.ts-prune.json
+frontend/tsconfig.typecheck.json
