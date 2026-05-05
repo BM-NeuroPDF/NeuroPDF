@@ -17,7 +17,7 @@ omit =
     */app/**/__init__.py
     */app/schemas/*
     */app/models.py
-    */app/routers/files.py
+    */app/routers/files/_legacy.py
     */app/redis_client.py
     */app/services/avatar_service.py
     */app/routers/user_avatar_routes.py
