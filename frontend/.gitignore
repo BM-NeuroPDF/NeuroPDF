@@ -43,3 +43,4 @@ yarn-error.log*
 next-env.d.ts
 
 certificatesfrontend/audit.json
+frontend/audit.json

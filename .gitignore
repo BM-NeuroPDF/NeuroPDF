@@ -65,3 +65,4 @@ stash-backup*
 
 backend/uploads/
 backend/static/avatars/backend/app/static/avatars/test-user-id/
+backend/app/static/avatars/
