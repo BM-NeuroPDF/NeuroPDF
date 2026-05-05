@@ -71,9 +71,7 @@ export default function EulaGuard({ children }: { children: React.ReactNode }) {
 
       // TOKEN YOKSA OTOMATİK ÇIKIŞ YAP (Hata Çözümü)
       if (!token) {
-        alert(
-          'Oturum süreniz dolmuş veya token hatalı. Lütfen tekrar giriş yapın.'
-        );
+        alert('Oturum süreniz dolmuş veya token hatalı. Lütfen tekrar giriş yapın.');
         await signOut({ callbackUrl: '/login' });
         return;
       }
@@ -101,7 +99,7 @@ export default function EulaGuard({ children }: { children: React.ReactNode }) {
           alert(
             language === 'tr'
               ? `EULA onayı alınamadı.${message ? ` (${message})` : ''}`
-              : `EULA acceptance failed.${message ? ` (${message})` : ''}`
+              : `EULA acceptance failed.${message ? ` (${message})` : ''}`,
           );
         }
       }
@@ -110,7 +108,7 @@ export default function EulaGuard({ children }: { children: React.ReactNode }) {
       alert(
         language === 'tr'
           ? 'EULA isteği sırasında ağ hatası oluştu.'
-          : 'Network error while sending EULA request.'
+          : 'Network error while sending EULA request.',
       );
     }
   };
@@ -127,9 +125,7 @@ export default function EulaGuard({ children }: { children: React.ReactNode }) {
             {/* Header */}
             <div className="p-6 border-b border-[var(--navbar-border)]">
               <h2 className="text-2xl font-bold text-red-500">
-                {language === 'tr'
-                  ? 'Son Bir Adım: Kullanıcı Sözleşmesi'
-                  : 'One Last Step: EULA'}
+                {language === 'tr' ? 'Son Bir Adım: Kullanıcı Sözleşmesi' : 'One Last Step: EULA'}
               </h2>
               <p className="opacity-70 text-sm mt-1">
                 {language === 'tr'
@@ -154,17 +150,13 @@ export default function EulaGuard({ children }: { children: React.ReactNode }) {
               {/* SOL: Bilgi ve ÇIKIŞ Butonu */}
               <div className="flex flex-col gap-2">
                 <div className="text-xs font-bold opacity-80">
-                  <span
-                    className={timeLeft > 0 ? 'text-red-400' : 'text-green-500'}
-                  >
+                  <span className={timeLeft > 0 ? 'text-red-400' : 'text-green-500'}>
                     {timeLeft > 0
                       ? `⏳ ${language === 'tr' ? 'Okuma Süresi' : 'Reading Time'}: ${timeLeft}s`
                       : `✅ ${language === 'tr' ? 'Süre Doldu' : 'Time Completed'}`}
                   </span>
                   <span className="mx-2">|</span>
-                  <span
-                    className={!hasScrolled ? 'text-red-400' : 'text-green-500'}
-                  >
+                  <span className={!hasScrolled ? 'text-red-400' : 'text-green-500'}>
                     {!hasScrolled
                       ? `📜 ${language === 'tr' ? 'Aşağı kaydırınız' : 'Scroll down'}`
                       : `✅ ${language === 'tr' ? 'Okundu' : 'Scrolled'}`}
@@ -176,9 +168,7 @@ export default function EulaGuard({ children }: { children: React.ReactNode }) {
                   onClick={() => signOut({ callbackUrl: '/login' })}
                   className="text-xs text-red-500 hover:text-red-600 underline text-left font-semibold"
                 >
-                  {language === 'tr'
-                    ? 'Kabul etmiyorum, çıkış yap.'
-                    : 'I decline, sign out.'}
+                  {language === 'tr' ? 'Kabul etmiyorum, çıkış yap.' : 'I decline, sign out.'}
                 </button>
               </div>
 
@@ -194,9 +184,7 @@ export default function EulaGuard({ children }: { children: React.ReactNode }) {
                   cursor: canAccept ? 'pointer' : 'not-allowed',
                 }}
               >
-                {language === 'tr'
-                  ? 'Okudum, Kabul Ediyorum'
-                  : 'I Read & Accept'}
+                {language === 'tr' ? 'Okudum, Kabul Ediyorum' : 'I Read & Accept'}
               </button>
             </div>
           </div>

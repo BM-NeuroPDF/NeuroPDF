@@ -1,18 +1,12 @@
 import { test, expect } from '@playwright/test';
-import {
-  isMobileViewport,
-  login,
-  openMobileMenuIfNeeded,
-} from '../support/helpers';
+import { loginAsTestUser } from '../support/auth';
+import { isMobileViewport, openMobileMenuIfNeeded } from '../support/helpers';
 import path from 'path';
-
-const TEST_EMAIL = process.env.E2E_TEST_EMAIL || 'test1@gmail.com';
-const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD || 'Test1234.';
 
 test.describe('PDF Summarize E2E', () => {
   test('user can upload and summarize a PDF', async ({ page }) => {
     // Login first
-    await login(page, TEST_EMAIL, TEST_PASSWORD);
+    await loginAsTestUser(page);
 
     // Navigate to summarize page (mobilde menü içinden link görünür olabilir)
     if (isMobileViewport(page)) {
@@ -87,7 +81,7 @@ test.describe('PDF Summarize E2E', () => {
 
   test('user can see loading state during summarization', async ({ page }) => {
     // Login first
-    await login(page, TEST_EMAIL, TEST_PASSWORD);
+    await loginAsTestUser(page);
 
     // Navigate to summarize page (mobilde menü içinden link görünür olabilir)
     if (isMobileViewport(page)) {

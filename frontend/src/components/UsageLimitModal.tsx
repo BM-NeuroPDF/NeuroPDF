@@ -13,16 +13,28 @@ export default function UsageLimitModal({
   onClose,
   onLogin,
   usageCount = 3,
-  maxUsage = 3
+  maxUsage = 3,
 }: UsageLimitModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" data-testid="usage-limit-modal">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      data-testid="usage-limit-modal"
+    >
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black bg-opacity-50"
         onClick={onClose}
+        role="button"
+        tabIndex={0}
+        aria-label="Kapat"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onClose();
+          }
+        }}
       />
 
       {/* Modal */}
@@ -46,23 +58,17 @@ export default function UsageLimitModal({
           </div>
 
           {/* Title */}
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Kullanım Limitine Ulaştınız
-          </h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Kullanım Limitine Ulaştınız</h2>
 
           {/* Description */}
-          <p className="text-gray-600 mb-2">
-            Ücretsiz kullanım hakkınızın tamamını kullandınız.
-          </p>
+          <p className="text-gray-600 mb-2">Ücretsiz kullanım hakkınızın tamamını kullandınız.</p>
           <p className="text-sm text-gray-500 mb-6">
             Kullanım: {usageCount} / {maxUsage}
           </p>
 
           {/* Benefits */}
           <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left">
-            <p className="font-semibold text-gray-900 mb-2">
-              Giriş yaparak:
-            </p>
+            <p className="font-semibold text-gray-900 mb-2">Giriş yaparak:</p>
             <ul className="space-y-2 text-sm text-gray-600">
               <li className="flex items-start">
                 <svg

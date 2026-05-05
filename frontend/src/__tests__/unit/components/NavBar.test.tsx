@@ -122,9 +122,7 @@ describe('NavBar', () => {
 
       renderWithProvider(<NavBar />);
 
-      const uploadLink = screen
-        .getByText(/PDF Görüntüleme|Upload/i)
-        .closest('a');
+      const uploadLink = screen.getByText(/PDF Görüntüleme|Upload/i).closest('a');
       expect(uploadLink).toHaveClass('bg-[var(--button-bg)]');
     });
 
@@ -251,21 +249,11 @@ describe('NavBar', () => {
       await user.click(hamburgerButton);
 
       // Tüm linkler mobil menüde görünmeli (getAllByText kullan çünkü desktop'ta da var)
-      expect(
-        screen.getAllByText(/PDF Görüntüleme|Upload/i).length
-      ).toBeGreaterThan(0);
-      expect(
-        screen.getAllByText(/Sayfa Çıkar|Extract/i).length
-      ).toBeGreaterThan(0);
-      expect(screen.getAllByText(/Sayfa Düzenle|Edit/i).length).toBeGreaterThan(
-        0
-      );
-      expect(
-        screen.getAllByText(/PDF Birleştir|Merge/i).length
-      ).toBeGreaterThan(0);
-      expect(
-        screen.getAllByText(/PDF Özetleme|Summarize/i).length
-      ).toBeGreaterThan(0);
+      expect(screen.getAllByText(/PDF Görüntüleme|Upload/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Sayfa Çıkar|Extract/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Sayfa Düzenle|Edit/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/PDF Birleştir|Merge/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/PDF Özetleme|Summarize/i).length).toBeGreaterThan(0);
       expect(screen.getAllByText('Pro').length).toBeGreaterThan(0);
     });
 
@@ -341,9 +329,7 @@ describe('NavBar', () => {
       const user = userEvent.setup();
       const { container } = renderWithProvider(<NavBar />);
       await user.click(screen.getByLabelText(/Menüyü aç|Open menu/i));
-      const link = container.querySelector(
-        'a[href="/summarize-pdf"]'
-      ) as HTMLAnchorElement;
+      const link = container.querySelector('a[href="/summarize-pdf"]') as HTMLAnchorElement;
       expect(link.className).toMatch(/yellow/);
     });
 
@@ -353,9 +339,7 @@ describe('NavBar', () => {
       const { container } = renderWithProvider(<NavBar />);
       await user.click(screen.getByLabelText(/Menüyü aç|Open menu/i));
       const mobileNav = container.querySelector('.lg\\:hidden.py-4');
-      const link = mobileNav?.querySelector(
-        'a[href="/summarize-pdf"]'
-      ) as HTMLAnchorElement;
+      const link = mobileNav?.querySelector('a[href="/summarize-pdf"]') as HTMLAnchorElement;
       expect(link.className).toMatch(/button-bg|shadow-sm/);
     });
   });

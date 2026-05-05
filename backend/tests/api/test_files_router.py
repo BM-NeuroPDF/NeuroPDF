@@ -16,6 +16,12 @@ from app.repositories.user_repo import UserRepository
 
 client = TestClient(app)
 
+MINIMAL_PDF = (
+    b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+    b"2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n"
+    b"trailer\n<< /Root 1 0 R >>\n%%EOF"
+)
+
 
 # ==========================================
 # FIXTURES
@@ -56,9 +62,7 @@ def mock_user():
 @pytest.fixture
 def sample_pdf():
     """Sample PDF file content"""
-    # Minimal valid PDF content
-    pdf_content = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\nxref\n0 0\ntrailer\n<< /Size 0 /Root 1 0 R >>\nstartxref\n9\n%%EOF"
-    return pdf_content
+    return MINIMAL_PDF
 
 
 @pytest.fixture
@@ -80,8 +84,8 @@ def override_dependencies(mock_supabase, mock_db, mock_user):
 class TestSummarizeFile:
     """Test /files/summarize endpoint"""
 
-    @patch("app.routers.files.check_summarize_cache")
-    @patch("app.routers.files.get_user_llm_choice")
+    @patch("app.routers.files._legacy.check_summarize_cache")
+    @patch("app.routers.files._legacy.get_user_llm_choice")
     def test_summarize_file_success(
         self,
         mock_get_llm_choice,
@@ -126,8 +130,8 @@ class TestSummarizeFile:
         assert "summary" in data
         assert "pdf_text" in data
 
-    @patch("app.routers.files.check_summarize_cache_by_hash")
-    @patch("app.routers.files.get_user_llm_choice")
+    @patch("app.routers.files._legacy.check_summarize_cache_by_hash")
+    @patch("app.routers.files._legacy.get_user_llm_choice")
     def test_summarize_file_cached(
         self,
         mock_get_llm_choice,
@@ -223,7 +227,7 @@ class TestChatEndpoints:
         data = response.json()
         assert "session_id" in data
 
-    @patch("app.routers.files.append_chat_turn")
+    @patch("app.routers.files._legacy.append_chat_turn")
     def test_send_chat_message(
         self, mock_append_chat_turn, mock_ai_http_client, override_dependencies
     ):
@@ -262,8 +266,8 @@ class TestChatEndpoints:
         response = client.post("/files/chat/message", json=payload)
         assert response.status_code == 400
 
-    @patch("app.routers.files.get_chat_session_by_db_id")
-    @patch("app.routers.files.get_session_messages_ordered")
+    @patch("app.routers.files._legacy.get_chat_session_by_db_id")
+    @patch("app.routers.files._legacy.get_session_messages_ordered")
     def test_get_session_messages_includes_metadata(
         self, mock_get_messages, mock_get_session, override_dependencies
     ):
@@ -288,9 +292,9 @@ class TestChatEndpoints:
         assert item["sourceLanguage"] == "tr"
         assert item["translations"]["en"] == "Hello"
 
-    @patch("app.routers.files.history_for_ai_restore")
-    @patch("app.routers.files.get_session_messages_ordered")
-    @patch("app.routers.files.get_chat_session_by_db_id")
+    @patch("app.routers.files._legacy.history_for_ai_restore")
+    @patch("app.routers.files._legacy.get_session_messages_ordered")
+    @patch("app.routers.files._legacy.get_chat_session_by_db_id")
     def test_resume_session_returns_message_metadata(
         self,
         mock_get_session,
@@ -536,8 +540,8 @@ class TestStatsRepositoryShimEndpoints:
     @pytest.fixture(autouse=True)
     def _bypass_stats_redis_cache(self):
         with (
-            patch("app.routers.files.stats_cache_get_json", return_value=None),
-            patch("app.routers.files.stats_cache_set_json"),
+            patch("app.routers.files._legacy.stats_cache_get_json", return_value=None),
+            patch("app.routers.files._legacy.stats_cache_set_json"),
         ):
             yield
 
@@ -642,10 +646,10 @@ class TestStatsRepositoryShimEndpoints:
 
         with (
             patch(
-                "app.routers.files.stats_cache_get_json",
+                "app.routers.files._legacy.stats_cache_get_json",
                 side_effect=[None, cached_payload],
             ),
-            patch("app.routers.files.stats_cache_set_json") as mock_set_cache,
+            patch("app.routers.files._legacy.stats_cache_set_json") as mock_set_cache,
         ):
             r1 = client.get("/files/user/stats")
             r2 = client.get("/files/user/stats")
@@ -674,14 +678,17 @@ class TestStatsRepositoryShimEndpoints:
         caplog.set_level(logging.INFO)
         with (
             patch(
-                "app.routers.files.stats_cache_get_json",
+                "app.routers.files._legacy.stats_cache_get_json",
                 side_effect=[None, cached_payload],
             ),
-            patch("app.routers.files.stats_cache_set_json"),
+            patch("app.routers.files._legacy.stats_cache_set_json"),
         ):
             client.get("/files/user/stats")
             client.get("/files/user/stats")
-        assert any("user_stats cache hit" in r.message for r in caplog.records)
+        assert any(
+            "event=cache_lookup" in r.message and "phase=cache_hit" in r.message
+            for r in caplog.records
+        )
 
     @patch("app.routers.files.stats_repo.get_global_stats", new_callable=AsyncMock)
     def test_get_global_stats_second_request_uses_cache_without_repo(
@@ -697,10 +704,10 @@ class TestStatsRepositoryShimEndpoints:
 
         with (
             patch(
-                "app.routers.files.stats_cache_get_json",
+                "app.routers.files._legacy.stats_cache_get_json",
                 side_effect=[None, cached],
             ),
-            patch("app.routers.files.stats_cache_set_json") as mock_set,
+            patch("app.routers.files._legacy.stats_cache_set_json") as mock_set,
         ):
             r1 = client.get("/files/global-stats")
             r2 = client.get("/files/global-stats")
@@ -729,24 +736,30 @@ class TestStatsRepositoryShimEndpoints:
         caplog.set_level(logging.INFO)
         with (
             patch(
-                "app.routers.files.stats_cache_get_json",
+                "app.routers.files._legacy.stats_cache_get_json",
                 side_effect=[None, cached],
             ),
-            patch("app.routers.files.stats_cache_set_json"),
+            patch("app.routers.files._legacy.stats_cache_set_json"),
         ):
             client.get("/files/global-stats")
             client.get("/files/global-stats")
-        assert any("global_stats cache hit" in r.message for r in caplog.records)
+        assert any(
+            "event=cache_lookup" in r.message
+            and "global_stats_redis" in r.message
+            and "phase=cache_hit" in r.message
+            for r in caplog.records
+        )
 
     @pytest.mark.asyncio
-    @patch("app.routers.files.stats_repo.increment_usage", new_callable=AsyncMock)
+    @patch("app.routers.files._legacy.stats_repo.increment_usage", new_callable=AsyncMock)
+    @patch("app.routers.files.settings.SUPABASE_URL", "http://test")
     @patch("app.routers.files.settings.USE_SUPABASE", True)
     async def test_increment_user_usage_task_uses_supabase(
         self, mock_increment_usage, mock_supabase
     ):
         from app.routers.files import increment_user_usage_task
 
-        with patch("app.routers.files.get_supabase", return_value=mock_supabase):
+        with patch("app.routers.files._legacy.get_supabase", return_value=mock_supabase):
             await increment_user_usage_task("user-1", "summary")
 
         mock_increment_usage.assert_awaited_once_with(
@@ -757,11 +770,11 @@ class TestStatsRepositoryShimEndpoints:
         )
 
     @pytest.mark.asyncio
-    @patch("app.routers.files.stats_repo.increment_usage", new_callable=AsyncMock)
+    @patch("app.routers.files._legacy.stats_repo.increment_usage", new_callable=AsyncMock)
     @patch("app.routers.files.settings.USE_SUPABASE", False)
     async def test_increment_user_usage_task_uses_local_db(self, mock_increment_usage):
         mock_session = MagicMock()
-        with patch("app.routers.files.SessionLocal", return_value=mock_session):
+        with patch("app.routers.files._legacy.SessionLocal", return_value=mock_session):
             from app.routers.files import increment_user_usage_task
 
             await increment_user_usage_task("user-1", "tool")
@@ -856,8 +869,8 @@ class TestUserRepositoryShimEndpoints:
 class TestPDFOperations:
     """Test PDF operation endpoints"""
 
-    @patch("app.routers.files.PdfReader")
-    @patch("app.routers.files.PdfWriter")
+    @patch("app.routers.files._legacy.PdfReader")
+    @patch("app.routers.files._legacy.PdfWriter")
     def test_extract_pages(
         self, mock_writer, mock_reader, override_dependencies, sample_pdf
     ):
@@ -879,8 +892,8 @@ class TestPDFOperations:
         # Should return PDF bytes or success status
         assert response.status_code in [200, 201]
 
-    @patch("app.routers.files.PdfReader")
-    @patch("app.routers.files.PdfWriter")
+    @patch("app.routers.files._legacy.PdfReader")
+    @patch("app.routers.files._legacy.PdfWriter")
     def test_merge_pdfs(
         self, mock_writer, mock_reader, override_dependencies, sample_pdf
     ):

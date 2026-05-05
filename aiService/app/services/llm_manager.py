@@ -2,6 +2,7 @@
 
 from fastapi import HTTPException
 from typing import Any, Literal, Optional
+from collections.abc import Iterator
 
 from app.core.tools.agent_loop import run_with_tools
 
@@ -33,6 +34,17 @@ def summarize_text(
 
 def _cloud_generate(text_content: str, prompt_instruction: str, mode: CloudMode, language: str = "tr") -> str:
     return ai_service.gemini_generate(
+        text_content=text_content,
+        prompt_instruction=prompt_instruction,
+        mode=mode,
+        language=language,
+    )
+
+
+def _cloud_generate_stream(
+    text_content: str, prompt_instruction: str, mode: CloudMode, language: str = "tr"
+) -> Iterator[str]:
+    return ai_service.gemini_generate_stream(
         text_content=text_content,
         prompt_instruction=prompt_instruction,
         mode=mode,
@@ -216,3 +228,65 @@ def general_chat(
         )
 
     raise HTTPException(status_code=400, detail="Geçersiz llm_provider.")
+
+
+def stream_chat_over_pdf(
+    session_text: str,
+    filename: str,
+    history_text: str,
+    user_message: str,
+    llm_provider: LLMProvider = "cloud",
+    mode: CloudMode = "pro",
+    language: str = "tr",
+) -> Iterator[str]:
+    full_prompt = _build_chat_prompt(
+        session_text, filename, history_text, user_message, language
+    )
+    if llm_provider == "cloud":
+        yield from _cloud_generate_stream(
+            text_content=full_prompt,
+            prompt_instruction="",
+            mode=mode,
+            language=language,
+        )
+        return
+    if llm_provider == "local":
+        answer = _local_chat_generate(
+            user_message=user_message,
+            instruction=full_prompt,
+            history=None,
+        )
+        for part in answer.split(" "):
+            if part:
+                yield f"{part} "
+        return
+    raise HTTPException(status_code=400, detail="Geçersiz llm_provider.")
+
+
+def stream_summarize_text(
+    text: str,
+    prompt_instruction: str,
+    llm_provider: LLMProvider = "cloud",
+    mode: CloudMode = "flash",
+    language: str = "tr",
+) -> Iterator[str]:
+    if llm_provider == "cloud":
+        yield from _cloud_generate_stream(
+            text_content=text,
+            prompt_instruction=prompt_instruction,
+            mode=mode,
+            language=language,
+        )
+        return
+    if llm_provider == "local":
+        result = analyze_text_with_local_llm(
+            text, task="summarize", instruction=prompt_instruction
+        )
+        summary = result.get("summary", "") or "Local LLM yanıt üretmedi."
+        for part in summary.split(" "):
+            if part:
+                yield f"{part} "
+        return
+    raise HTTPException(
+        status_code=400, detail="Geçersiz llm_provider. 'cloud' veya 'local' olmalı."
+    )

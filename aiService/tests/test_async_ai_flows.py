@@ -5,7 +5,7 @@ LLM mock'lanır; gerçek API maliyeti yok.
 import pytest
 
 pytestmark = [pytest.mark.async_ai]
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 # TestClient senkron; async endpoint'leri asyncio.to_thread ile çağırır, bu yüzden TestClient yeterli.

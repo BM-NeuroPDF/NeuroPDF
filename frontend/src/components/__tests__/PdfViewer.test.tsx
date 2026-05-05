@@ -47,9 +47,7 @@ describe('PdfViewer', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useLanguage).mockReturnValue(
-      mockUseLanguage as ReturnType<typeof useLanguage>
-    );
+    vi.mocked(useLanguage).mockReturnValue(mockUseLanguage as ReturnType<typeof useLanguage>);
   });
 
   it('renders PDF viewer with file', () => {

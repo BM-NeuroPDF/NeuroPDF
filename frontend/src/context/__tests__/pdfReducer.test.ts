@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pdfReducer } from '../PdfContext';
+import { pdfReducer } from '../pdf/pdfModel';
 
 function f(name: string, type = 'application/pdf') {
   return new File(['x'], name, { type });

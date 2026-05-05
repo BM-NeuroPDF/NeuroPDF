@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { isMobileViewport, login } from '../support/helpers';
-
-const TEST_EMAIL = process.env.E2E_TEST_EMAIL || 'test1@gmail.com';
-const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD || 'Test1234.';
+import {
+  isMobileViewport,
+  login,
+  clickWhenStable,
+} from '../support/helpers';
+import { historyFlowUser } from '../fixtures/test-data';
 
 /** Backend ile uyumlu: GET /files/chat/sessions */
 const MOCK_SESSIONS_BODY = {
@@ -91,7 +93,9 @@ test.describe('Chat History E2E', () => {
       await route.continue();
     });
 
-    await login(page, TEST_EMAIL, TEST_PASSWORD);
+    await login(page, historyFlowUser.email, historyFlowUser.password, {
+      username: historyFlowUser.username,
+    });
 
     await page.goto('/upload');
     await page.waitForLoadState('domcontentloaded');
@@ -117,7 +121,6 @@ test.describe('Chat History E2E', () => {
       .filter({ has: page.locator('p[title="Finans_Raporu_2024.pdf"]') })
       .first();
     await expect(historyButton).toBeVisible();
-    await page.waitForTimeout(2000);
     const resumePromise = page.waitForRequest(
       (req) =>
         (req.url().includes('/api/proxy/chat/sessions/') ||
@@ -125,7 +128,7 @@ test.describe('Chat History E2E', () => {
         req.url().includes('resume') &&
         req.method() === 'POST'
     );
-    await historyButton.click();
+    await clickWhenStable(historyButton, { timeout: 15_000 });
 
     await resumePromise;
 

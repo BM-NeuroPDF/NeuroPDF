@@ -23,7 +23,7 @@ describe('SummarizePdfWorkArea', () => {
         onSummarize={vi.fn()}
         t={t as ComponentProps<typeof SummarizePdfWorkArea>['t']}
         pdfViewer={PdfViewer}
-      />
+      />,
     );
     expect(screen.getByText('pdfPreviewTitle')).toBeInTheDocument();
     expect(screen.getByTestId('pdf-viewer-mock')).toHaveTextContent('test.pdf');
@@ -38,7 +38,7 @@ describe('SummarizePdfWorkArea', () => {
         onSummarize={onSummarize}
         t={t as ComponentProps<typeof SummarizePdfWorkArea>['t']}
         pdfViewer={PdfViewer}
-      />
+      />,
     );
     fireEvent.click(screen.getByRole('button', { name: /summarizeButton/i }));
     expect(onSummarize).toHaveBeenCalled();
@@ -52,17 +52,13 @@ describe('SummarizePdfWorkArea', () => {
         onSummarize={vi.fn()}
         t={t as ComponentProps<typeof SummarizePdfWorkArea>['t']}
         pdfViewer={PdfViewer}
-      />
+      />,
     );
-    expect(
-      screen.getByRole('button', { name: /summarizeButton/i })
-    ).toBeDisabled();
+    expect(screen.getByRole('button', { name: /summarizeButton/i })).toBeDisabled();
   });
 
   it('uses summarize button fallback label when t returns empty', () => {
-    const tEmpty = (() => '') as ComponentProps<
-      typeof SummarizePdfWorkArea
-    >['t'];
+    const tEmpty = (() => '') as ComponentProps<typeof SummarizePdfWorkArea>['t'];
     render(
       <SummarizePdfWorkArea
         file={pdf}
@@ -70,7 +66,7 @@ describe('SummarizePdfWorkArea', () => {
         onSummarize={vi.fn()}
         t={tEmpty}
         pdfViewer={PdfViewer}
-      />
+      />,
     );
     expect(screen.getByRole('button', { name: /Özetle/i })).toBeInTheDocument();
   });

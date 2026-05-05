@@ -49,9 +49,7 @@ export function PopupProvider({ children }: { children: React.ReactNode }) {
             type={popup.type}
             message={popup.message}
             open={true}
-            onClose={() =>
-              setPopups((prev) => prev.filter((p) => p.id !== popup.id))
-            }
+            onClose={() => setPopups((prev) => prev.filter((p) => p.id !== popup.id))}
           />
         ))}
       </div>

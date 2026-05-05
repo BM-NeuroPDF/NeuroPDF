@@ -17,7 +17,7 @@ vi.mock('react-dropzone', () => ({
 }));
 
 vi.mock('@/context/PdfContext', () => ({
-  usePdf: () => ({
+  usePdfData: () => ({
     pdfFile: null,
     pdfList: [] as File[],
   }),
@@ -25,9 +25,7 @@ vi.mock('@/context/PdfContext', () => ({
 
 import { useUnifiedPdfDrop } from '../useUnifiedPdfDrop';
 
-type UnifiedRootProps = ReturnType<
-  ReturnType<typeof useUnifiedPdfDrop>['getRootProps']
->;
+type UnifiedRootProps = ReturnType<ReturnType<typeof useUnifiedPdfDrop>['getRootProps']>;
 
 describe('useUnifiedPdfDrop branch coverage (mocked dropzone)', () => {
   const onFiles = vi.fn();
@@ -104,9 +102,7 @@ describe('useUnifiedPdfDrop branch coverage (mocked dropzone)', () => {
       stopPropagation: vi.fn(),
       dataTransfer: {
         getData: (mime: string) =>
-          mime === 'application/x-neuro-pdf'
-            ? JSON.stringify({ name: 'missing.pdf' })
-            : '',
+          mime === 'application/x-neuro-pdf' ? JSON.stringify({ name: 'missing.pdf' }) : '',
       },
     } as unknown as React.DragEvent<HTMLDivElement>;
 

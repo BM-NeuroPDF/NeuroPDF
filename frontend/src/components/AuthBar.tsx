@@ -27,6 +27,7 @@ export default function AuthBar() {
                      text-sm font-medium opacity-80 hover:opacity-100 hover:scale-105
                      bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 border border-transparent hover:border-[var(--navbar-border)]"
           title={t('myProfile') || 'Profilim'}
+          aria-label={t('myProfile') || 'Profilim'}
         >
           {/* İkon: Kullanıcı */}
           <svg
@@ -64,10 +65,7 @@ export default function AuthBar() {
 
   // Oturum Yoksa (Giriş Yap)
   return (
-    <button
-      onClick={() => router.push('/login')}
-      className="btn-primary whitespace-nowrap"
-    >
+    <button onClick={() => router.push('/login')} className="btn-primary whitespace-nowrap">
       {t('loginLink')}
     </button>
   );

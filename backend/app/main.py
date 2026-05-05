@@ -1,17 +1,44 @@
 # backend/app/main.py
 from contextlib import asynccontextmanager
+import logging
+import os
+import time
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 from sqlalchemy.exc import OperationalError, PendingRollbackError
 from app.config import settings
+from app.observability.metrics import (
+    METRICS_CONTENT_TYPE,
+    metrics_payload,
+    observe_http_request,
+    set_redis_up,
+)
+from app.observability.sentry import init_sentry
 from app.routers import auth, guest, files, user_avatar_routes
+
+logger = logging.getLogger(__name__)
+init_sentry(settings, "backend")
 
 # Security scheme for Swagger UI
 security_scheme = HTTPBearer(bearerFormat="JWT", scheme_name="Bearer")
+
+
+def _validate_cors_policy() -> None:
+    env = os.getenv("ENVIRONMENT", "development").lower()
+    if env in {"prod", "production"}:
+        if "*" in settings.CORS_ALLOWED_ORIGINS:
+            logger.error("CORS misconfiguration: wildcard origin is not allowed in production.")
+            raise RuntimeError("CORS_ALLOWED_ORIGINS cannot contain '*' in production.")
+        if "*" in settings.CORS_ALLOWED_METHODS:
+            logger.error("CORS misconfiguration: wildcard methods are not allowed in production.")
+            raise RuntimeError("CORS_ALLOWED_METHODS cannot contain '*' in production.")
+        if "*" in settings.CORS_ALLOWED_HEADERS:
+            logger.error("CORS misconfiguration: wildcard headers are not allowed in production.")
+            raise RuntimeError("CORS_ALLOWED_HEADERS cannot contain '*' in production.")
 
 
 @asynccontextmanager
@@ -86,22 +113,14 @@ app.openapi = custom_openapi
 bearer_scheme = security_scheme
 
 # CORS Middleware
-# Development için localhost'u da ekle
-cors_origins = [
-    settings.FRONTEND_ORIGIN,
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://localhost:3002",
-    "https://localhost:3000",
-    "https://localhost:3001",
-    "https://localhost:3002",
-]
+_validate_cors_policy()
+cors_origins = settings.CORS_ALLOWED_ORIGINS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
+    allow_methods=settings.CORS_ALLOWED_METHODS,
+    allow_headers=settings.CORS_ALLOWED_HEADERS,
     expose_headers=["*"],
 )
 
@@ -109,7 +128,9 @@ app.add_middleware(
 # Security Headers Middleware (exceptions propagate to FastAPI handlers)
 @app.middleware("http")
 async def add_security_headers(request, call_next):
+    start = time.perf_counter()
     response = await call_next(request)
+    duration = time.perf_counter() - start
 
     # CORS header'ları her zaman ekle (hata durumunda bile)
     origin = request.headers.get("origin")
@@ -132,6 +153,7 @@ async def add_security_headers(request, call_next):
         "connect-src 'self';"
     )
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    observe_http_request(request, response.status_code, duration)
     return response
 
 
@@ -161,15 +183,37 @@ async def health_ready():
     from app.config import settings
     from app.db import engine, get_supabase
 
+    try:
+        from app.redis_client import redis_client
+
+        if redis_client is None:
+            redis_status = "unavailable"
+            set_redis_up(False)
+        else:
+            redis_client.ping()
+            redis_status = "connected"
+            set_redis_up(True)
+    except Exception as e:
+        redis_status = f"error: {str(e)}"
+        set_redis_up(False)
+
     if not settings.USE_SUPABASE:
         try:
             if engine is None:
-                return {"api": "ok", "database": "error: engine not initialized"}
+                return {
+                    "api": "ok",
+                    "database": "error: engine not initialized",
+                    "redis": redis_status,
+                }
             with engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
-            return {"api": "ok", "database": "local_postgres_connected"}
+            return {
+                "api": "ok",
+                "database": "local_postgres_connected",
+                "redis": redis_status,
+            }
         except Exception as e:
-            return {"api": "ok", "database": f"error: {str(e)}"}
+            return {"api": "ok", "database": f"error: {str(e)}", "redis": redis_status}
 
     try:
         supabase_client = get_supabase()
@@ -178,7 +222,27 @@ async def health_ready():
     except Exception as e:
         db_status = f"error: {str(e)}"
 
-    return {"api": "ok", "database": db_status}
+    return {"api": "ok", "database": db_status, "redis": redis_status}
+
+
+@app.get("/_debug/sentry")
+async def debug_sentry():
+    if os.getenv("DEBUG", "false").lower() != "true":
+        return JSONResponse(status_code=404, content={"detail": "Not found"})
+    raise RuntimeError("Sentry debug endpoint exception")
+
+
+@app.get("/metrics")
+async def metrics(request: Request):
+    client_host = request.client.host if request.client else ""
+    is_local = client_host in {"127.0.0.1", "::1", "localhost"}
+    token = request.headers.get("X-Metrics-Token", "")
+    if settings.METRICS_TOKEN:
+        if token != settings.METRICS_TOKEN:
+            return JSONResponse(status_code=403, content={"detail": "Forbidden"})
+    elif not (settings.METRICS_ALLOW_INSECURE_LOCAL and is_local):
+        return JSONResponse(status_code=403, content={"detail": "Forbidden"})
+    return Response(content=metrics_payload(), media_type=METRICS_CONTENT_TYPE)
 
 
 if __name__ == "__main__":

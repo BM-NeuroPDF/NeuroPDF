@@ -8,7 +8,8 @@ import Providers from './Providers';
 import NavBar from '@/components/NavBar';
 import ResponsivePdfPanel from '@/components/ResponsivePdfPanel';
 import EulaGuard from '@/components/auth/EulaGuard';
-import ProGlobalChat from '@/components/ProGlobalChat'; // Global ProChat FAB + panel (Pro: chat; standart: /pricing)
+import { ProGlobalChatGate } from '@/components/ProGlobalChatGate';
+import WebVitalsReporter from '@/components/WebVitalsReporter';
 
 import { PdfProvider } from '@/context/PdfContext';
 import { LanguageProvider } from '@/context/LanguageContext';
@@ -23,11 +24,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="tr">
       <body className="antialiased transition-colors duration-300 bg-[var(--background)] text-[var(--foreground)]">
@@ -36,12 +33,10 @@ export default function RootLayout({
             <PdfProvider>
               <PopupProvider>
                 <NavBar />
+                <WebVitalsReporter />
 
                 <EulaGuard>
-                  <div
-                    className="flex min-h-screen"
-                    style={{ paddingTop: 'var(--navbar-height)' }}
-                  >
+                  <div className="flex min-h-screen" style={{ paddingTop: 'var(--navbar-height)' }}>
                     <main className="relative z-0 flex min-h-0 flex-1 flex-col min-w-0 px-4 md:px-6">
                       {children}
                     </main>
@@ -50,8 +45,8 @@ export default function RootLayout({
                       <ResponsivePdfPanel />
                     </div>
                   </div>
-                  {/* Global ProChat: FAB tüm sayfalarda; panel ve mesaj geçmişi context ile korunur */}
-                  <ProGlobalChat />
+                  {/* Global ProChat: ağır ağaç defer; girişli kullanıcıda idle / ilk etkileşimde yüklenir */}
+                  <ProGlobalChatGate />
                 </EulaGuard>
               </PopupProvider>
             </PdfProvider>

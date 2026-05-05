@@ -1,15 +1,6 @@
 import React from 'react';
 import type { FileRejection } from 'react-dropzone';
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  beforeAll,
-  afterEach,
-  afterAll,
-} from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterEach, afterAll } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { setupServer } from 'msw/node';
@@ -25,11 +16,7 @@ vi.mock('react-markdown', () => {
   const React = require('react');
   return {
     default: (props: { children?: React.ReactNode }) =>
-      React.createElement(
-        'div',
-        { 'data-testid': 'react-markdown-mock' },
-        props.children
-      ),
+      React.createElement('div', { 'data-testid': 'react-markdown-mock' }, props.children),
   };
 });
 
@@ -114,9 +101,7 @@ vi.mock('react-dropzone', () => ({
             } else {
               fileRejections.push({
                 file,
-                errors: [
-                  { code: 'file-invalid-type', message: 'Invalid file type' },
-                ],
+                errors: [{ code: 'file-invalid-type', message: 'Invalid file type' }],
               });
             }
 
@@ -153,7 +138,7 @@ function renderWithProviders(ui: React.ReactElement) {
           <PopupProvider>{ui}</PopupProvider>
         </PdfProvider>
       </LanguageProvider>
-    </SessionProvider>
+    </SessionProvider>,
   );
 }
 
@@ -238,12 +223,10 @@ describe('UploadPage Integration', () => {
       await waitFor(
         () => {
           expect(
-            screen.getByText(
-              /Geçersiz dosya türü|Invalid file type|Sadece PDF/i
-            )
+            screen.getByText(/Geçersiz dosya türü|Invalid file type|Sadece PDF/i),
           ).toBeInTheDocument();
         },
-        { timeout: 3000 }
+        { timeout: 3000 },
       );
     });
 
@@ -268,11 +251,11 @@ describe('UploadPage Integration', () => {
         await waitFor(
           () => {
             const errorText = screen.getByText(
-              /Dosya boyutu sınırı aşıldı\.|File size limit exceeded/i
+              /Dosya boyutu sınırı aşıldı\.|File size limit exceeded/i,
             );
             expect(errorText).toBeInTheDocument();
           },
-          { timeout: 3000 }
+          { timeout: 3000 },
         );
       } finally {
         vi.mocked(getMaxUploadBytes).mockReturnValue(50 * 1024 * 1024);
@@ -340,12 +323,10 @@ describe('UploadPage Integration', () => {
       await waitFor(
         () => {
           // Success message appears in popup - use exact translation text
-          const successText = screen.queryByText(
-            /Yüklendi|Uploaded|PDF added/i
-          );
+          const successText = screen.queryByText(/Yüklendi|Uploaded|PDF added/i);
           expect(successText).toBeInTheDocument();
         },
-        { timeout: 3000 }
+        { timeout: 3000 },
       );
     });
 
@@ -381,7 +362,7 @@ describe('UploadPage Integration', () => {
           });
           expect(button).toBeDisabled();
         },
-        { timeout: 1000 }
+        { timeout: 1000 },
       ).catch(() => {
         // If upload completes too fast, that's also fine
       });
@@ -421,11 +402,9 @@ describe('UploadPage Integration', () => {
       // Wait for limit modal to appear
       await waitFor(
         () => {
-          expect(
-            screen.getByText(/Günlük Limit Doldu|Daily Limit|limit/i)
-          ).toBeInTheDocument();
+          expect(screen.getByText(/Günlük Limit Doldu|Daily Limit|limit/i)).toBeInTheDocument();
         },
-        { timeout: 3000 }
+        { timeout: 3000 },
       );
     });
 
@@ -433,9 +412,7 @@ describe('UploadPage Integration', () => {
       renderWithProviders(<UploadPage />);
 
       // Usage info may or may not be visible; limit modal must not be shown
-      expect(
-        screen.queryByText(/Günlük Limit Doldu|Daily Limit/i)
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText(/Günlük Limit Doldu|Daily Limit/i)).not.toBeInTheDocument();
     });
   });
 
@@ -444,18 +421,14 @@ describe('UploadPage Integration', () => {
       renderWithProviders(<UploadPage />);
 
       // Page title should be visible
-      expect(
-        screen.getByText(/uploadPageTitle|Neuro PDF|Yükleme|Upload/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/uploadPageTitle|Neuro PDF|Yükleme|Upload/i)).toBeInTheDocument();
     });
 
     it('should render dropzone area', () => {
       renderWithProviders(<UploadPage />);
 
       // Dropzone should be visible
-      const dropzone = screen.getByText(
-        /dropPassive|dropActive|Sürükle|Drag.*drop/i
-      );
+      const dropzone = screen.getByText(/dropPassive|dropActive|Sürükle|Drag.*drop/i);
       expect(dropzone).toBeInTheDocument();
     });
 

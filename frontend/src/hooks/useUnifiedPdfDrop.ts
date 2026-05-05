@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useDropzone, DropzoneOptions, FileRejection } from 'react-dropzone';
-import { usePdf } from '@/context/PdfContext';
+import { usePdfData } from '@/context/PdfContext';
 
 /**
  * Unified PDF drop hook
@@ -23,14 +23,14 @@ export function useUnifiedPdfDrop({
   options: DropzoneOptions;
   onFiles: (files: File[], rejections: FileRejection[]) => void;
 }) {
-  const { pdfFile, pdfList } = usePdf();
+  const { pdfFile, pdfList } = usePdfData();
 
   // Wrap dropzone onDrop to delegate to consumer-provided handler
   const onDrop = useCallback(
     (acceptedFiles: File[], fileRejections: FileRejection[]) => {
       onFiles(acceptedFiles, fileRejections);
     },
-    [onFiles]
+    [onFiles],
   );
 
   const {
@@ -50,9 +50,7 @@ export function useUnifiedPdfDrop({
       return {
         ...base,
         onDragOverCapture: (e: React.DragEvent) => {
-          base.onDragOverCapture?.(
-            e as unknown as React.DragEvent<HTMLElement>
-          );
+          base.onDragOverCapture?.(e as unknown as React.DragEvent<HTMLElement>);
           // Allow drop for both native and panel-origin drags
           e.preventDefault();
           try {
@@ -94,7 +92,7 @@ export function useUnifiedPdfDrop({
         },
       } as typeof base;
     },
-    [_getRootProps, onFiles, pdfFile, pdfList]
+    [_getRootProps, onFiles, pdfFile, pdfList],
   );
 
   return { getRootProps, getInputProps, isDragActive };

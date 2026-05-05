@@ -34,19 +34,16 @@ export function useChatLocalization<K extends string>({
       'chatErrorSessionRefresh',
       'chatErrorConnection',
     ],
-    []
+    [],
   );
 
-  const interpolate = useCallback(
-    (template: string, params?: Record<string, string>) => {
-      if (!params) return template;
-      return Object.entries(params).reduce(
-        (acc, [key, value]) => acc.replaceAll(`{${key}}`, value),
-        template
-      );
-    },
-    []
-  );
+  const interpolate = useCallback((template: string, params?: Record<string, string>) => {
+    if (!params) return template;
+    return Object.entries(params).reduce(
+      (acc, [key, value]) => acc.replaceAll(`{${key}}`, value),
+      template,
+    );
+  }, []);
 
   const makeAssistantMessage = useCallback(
     (key: LocalizableChatKey, params?: Record<string, string>): Message => ({
@@ -60,7 +57,7 @@ export function useChatLocalization<K extends string>({
         [language]: interpolate(t(key as K), params),
       },
     }),
-    [interpolate, language, t]
+    [interpolate, language, t],
   );
 
   const makeRuntimeMessage = useCallback(
@@ -73,7 +70,7 @@ export function useChatLocalization<K extends string>({
         [language]: content,
       },
     }),
-    [language]
+    [language],
   );
 
   const localizeMessageIfPossible = useCallback(
@@ -98,43 +95,30 @@ export function useChatLocalization<K extends string>({
 
       for (const key of localizableAssistantKeys) {
         if (key === 'chatWelcomePdf') continue;
-        if (
-          message.content === translations.tr[key] ||
-          message.content === translations.en[key]
-        ) {
+        if (message.content === translations.tr[key] || message.content === translations.en[key]) {
           return makeAssistantMessage(key);
         }
       }
 
       const pdfWelcomeMatch =
-        message.content.match(/\*\*"(.+?)"\*\*/) ??
-        message.content.match(/"(.+?)"/);
+        message.content.match(/\*\*"(.+?)"\*\*/) ?? message.content.match(/"(.+?)"/);
       if (pdfWelcomeMatch?.[1]) {
         const name = pdfWelcomeMatch[1];
-        const trCandidate = translations.tr.chatWelcomePdf.replace(
-          '{name}',
-          name
-        );
-        const enCandidate = translations.en.chatWelcomePdf.replace(
-          '{name}',
-          name
-        );
-        if (
-          message.content === trCandidate ||
-          message.content === enCandidate
-        ) {
+        const trCandidate = translations.tr.chatWelcomePdf.replace('{name}', name);
+        const enCandidate = translations.en.chatWelcomePdf.replace('{name}', name);
+        if (message.content === trCandidate || message.content === enCandidate) {
           return makeAssistantMessage('chatWelcomePdf', { name });
         }
       }
 
       return message;
     },
-    [interpolate, language, localizableAssistantKeys, makeAssistantMessage, t]
+    [interpolate, language, localizableAssistantKeys, makeAssistantMessage, t],
   );
 
   const displayChatMessages = useMemo(
     () => activeChatMessages.map(localizeMessageIfPossible),
-    [activeChatMessages, localizeMessageIfPossible]
+    [activeChatMessages, localizeMessageIfPossible],
   );
 
   return {

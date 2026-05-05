@@ -18,15 +18,12 @@ export async function POST(req: Request) {
     const guestId = incomingHeaders.get('x-guest-id');
     if (guestId) outgoingHeaders.set('x-guest-id', guestId);
 
-    const backendResponse = await fetch(
-      `${backendBaseUrl}/files/chat/general/message`,
-      {
-        method: 'POST',
-        headers: outgoingHeaders,
-        body: rawBody,
-        cache: 'no-store',
-      }
-    );
+    const backendResponse = await fetch(`${backendBaseUrl}/files/chat/general/message`, {
+      method: 'POST',
+      headers: outgoingHeaders,
+      body: rawBody,
+      cache: 'no-store',
+    });
 
     return new Response(backendResponse.body, {
       status: backendResponse.status,

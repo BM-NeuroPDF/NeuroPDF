@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { translations } from '@/utils/translations';
 
 export type ProfileHeroUser = {
@@ -50,6 +51,7 @@ export function ProfileHeroCard({
           onClick={onEditAvatar}
           className="absolute top-1 right-1 p-2 bg-[var(--button-bg)] text-white rounded-full shadow-lg hover:brightness-110 transition-all z-20 hover:scale-110"
           title={t('changeProfileImage') || 'Profil Resmini Değiştir'}
+          aria-label={t('profileEditAvatarAria')}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -68,11 +70,13 @@ export function ProfileHeroCard({
         </button>
 
         {avatarSrc ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
+          <Image
             src={avatarSrc}
-            alt="Profil Resmi"
-            className="w-full h-full object-cover"
+            alt={t('profileImageAlt')}
+            fill
+            sizes="8rem"
+            className="object-cover"
+            unoptimized={avatarSrc.startsWith('blob:') || avatarSrc.startsWith('data:')}
           />
         ) : (
           <span className="text-4xl font-bold text-[var(--button-bg)]">
@@ -80,10 +84,7 @@ export function ProfileHeroCard({
           </span>
         )}
       </div>
-      <h2
-        className="text-xl font-bold truncate w-full px-2"
-        title={user.name || ''}
-      >
+      <h2 className="text-xl font-bold truncate w-full px-2" title={user.name || ''}>
         {user.name}
       </h2>
       <p
@@ -94,9 +95,7 @@ export function ProfileHeroCard({
       </p>
       <p className="text-sm font-semibold opacity-80 mb-3 tabular-nums">
         {stats.tools_count}{' '}
-        <span className="text-xs font-normal opacity-70">
-          {t('documentCountLabel')}
-        </span>
+        <span className="text-xs font-normal opacity-70">{t('documentCountLabel')}</span>
       </p>
       <button
         type="button"

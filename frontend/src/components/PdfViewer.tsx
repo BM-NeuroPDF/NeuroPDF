@@ -7,8 +7,7 @@ import type { ReactPdfJsWorkerModule } from '@/types/pdfjsWorker';
 
 // Configure worker from CDN to exactly match installed pdfjs version (.mjs)
 if (typeof window !== 'undefined') {
-  (pdfjs as ReactPdfJsWorkerModule).GlobalWorkerOptions.workerSrc =
-    '/pdf.worker.mjs';
+  (pdfjs as ReactPdfJsWorkerModule).GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
 }
 
 type Props = {
@@ -37,7 +36,7 @@ export default function PdfViewer({ file, height = 700 }: Props) {
       cMapUrl: '/cmaps/', // next.config.ts ile public/cmaps içine kopyalamıştık
       cMapPacked: true,
     }),
-    []
+    [],
   );
 
   useEffect(() => {
@@ -105,10 +104,7 @@ export default function PdfViewer({ file, height = 700 }: Props) {
               }}
               disabled={!numPages}
             />
-            <span
-              className="text-sm opacity-70"
-              style={{ color: 'var(--foreground)' }}
-            >
+            <span className="text-sm opacity-70" style={{ color: 'var(--foreground)' }}>
               / {numPages || '--'}
             </span>
           </div>
@@ -128,9 +124,7 @@ export default function PdfViewer({ file, height = 700 }: Props) {
           <button
             className={buttonClass}
             style={buttonStyle}
-            onClick={() =>
-              setScale((s) => Math.max(0.5, Number((s - 0.1).toFixed(1))))
-            }
+            onClick={() => setScale((s) => Math.max(0.5, Number((s - 0.1).toFixed(1))))}
           >
             −
           </button>
@@ -143,9 +137,7 @@ export default function PdfViewer({ file, height = 700 }: Props) {
           <button
             className={buttonClass}
             style={buttonStyle}
-            onClick={() =>
-              setScale((s) => Math.min(3, Number((s + 0.1).toFixed(1))))
-            }
+            onClick={() => setScale((s) => Math.min(3, Number((s + 0.1).toFixed(1))))}
           >
             +
           </button>

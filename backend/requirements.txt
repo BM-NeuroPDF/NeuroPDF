@@ -20,6 +20,7 @@ email-validator
 reportlab
 bcrypt
 google-generativeai
+prometheus_client
 
 # Test dependencies
 pytest>=7.4.0

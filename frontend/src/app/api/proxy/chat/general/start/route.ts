@@ -18,15 +18,12 @@ export async function POST(req: Request) {
     const guestId = incomingHeaders.get('x-guest-id');
     if (guestId) outgoingHeaders.set('x-guest-id', guestId);
 
-    const backendResponse = await fetch(
-      `${backendBaseUrl}/files/chat/general/start`,
-      {
-        method: 'POST',
-        headers: outgoingHeaders,
-        body: rawBody,
-        cache: 'no-store',
-      }
-    );
+    const backendResponse = await fetch(`${backendBaseUrl}/files/chat/general/start`, {
+      method: 'POST',
+      headers: outgoingHeaders,
+      body: rawBody,
+      cache: 'no-store',
+    });
 
     return new Response(backendResponse.body, {
       status: backendResponse.status,
@@ -35,9 +32,7 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     const message =
-      error instanceof Error
-        ? error.message
-        : 'Proxy request failed for /files/chat/general/start';
+      error instanceof Error ? error.message : 'Proxy request failed for /files/chat/general/start';
     return new Response(JSON.stringify({ detail: message }), {
       status: 502,
       headers: { 'content-type': 'application/json' },

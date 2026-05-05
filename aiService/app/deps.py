@@ -1,6 +1,6 @@
 # aiService/app/deps.py
 import os
-from fastapi import Header, HTTPException, Security
+from fastapi import HTTPException, Security
 from fastapi.security import APIKeyHeader
 from .config import settings
 
@@ -27,7 +27,7 @@ def verify_api_key(x_api_key: str = Security(API_KEY_HEADER)):
         try:
             import logging
             logger = logging.getLogger("security")
-            logger.warning(f"API key missing for AI Service endpoint")
+            logger.warning("API key missing for AI Service endpoint")
         except Exception:
             pass
         raise HTTPException(
@@ -40,7 +40,7 @@ def verify_api_key(x_api_key: str = Security(API_KEY_HEADER)):
         try:
             import logging
             logger = logging.getLogger("security")
-            logger.warning(f"Invalid API key attempt for AI Service")
+            logger.warning("Invalid API key attempt for AI Service")
         except Exception:
             pass
         raise HTTPException(

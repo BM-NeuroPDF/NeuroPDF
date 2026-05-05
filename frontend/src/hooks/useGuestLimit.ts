@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react'; // ✅ EKLENDİ
 import { guestService } from '@/services/guestService';
 
-interface UsageInfo {
+export interface UsageInfo {
   can_use: boolean;
   usage_count: number;
   remaining_usage: number;

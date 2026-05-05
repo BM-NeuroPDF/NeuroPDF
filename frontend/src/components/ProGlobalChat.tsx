@@ -1,11 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { sendRequest } from '@/utils/api';
+import {
+  postGeneralChatMessage,
+  postGeneralChatStart,
+  streamPdfChatMessage,
+} from '@/services/chatService';
 import { useLanguage } from '@/context/LanguageContext';
-import { usePdf } from '@/context/PdfContext';
+import { usePdfActions, usePdfData, usePdfUi } from '@/context/PdfContext';
 import ProChatPanel from './ProChatPanel';
 import ProGlobalChatFab from './ProGlobalChatFab';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
@@ -20,29 +24,24 @@ export default function ProGlobalChat() {
   const router = useRouter();
   const { t, language } = useLanguage();
 
-  // PDF & chat state
+  // PDF & chat state (split contexts: UI toggles do not force data-only subtrees to re-render)
   const {
     pdfFile,
     pdfList,
-    savePdf,
-    clearPdf,
     sessionId: pdfSessionId,
     chatMessages: pdfChatMessages,
     setChatMessages: setPdfChatMessages,
     setIsChatActive,
     setSessionId: setPdfSessionId,
-    proChatOpen,
-    setProChatOpen,
-    proChatPanelOpen,
-    setProChatPanelOpen,
     generalChatMessages,
     setGeneralChatMessages,
     generalSessionId,
     setGeneralSessionId,
     setActiveSessionDbId,
     existingDocumentId,
-    loadChatSessions,
-  } = usePdf();
+  } = usePdfData();
+  const { proChatOpen, setProChatOpen, proChatPanelOpen, setProChatPanelOpen } = usePdfUi();
+  const { savePdf, clearPdf, loadChatSessions } = usePdfActions();
   const { applyClientActions } = usePdfClientActions({
     pdfFile,
     pdfList,
@@ -56,7 +55,8 @@ export default function ProGlobalChat() {
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(false);
   const [showProRequiredModal, setShowProRequiredModal] = useState(false);
-  const [typingAudio, setTypingAudio] = useState<HTMLAudioElement | null>(null);
+  const typingAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [streamController, setStreamController] = useState<AbortController | null>(null);
 
   // Custom hooks
   const { isRecording, stopRecording, toggleRecording } = useVoiceInput({
@@ -66,89 +66,76 @@ export default function ProGlobalChat() {
   });
 
   useEffect(() => {
-    let audio: HTMLAudioElement | null = null;
     if (loading) {
-      audio = new Audio('/sounds/typing.mp3');
+      const audio = new Audio('/sounds/typing.mp3');
       audio.loop = true;
       audio.volume = 0.3;
-      audio.play().catch((e) => console.error('Typing sound error:', e));
-      setTypingAudio(audio);
+      typingAudioRef.current = audio;
+      void audio.play().catch((e) => console.error('Typing sound error:', e));
     } else {
-      if (typingAudio) {
-        typingAudio.pause();
-        setTypingAudio(null);
-      }
+      typingAudioRef.current?.pause();
+      typingAudioRef.current = null;
     }
     return () => {
-      if (audio) {
-        audio.pause();
-      }
+      typingAudioRef.current?.pause();
+      typingAudioRef.current = null;
     };
-  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading]);
 
-  const activeChatMessages = pdfSessionId
-    ? pdfChatMessages
-    : generalChatMessages;
+  const activeChatMessages = pdfSessionId ? pdfChatMessages : generalChatMessages;
   const isPdfChat = !!pdfSessionId;
   const activeSessionId = pdfSessionId || generalSessionId;
-  const { userRole, isRoleLoading, avatarSrc, initChatSession } =
-    useChatSessionBootstrap({
-      session,
-      status,
-      language,
-      t,
-      pdfFile,
-      existingDocumentId,
-      pdfSessionId,
-      generalSessionId,
-      proChatOpen,
-      proChatPanelOpen,
-      setProChatOpen,
-      setProChatPanelOpen,
-      setPdfSessionId,
-      setGeneralSessionId,
-      setIsChatActive,
-      setActiveSessionDbId,
-      setPdfChatMessages,
-      setGeneralChatMessages,
-      makeAssistantMessage: (key: string, params?: Record<string, string>) =>
-        makeAssistantMessage(
-          key as
-            | 'chatWelcomePdf'
-            | 'chatWelcomeGeneral'
-            | 'chatInitError'
-            | 'chatErrorQuotaExceeded'
-            | 'chatErrorSessionExpired'
-            | 'chatErrorSessionRefresh'
-            | 'chatErrorConnection',
-          params
-        ),
-      loadChatSessions,
-      setInitializing,
-    });
-  const isProUser =
-    userRole?.toLowerCase() === 'pro' || userRole?.toLowerCase() === 'pro user';
-  const canAccessChat = status === 'authenticated' && isProUser;
-  const {
-    supportedLanguages,
-    makeAssistantMessage,
-    makeRuntimeMessage,
-    displayChatMessages,
-  } = useChatLocalization({
+  const { userRole, isRoleLoading, avatarSrc, initChatSession } = useChatSessionBootstrap({
+    session,
+    status,
     language,
     t,
-    activeChatMessages,
+    pdfFile,
+    existingDocumentId,
+    pdfSessionId,
+    generalSessionId,
+    proChatOpen,
+    proChatPanelOpen,
+    setProChatOpen,
+    setProChatPanelOpen,
+    setPdfSessionId,
+    setGeneralSessionId,
+    setIsChatActive,
+    setActiveSessionDbId,
+    setPdfChatMessages,
+    setGeneralChatMessages,
+    makeAssistantMessage: (key: string, params?: Record<string, string>) =>
+      makeAssistantMessage(
+        key as
+          | 'chatWelcomePdf'
+          | 'chatWelcomeGeneral'
+          | 'chatInitError'
+          | 'chatErrorQuotaExceeded'
+          | 'chatErrorSessionExpired'
+          | 'chatErrorSessionRefresh'
+          | 'chatErrorConnection',
+        params,
+      ),
+    loadChatSessions,
+    setInitializing,
   });
-  const { translateAndCacheMessage, enqueueAssistantTranslation } =
-    useMessageTranslationQueue({
+  const isProUser = userRole?.toLowerCase() === 'pro' || userRole?.toLowerCase() === 'pro user';
+  const canAccessChat = status === 'authenticated' && isProUser;
+  const { supportedLanguages, makeAssistantMessage, makeRuntimeMessage, displayChatMessages } =
+    useChatLocalization({
       language,
-      loading,
-      supportedLanguages,
+      t,
       activeChatMessages,
-      isPdfChat,
-      setPdfChatMessages,
-      setGeneralChatMessages,
     });
+  const { translateAndCacheMessage, enqueueAssistantTranslation } = useMessageTranslationQueue({
+    language,
+    loading,
+    supportedLanguages,
+    activeChatMessages,
+    isPdfChat,
+    setPdfChatMessages,
+    setGeneralChatMessages,
+  });
 
   // Handlers
   const playNotificationTwice = useCallback(() => {
@@ -220,33 +207,68 @@ export default function ProGlobalChat() {
     setLoading(true);
 
     try {
-      const endpoint = isPdfChat
-        ? '/api/proxy/chat/message'
-        : '/files/chat/general/message';
-      const res = await sendRequest(endpoint, 'POST', {
-        session_id: activeSessionId,
-        message: userMsg,
-        message_payload: {
-          id: userMessage.id,
-          sourceLanguage: userMessage.sourceLanguage,
-          translations: userMessage.translations,
-        },
-        language: language,
-      });
-      const assistantMessage = makeRuntimeMessage(
-        'assistant',
-        String(res.answer ?? '')
-      );
       if (isPdfChat) {
+        const controller = new AbortController();
+        setStreamController(controller);
+        const assistantMessage = makeRuntimeMessage('assistant', '');
         setPdfChatMessages((prev) => [...prev, assistantMessage]);
-        await applyClientActions(res.client_actions);
+        let finalAnswer = '';
+        let doneAnswer = '';
+        let doneActions: unknown[] = [];
+        await streamPdfChatMessage(
+          {
+            session_id: activeSessionId,
+            message: userMsg,
+            message_payload: {
+              id: userMessage.id,
+              sourceLanguage: userMessage.sourceLanguage,
+              translations: userMessage.translations,
+            },
+            language: language,
+          },
+          (evt) => {
+            if (evt.type === 'token') {
+              finalAnswer += String(evt.token ?? '');
+              setPdfChatMessages((prev) => {
+                const next = [...prev];
+                const idx = next.findIndex((m) => m.id === assistantMessage.id);
+                if (idx >= 0) next[idx] = { ...next[idx], content: finalAnswer };
+                return next;
+              });
+            } else if (evt.type === 'done') {
+              doneAnswer = String(evt.answer ?? '');
+              doneActions = Array.isArray(evt.client_actions) ? evt.client_actions : [];
+            } else if (evt.type === 'error') {
+              throw new Error(String(evt.detail ?? 'stream error'));
+            }
+          },
+          controller.signal,
+        );
+        setStreamController(null);
+        await applyClientActions(doneActions);
         void loadChatSessions();
+        enqueueAssistantTranslation(
+          { ...assistantMessage, content: finalAnswer || doneAnswer },
+          true,
+        );
+        playNotificationTwice();
       } else {
+        const res = await postGeneralChatMessage({
+          session_id: activeSessionId,
+          message: userMsg,
+          message_payload: {
+            id: userMessage.id,
+            sourceLanguage: userMessage.sourceLanguage,
+            translations: userMessage.translations,
+          },
+          language: language,
+        });
+        const assistantMessage = makeRuntimeMessage('assistant', String(res.answer ?? ''));
         setGeneralChatMessages((prev) => [...prev, assistantMessage]);
         await applyClientActions(res.client_actions);
+        enqueueAssistantTranslation(assistantMessage, false);
+        playNotificationTwice();
       }
-      enqueueAssistantTranslation(assistantMessage, isPdfChat);
-      playNotificationTwice();
     } catch (e: unknown) {
       console.error('Chat mesaj hatası:', e);
       const errorMessage =
@@ -262,10 +284,7 @@ export default function ProGlobalChat() {
         errorMessage.includes('Gemini API')
       ) {
         if (isPdfChat) {
-          setPdfChatMessages((prev) => [
-            ...prev,
-            makeAssistantMessage('chatErrorQuotaExceeded'),
-          ]);
+          setPdfChatMessages((prev) => [...prev, makeAssistantMessage('chatErrorQuotaExceeded')]);
         } else {
           setGeneralChatMessages((prev) => [
             ...prev,
@@ -282,37 +301,27 @@ export default function ProGlobalChat() {
         errorMessage.includes('session')
       ) {
         if (isPdfChat) {
-          setPdfChatMessages((prev) => [
-            ...prev,
-            makeAssistantMessage('chatErrorSessionExpired'),
-          ]);
+          setPdfChatMessages((prev) => [...prev, makeAssistantMessage('chatErrorSessionExpired')]);
         } else {
           try {
-            const res = await sendRequest('/files/chat/general/start', 'POST', {
+            const res = await postGeneralChatStart({
               llm_provider: 'cloud',
               mode: 'flash',
               language: language,
             });
             if (res.session_id) {
               setGeneralSessionId(res.session_id);
-              const retryRes = await sendRequest(
-                '/files/chat/general/message',
-                'POST',
-                {
-                  session_id: res.session_id,
-                  message: userMsg,
-                  message_payload: {
-                    id: userMessage.id,
-                    sourceLanguage: userMessage.sourceLanguage,
-                    translations: userMessage.translations,
-                  },
-                  language: language,
-                }
-              );
-              const retryAssistant = makeRuntimeMessage(
-                'assistant',
-                String(retryRes.answer ?? '')
-              );
+              const retryRes = await postGeneralChatMessage({
+                session_id: res.session_id,
+                message: userMsg,
+                message_payload: {
+                  id: userMessage.id,
+                  sourceLanguage: userMessage.sourceLanguage,
+                  translations: userMessage.translations,
+                },
+                language: language,
+              });
+              const retryAssistant = makeRuntimeMessage('assistant', String(retryRes.answer ?? ''));
               setGeneralChatMessages((prev) => [...prev, retryAssistant]);
               await applyClientActions(retryRes.client_actions);
               enqueueAssistantTranslation(retryAssistant, false);
@@ -330,21 +339,21 @@ export default function ProGlobalChat() {
         }
       } else {
         if (isPdfChat) {
-          setPdfChatMessages((prev) => [
-            ...prev,
-            makeAssistantMessage('chatErrorConnection'),
-          ]);
+          setPdfChatMessages((prev) => [...prev, makeAssistantMessage('chatErrorConnection')]);
         } else {
-          setGeneralChatMessages((prev) => [
-            ...prev,
-            makeAssistantMessage('chatErrorConnection'),
-          ]);
+          setGeneralChatMessages((prev) => [...prev, makeAssistantMessage('chatErrorConnection')]);
         }
       }
     } finally {
       setLoading(false);
     }
   };
+
+  const stopGeneration = useCallback(() => {
+    streamController?.abort();
+    setStreamController(null);
+    setLoading(false);
+  }, [streamController]);
 
   // Render
   return (
@@ -381,9 +390,7 @@ export default function ProGlobalChat() {
           input={input}
           setInput={setInput}
           promptSuggestions={promptSuggestions}
-          promptSuggestionsDisabled={
-            !activeSessionId || loading || initializing
-          }
+          promptSuggestionsDisabled={!activeSessionId || loading || initializing}
           headerTitle="Neuro AI"
           headerSubtitle={
             isPdfChat
@@ -400,6 +407,7 @@ export default function ProGlobalChat() {
           typingLabel={t('aiTyping')}
           isRecording={isRecording}
           onVoiceToggle={toggleRecording}
+          onStopGeneration={stopGeneration}
         />
       )}
     </>

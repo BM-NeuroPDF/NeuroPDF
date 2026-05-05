@@ -78,8 +78,8 @@ export default function ProGlobalChatFab({
                   <Image
                     src={avatarSrc}
                     alt="avatar"
-                    width={32}
-                    height={32}
+                    width={40}
+                    height={40}
                     className="rounded-full object-cover drop-shadow-sm w-10 h-10"
                     unoptimized
                   />
@@ -118,10 +118,7 @@ export default function ProGlobalChatFab({
                 borderColor: 'var(--container-border)',
               }}
             >
-              <h3
-                className="font-bold text-lg mb-2"
-                style={{ color: 'var(--foreground)' }}
-              >
+              <h3 className="font-bold text-lg mb-2" style={{ color: 'var(--foreground)' }}>
                 {proRequiredTitle}
               </h3>
               <p className="text-sm opacity-80 mb-6">{proRequiredDesc}</p>

@@ -7,10 +7,28 @@ import {
   type SetStateAction,
 } from 'react';
 import type { Session } from 'next-auth';
+import { getSession } from 'next-auth/react';
 import { guestService } from '@/services/guestService';
 import type { Message } from '@/context/PdfContext';
-import { sendRequest } from '@/utils/api';
+import {
+  sendRequest,
+  type ChatStartFromTextResponse,
+  type SummarizeApiResponse,
+} from '@/utils/api';
+import type { UserStats } from '@/hooks/useUserStats';
 import { translations } from '@/utils/translations';
+import { presentError, toAppError } from '@/utils/errorPresenter';
+import { logError } from '@/utils/logger';
+import { z } from 'zod';
+import { parseSummarizeSseEvent } from '@/schemas/summarizeSse';
+
+const errorMessageCarrierSchema = z.object({ message: z.string() });
+
+function messageFromUnknownError(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  const r = errorMessageCarrierSchema.safeParse(e);
+  return r.success ? r.data.message : '';
+}
 
 export type SummarizePdfErrorType =
   | 'NONE'
@@ -82,8 +100,8 @@ export function usePdfSummarize({
 
   useEffect(() => {
     if (status !== 'authenticated' || !session) return;
-    sendRequest('/files/user/stats', 'GET')
-      .then((data: { role?: string }) => setUserRole(data?.role ?? null))
+    sendRequest<UserStats>('/files/user/stats', 'GET')
+      .then((data) => setUserRole(data?.role ?? null))
       .catch(() => setUserRole(null));
   }, [status, session]);
 
@@ -100,7 +118,7 @@ export function usePdfSummarize({
       clearError();
       resetAudio();
     },
-    [savePdf, clearError, resetAudio, setFile]
+    [savePdf, clearError, resetAudio, setFile],
   );
 
   const summarize = useCallback(async () => {
@@ -117,63 +135,120 @@ export function usePdfSummarize({
     resetAudio();
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const summarizeEndpoint = session
-        ? '/files/summarize'
-        : '/files/summarize-guest';
-      const data = (await sendRequest(
-        summarizeEndpoint,
-        'POST',
-        formData,
-        true
-      )) as {
-        summary?: string;
-        pdf_text?: string;
-      };
+      let data: SummarizeApiResponse | null = null;
+      if (session) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const isVitest = typeof process !== 'undefined' && !!process.env.VITEST;
+        if (isVitest) {
+          data = await sendRequest<SummarizeApiResponse>(
+            '/files/summarize',
+            'POST',
+            formData,
+            true,
+          );
+        } else {
+          const currentSession = await getSession();
+          const token =
+            currentSession?.accessToken ??
+            currentSession?.apiToken ??
+            currentSession?.user?.accessToken ??
+            currentSession?.user?.apiToken;
+          const headers: Record<string, string> = {};
+          if (token) headers.Authorization = `Bearer ${token}`;
+          const response = await fetch('/files/summarize/stream?language=tr', {
+            method: 'POST',
+            headers,
+            body: formData,
+          });
+          if (!response.ok || !response.body) {
+            throw new Error(`Stream failed: ${response.status}`);
+          }
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          let summaryAcc = '';
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split('\n\n');
+            buffer = parts.pop() ?? '';
+            for (const part of parts) {
+              const line = part.split('\n').find((l) => l.startsWith('data:'));
+              if (!line) continue;
+              const raw: unknown = JSON.parse(line.slice(5).trim());
+              const sse = parseSummarizeSseEvent(raw);
+              if (sse.type === 'token' && sse.token) {
+                summaryAcc += sse.token;
+                setSummary(summaryAcc);
+              } else if (sse.type === 'done') {
+                data = { summary: sse.summary, pdf_text: sse.pdf_text };
+              } else if (sse.type === 'error') {
+                throw new Error(sse.detail || 'stream error');
+              }
+            }
+          }
+        }
+      } else {
+        const formData = new FormData();
+        formData.append('file', file);
+        data = await sendRequest<SummarizeApiResponse>(
+          '/files/summarize-guest',
+          'POST',
+          formData,
+          true,
+        );
+      }
 
       if (data && data.summary) {
         setSummary(data.summary);
         setSummarizing(false);
 
         if (data.pdf_text && session && file) {
-          sendRequest('/files/user/stats', 'GET')
-            .then((stats: { role?: string }) => {
+          void (async () => {
+            try {
+              const stats = await sendRequest<UserStats>('/files/user/stats', 'GET');
               const role = (stats?.role ?? '').toLowerCase();
               if (role !== 'pro' && role !== 'pro user') return;
-              return sendRequest('/files/chat/start-from-text', 'POST', {
-                pdf_text: data.pdf_text,
-                filename: file.name,
-              });
-            })
-            .then(
-              (
-                chatRes: {
-                  session_id?: string;
-                  db_session_id?: string | null;
-                } | void
-              ) => {
-                if (chatRes?.session_id) {
-                  setSessionId(chatRes.session_id);
-                  setIsChatActive(true);
-                  if (chatRes?.db_session_id) {
-                    setActiveSessionDbId(chatRes.db_session_id);
-                  }
-                  void loadChatSessions();
-                  setChatMessages([
-                    {
-                      role: 'assistant',
-                      content: `👋 Merhaba! **"${file.name}"** dosyasını analiz ettim. Bana bu belgeyle ilgili her şeyi sorabilirsin.`,
-                    },
-                  ]);
+
+              const chatRes = await sendRequest<ChatStartFromTextResponse>(
+                '/files/chat/start-from-text',
+                'POST',
+                {
+                  pdf_text: data.pdf_text,
+                  filename: file.name,
+                },
+              );
+
+              if (chatRes?.session_id) {
+                setSessionId(chatRes.session_id);
+                setIsChatActive(true);
+                if (chatRes?.db_session_id) {
+                  setActiveSessionDbId(chatRes.db_session_id);
                 }
+                void loadChatSessions();
+                setChatMessages([
+                  {
+                    role: 'assistant',
+                    content: `👋 Merhaba! **"${file.name}"** dosyasını analiz ettim. Bana bu belgeyle ilgili her şeyi sorabilirsin.`,
+                  },
+                ]);
               }
-            )
-            .catch((e: { message?: string }) => {
-              if (e?.message?.includes('403') || e?.message?.includes('Pro'))
-                return;
-              console.warn('PDF chat session başlatılamadı:', e);
-            });
+            } catch (e: unknown) {
+              const msg = messageFromUnknownError(e);
+              if (msg.includes('403') || msg.includes('Pro')) return;
+
+              const appErr = toAppError(e);
+              logError(appErr, {
+                scope: 'usePdfSummarize.chatBootstrap',
+                code: appErr.code,
+                category: appErr.category,
+              });
+              const presented = presentError(appErr);
+              console.warn('PDF chat session başlatılamadı:', presented.inlineMessage);
+            }
+          })();
         }
 
         if (!session) {

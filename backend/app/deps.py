@@ -46,7 +46,7 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has expired",
-            headers={"WWW-Authenticate": "Bearer"},
+            headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
         )
     except jwt.PyJWTError:
         # Token bozuksa veya imza geçersizse
@@ -63,7 +63,7 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
+            headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
         )
 
 

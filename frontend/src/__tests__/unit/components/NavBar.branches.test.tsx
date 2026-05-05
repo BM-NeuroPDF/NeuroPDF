@@ -43,9 +43,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('@/context/LanguageContext', () => ({
-  LanguageProvider: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
+  LanguageProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useLanguage: () => ({
     language: 'tr' as const,
     setLanguage: vi.fn(),
@@ -98,9 +96,7 @@ describe('NavBar branches (fallback labels & pathname)', () => {
   });
 
   it('does not mark route active when pathname is undefined', () => {
-    vi.mocked(usePathname).mockReturnValue(
-      undefined as unknown as ReturnType<typeof usePathname>
-    );
+    vi.mocked(usePathname).mockReturnValue(undefined as unknown as ReturnType<typeof usePathname>);
 
     render(<NavBar />);
 

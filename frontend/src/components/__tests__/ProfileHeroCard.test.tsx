@@ -11,9 +11,7 @@ const baseStats = {
   role: 'Pro',
 };
 
-function setup(
-  overrides: Partial<ComponentProps<typeof ProfileHeroCard>> = {}
-) {
+function setup(overrides: Partial<ComponentProps<typeof ProfileHeroCard>> = {}) {
   const onSignOut = vi.fn();
   const onEditAvatar = vi.fn();
   const onOpenDocuments = vi.fn();
@@ -27,7 +25,7 @@ function setup(
       onOpenDocuments={onOpenDocuments}
       t={t as ComponentProps<typeof ProfileHeroCard>['t']}
       {...overrides}
-    />
+    />,
   );
   return { ...view, onSignOut, onEditAvatar, onOpenDocuments };
 }
@@ -35,10 +33,8 @@ function setup(
 describe('ProfileHeroCard', () => {
   it('renders avatar image when src is set', () => {
     setup({ avatarSrc: 'https://example.com/a.png' });
-    expect(screen.getByAltText('Profil Resmi')).toHaveAttribute(
-      'src',
-      'https://example.com/a.png'
-    );
+    const img = screen.getByAltText('profileImageAlt');
+    expect(img.getAttribute('src')).toMatch(/example\.com%2Fa\.png|example\.com\/a\.png/);
   });
 
   it('renders initials when no avatar', () => {
@@ -98,14 +94,10 @@ describe('ProfileHeroCard', () => {
         onEditAvatar={vi.fn()}
         onOpenDocuments={vi.fn()}
         t={tEmpty}
-      />
+      />,
     );
     expect(screen.getByTitle('Profil Resmini Değiştir')).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /Belgelerim/i })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /Çıkış Yap/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Belgelerim/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Çıkış Yap/i })).toBeInTheDocument();
   });
 });

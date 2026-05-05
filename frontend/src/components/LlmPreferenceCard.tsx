@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import type { Session } from 'next-auth';
 import type { KeyedMutator } from 'swr';
-import { sendRequest } from '@/utils/api';
 import { translations } from '@/utils/translations';
+import { updateLlmPreference } from '@/services/llmPreferenceService';
 
 export type LlmChoiceData = { provider?: string };
 
@@ -15,12 +15,7 @@ export interface LlmPreferenceCardProps {
   t: (key: keyof (typeof translations)['tr']) => string;
 }
 
-export function LlmPreferenceCard({
-  llmData,
-  mutateLlm,
-  session,
-  t,
-}: LlmPreferenceCardProps) {
+export function LlmPreferenceCard({ llmData, mutateLlm, session, t }: LlmPreferenceCardProps) {
   const [llmChoice, setLlmChoice] = useState<'local' | 'cloud'>('local');
   const [loadingLlm, setLoadingLlm] = useState(false);
 
@@ -32,15 +27,12 @@ export function LlmPreferenceCard({
 
   if (!session?.user) return null;
 
-  const handleLlmSelection = (choice: 'local' | 'cloud') =>
-    setLlmChoice(choice);
+  const handleLlmSelection = (choice: 'local' | 'cloud') => setLlmChoice(choice);
 
   const handleSaveLlm = async () => {
     setLoadingLlm(true);
     try {
-      await sendRequest('/files/user/update-llm', 'POST', {
-        provider: llmChoice,
-      });
+      await updateLlmPreference(llmChoice);
       void mutateLlm();
     } catch (error) {
       console.error('Hata:', error);
@@ -132,8 +124,7 @@ export function LlmPreferenceCard({
                 <li className="flex items-start gap-3 text-sm">
                   <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
                   <span className="opacity-80 leading-snug">
-                    {t('localFeat1') ||
-                      'Maksimum Gizlilik (Veriler cihazda kalır).'}
+                    {t('localFeat1') || 'Maksimum Gizlilik (Veriler cihazda kalır).'}
                   </span>
                 </li>
                 <li className="flex items-start gap-3 text-sm">

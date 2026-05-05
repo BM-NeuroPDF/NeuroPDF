@@ -14,11 +14,7 @@ export interface ProfileStatsCardsProps {
   t: (key: keyof (typeof translations)['tr']) => string;
 }
 
-export function ProfileStatsCards({
-  stats,
-  userPlan,
-  t,
-}: ProfileStatsCardsProps) {
+export function ProfileStatsCards({ stats, userPlan, t }: ProfileStatsCardsProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div className="sm:col-span-2 p-6 rounded-2xl border border-[var(--navbar-border)] shadow-sm bg-[var(--background)] flex items-center gap-4 hover:shadow-md transition-shadow">
@@ -39,9 +35,7 @@ export function ProfileStatsCards({
           </svg>
         </div>
         <div>
-          <p className="text-sm opacity-60 font-medium">
-            {t('membershipType') || 'Üyelik Tipi'}
-          </p>
+          <p className="text-sm opacity-60 font-medium">{t('membershipType') || 'Üyelik Tipi'}</p>
           <p className="text-lg font-bold">{userPlan}</p>
         </div>
       </div>
@@ -63,9 +57,7 @@ export function ProfileStatsCards({
           </svg>
         </div>
         <div>
-          <p className="text-sm opacity-60 font-medium">
-            {t('aiSummary') || 'AI Özetleme'}
-          </p>
+          <p className="text-sm opacity-60 font-medium">{t('aiSummary') || 'AI Özetleme'}</p>
           <p className="text-lg font-bold">
             {stats.summary_count} {t('processCount') || 'İşlem'}
           </p>
@@ -89,9 +81,7 @@ export function ProfileStatsCards({
           </svg>
         </div>
         <div>
-          <p className="text-sm opacity-60 font-medium">
-            {t('pdfTools') || 'PDF Araçları'}
-          </p>
+          <p className="text-sm opacity-60 font-medium">{t('pdfTools') || 'PDF Araçları'}</p>
           <p className="text-lg font-bold">
             {stats.tools_count} {t('processCount') || 'İşlem'}
           </p>

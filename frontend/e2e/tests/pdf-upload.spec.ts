@@ -1,14 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { login } from '../support/helpers';
+import { loginAsTestUser } from '../support/auth';
 import path from 'path';
-
-const TEST_EMAIL = process.env.E2E_TEST_EMAIL || 'test1@gmail.com';
-const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD || 'Test1234.';
 
 test.describe('PDF Upload E2E', () => {
   test('user can upload a PDF file', async ({ page }) => {
     // Login first
-    await login(page, TEST_EMAIL, TEST_PASSWORD);
+    await loginAsTestUser(page);
 
     // Navigate to upload page
     await page.goto('/upload');
@@ -62,7 +59,7 @@ test.describe('PDF Upload E2E', () => {
 
   test('user can see PDF viewer after file selection', async ({ page }) => {
     // Login first
-    await login(page, TEST_EMAIL, TEST_PASSWORD);
+    await loginAsTestUser(page);
 
     // Navigate to upload page
     await page.goto('/upload');

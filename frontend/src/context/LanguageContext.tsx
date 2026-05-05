@@ -1,13 +1,13 @@
-"use client";
+'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { translations, Language } from '@/utils/translations';
+import { translations, Language, type TranslateFn } from '@/utils/translations';
 
 // Context'in taşıyacağı verilerin tipleri
 type LanguageContextType = {
   language: Language;
   setLanguage: (lang: Language) => void;
-  t: (key: keyof typeof translations['tr']) => string;
+  t: TranslateFn;
 };
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
@@ -38,7 +38,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   // Çeviri fonksiyonu (t)
   // Örnek kullanım: t('loginButton') -> "Giriş Yap"
-  const t = (key: keyof typeof translations['tr']) => {
+  const t = (key: keyof (typeof translations)['tr']) => {
     // Seçili dildeki karşılığı bul, yoksa anahtarı olduğu gibi göster
     return translations[language][key] || key;
   };

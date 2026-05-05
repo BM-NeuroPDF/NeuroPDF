@@ -2,8 +2,11 @@
 Unit tests for rate limiting functionality
 """
 
+from collections import OrderedDict
 from unittest.mock import Mock, patch, MagicMock
 
+import pytest
+from fastapi import HTTPException
 from fastapi import Request
 from app.rate_limit import (
     check_rate_limit,
@@ -97,6 +100,51 @@ class TestRateLimit:
 
             assert result is False
             mock_redis.incr.assert_not_called()
+
+    def test_critical_endpoint_fails_closed_when_no_redis(self):
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "127.0.0.1"
+
+        with (
+            patch("app.rate_limit.settings") as mock_settings,
+            patch("app.rate_limit.redis_client", None),
+        ):
+            mock_settings.RATE_LIMIT_ENABLED = True
+            with pytest.raises(HTTPException) as exc_info:
+                check_rate_limit(request, "auth:login", 10, 60, "critical")
+            assert exc_info.value.status_code == 503
+
+    def test_default_endpoint_degraded_to_local_limit_when_no_redis(self):
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "127.0.0.1"
+
+        with (
+            patch("app.rate_limit.settings") as mock_settings,
+            patch("app.rate_limit.redis_client", None),
+            patch("app.rate_limit._LOCAL_DEGRADED", OrderedDict()),
+        ):
+            mock_settings.RATE_LIMIT_ENABLED = True
+            # degraded limit = ceil(2/2)=1 => second blocked
+            assert check_rate_limit(request, "files:upload", 2, 60, "default") is True
+            assert check_rate_limit(request, "files:upload", 2, 60, "default") is False
+
+    def test_low_endpoint_allows_when_no_redis_and_records_sentry(self):
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "127.0.0.1"
+        mock_sentry = MagicMock()
+
+        with (
+            patch("app.rate_limit.settings") as mock_settings,
+            patch("app.rate_limit.redis_client", None),
+            patch.dict("sys.modules", {"sentry_sdk": mock_sentry}),
+        ):
+            mock_settings.RATE_LIMIT_ENABLED = True
+            assert check_rate_limit(request, "files:global_stats", 30, 60, "low") is True
+            assert mock_sentry.add_breadcrumb.called
+            assert mock_sentry.capture_message.called
 
 
 class TestTwoFaVerifyRateLimit:

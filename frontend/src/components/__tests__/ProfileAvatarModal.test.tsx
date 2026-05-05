@@ -1,14 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ComponentProps } from 'react';
 import type { Session } from 'next-auth';
-import {
-  render,
-  screen,
-  fireEvent,
-  waitFor,
-  within,
-  act,
-} from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { ProfileAvatarModal } from '../ProfileAvatarModal';
 import { sendRequest } from '@/utils/api';
 
@@ -25,9 +18,7 @@ const baseSession = {
   expires: '1',
 } as Session;
 
-function setup(
-  overrides: Partial<ComponentProps<typeof ProfileAvatarModal>> = {}
-) {
+function setup(overrides: Partial<ComponentProps<typeof ProfileAvatarModal>> = {}) {
   const onClose = vi.fn();
   const onAvatarConfirmed = vi.fn().mockResolvedValue(undefined);
   const props = {
@@ -43,9 +34,7 @@ function setup(
 }
 
 function pngFileInput() {
-  return document.querySelector(
-    'input[type="file"][accept="image/png"]'
-  ) as HTMLInputElement;
+  return document.querySelector('input[type="file"][accept="image/png"]') as HTMLInputElement;
 }
 
 function clickPurpleGenerateSubmit() {
@@ -64,8 +53,7 @@ describe('ProfileAvatarModal', () => {
     globalThis.URL.revokeObjectURL = vi.fn();
   });
 
-  const getRevokeMock = () =>
-    vi.mocked(globalThis.URL.revokeObjectURL as ReturnType<typeof vi.fn>);
+  const getRevokeMock = () => vi.mocked(globalThis.URL.revokeObjectURL as ReturnType<typeof vi.fn>);
 
   afterEach(() => {
     vi.useRealTimers();
@@ -80,16 +68,14 @@ describe('ProfileAvatarModal', () => {
         onAvatarConfirmed={vi.fn()}
         session={baseSession}
         t={t as ComponentProps<typeof ProfileAvatarModal>['t']}
-      />
+      />,
     );
     expect(container.firstChild).toBeNull();
   });
 
   it('closes when dismiss clicked', () => {
     const { onClose } = setup();
-    const closeBtn = document.querySelector(
-      'button.absolute.top-4.right-4'
-    ) as HTMLButtonElement;
+    const closeBtn = document.querySelector('button.absolute.top-4.right-4') as HTMLButtonElement;
     fireEvent.click(closeBtn);
     expect(onClose).toHaveBeenCalled();
   });
@@ -112,7 +98,7 @@ describe('ProfileAvatarModal', () => {
         onAvatarConfirmed={vi.fn()}
         session={baseSession}
         t={tEmpty}
-      />
+      />,
     );
     fireEvent.change(pngFileInput(), {
       target: { files: [new File(['x'], 'x.jpg', { type: 'image/jpeg' })] },
@@ -154,7 +140,7 @@ describe('ProfileAvatarModal', () => {
         onAvatarConfirmed={vi.fn()}
         session={baseSession}
         t={t as ComponentProps<typeof ProfileAvatarModal>['t']}
-      />
+      />,
     );
     rerender(
       <ProfileAvatarModal
@@ -163,7 +149,7 @@ describe('ProfileAvatarModal', () => {
         onAvatarConfirmed={vi.fn()}
         session={baseSession}
         t={t as ComponentProps<typeof ProfileAvatarModal>['t']}
-      />
+      />,
     );
     act(() => {
       vi.advanceTimersByTime(300);
@@ -194,9 +180,7 @@ describe('ProfileAvatarModal', () => {
       session: baseSession,
       t: t as ComponentProps<typeof ProfileAvatarModal>['t'],
     };
-    const { unmount, rerender } = render(
-      <ProfileAvatarModal isOpen {...props} />
-    );
+    const { unmount, rerender } = render(<ProfileAvatarModal isOpen {...props} />);
     rerender(<ProfileAvatarModal isOpen={false} {...props} />);
     unmount();
     act(() => {
@@ -255,7 +239,7 @@ describe('ProfileAvatarModal', () => {
         '/api/v1/user/user-1/avatar',
         'POST',
         expect.any(FormData),
-        true
+        true,
       );
     });
     expect(onClose).toHaveBeenCalled();
@@ -273,7 +257,7 @@ describe('ProfileAvatarModal', () => {
         onAvatarConfirmed={vi.fn()}
         session={baseSession}
         t={tEmpty}
-      />
+      />,
     );
     fireEvent.change(pngFileInput(), {
       target: { files: [new File(['x'], 'x.png', { type: 'image/png' })] },
@@ -294,7 +278,7 @@ describe('ProfileAvatarModal', () => {
         onAvatarConfirmed={vi.fn()}
         session={baseSession}
         t={tEmpty}
-      />
+      />,
     );
     fireEvent.change(pngFileInput(), {
       target: { files: [new File(['y'], 'y.png', { type: 'image/png' })] },
@@ -320,7 +304,7 @@ describe('ProfileAvatarModal', () => {
         '/api/v1/user/me/avatar',
         'POST',
         expect.any(FormData),
-        true
+        true,
       );
     });
   });
@@ -356,9 +340,7 @@ describe('ProfileAvatarModal', () => {
         files: [new File(['x'], 'x.jpg', { type: 'image/jpeg' })],
       },
     });
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Referans resim sadece PNG formatında olabilir.'
-    );
+    expect(alertSpy).toHaveBeenCalledWith('Referans resim sadece PNG formatında olabilir.');
   });
 
   it('ignores reference change when no file', () => {
@@ -384,7 +366,7 @@ describe('ProfileAvatarModal', () => {
       expect(mockedSendRequest).toHaveBeenCalledWith(
         '/api/v1/user/user-1/avatar/generate',
         'POST',
-        { prompt: 'a cat' }
+        { prompt: 'a cat' },
       );
     });
     expect(screen.getByAltText('AI Preview')).toBeInTheDocument();
@@ -412,7 +394,7 @@ describe('ProfileAvatarModal', () => {
         '/api/v1/user/user-1/avatar/edit',
         'POST',
         expect.any(FormData),
-        true
+        true,
       );
     });
   });
@@ -463,11 +445,9 @@ describe('ProfileAvatarModal', () => {
     fireEvent.click(screen.getByText('Bu Resmi Kullan'));
 
     await waitFor(() => {
-      expect(mockedSendRequest).toHaveBeenCalledWith(
-        '/api/v1/user/user-1/avatar/confirm',
-        'POST',
-        { temp_avatar_id: 'temp-3' }
-      );
+      expect(mockedSendRequest).toHaveBeenCalledWith('/api/v1/user/user-1/avatar/confirm', 'POST', {
+        temp_avatar_id: 'temp-3',
+      });
     });
     expect(onClose).toHaveBeenCalled();
     expect(onAvatarConfirmed).toHaveBeenCalled();
@@ -541,7 +521,7 @@ describe('ProfileAvatarModal', () => {
       expect(mockedSendRequest).toHaveBeenCalledWith(
         '/api/v1/user/user-1/avatar/generate',
         'POST',
-        { prompt: 'hello' }
+        { prompt: 'hello' },
       );
     });
   });
@@ -556,9 +536,7 @@ describe('ProfileAvatarModal', () => {
   });
 
   it('shows uploading spinner', async () => {
-    mockedSendRequest.mockImplementation(
-      () => new Promise((r) => setTimeout(r, 5000))
-    );
+    mockedSendRequest.mockImplementation(() => new Promise((r) => setTimeout(r, 5000)));
     setup();
     fireEvent.change(pngFileInput(), {
       target: { files: [new File(['x'], 'x.png', { type: 'image/png' })] },
@@ -593,11 +571,9 @@ describe('ProfileAvatarModal', () => {
         onAvatarConfirmed={vi.fn()}
         session={baseSession}
         t={tEmpty}
-      />
+      />,
     );
-    expect(
-      screen.getByRole('heading', { name: 'Profil Resmini Değiştir' })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Profil Resmini Değiştir' })).toBeInTheDocument();
     expect(screen.getByText('PNG Yükle')).toBeInTheDocument();
   });
 });

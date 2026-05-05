@@ -23,9 +23,7 @@ vi.mock('@/services/pdfService', () => ({
 
 const t = (k: string) => k;
 
-function setup(
-  overrides: Partial<ComponentProps<typeof SummaryResultPanel>> = {}
-) {
+function setup(overrides: Partial<ComponentProps<typeof SummaryResultPanel>> = {}) {
   const onNew = vi.fn();
   const onDownloadPdf = vi.fn();
   const onStartChat = vi.fn();
@@ -57,9 +55,7 @@ describe('SummaryResultPanel', () => {
   it('renders summary and markdown viewer', () => {
     setup();
     expect(screen.getByText('summaryResultTitle')).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /PDF indir/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /PDF indir/i })).toBeInTheDocument();
   });
 
   it('sets data-filename from file', () => {
@@ -129,7 +125,7 @@ describe('SummaryResultPanel', () => {
         audioPlayer={null}
         t={tFallback}
         markdownViewer={MarkdownViewer}
-      />
+      />,
     );
     expect(screen.getByText('Sohbet Et')).toBeInTheDocument();
     rerender(
@@ -146,7 +142,7 @@ describe('SummaryResultPanel', () => {
         audioPlayer={null}
         t={tFallback}
         markdownViewer={MarkdownViewer}
-      />
+      />,
     );
     expect(screen.getByText("Sohbet için Pro'ya geç")).toBeInTheDocument();
   });
@@ -171,8 +167,7 @@ describe('SummaryResultPanel', () => {
   });
 
   it('uses listen label fallback when t returns empty and not loading', () => {
-    const tPartial = ((k: string) =>
-      k === 'listenSummary' ? '' : k) as ComponentProps<
+    const tPartial = ((k: string) => (k === 'listenSummary' ? '' : k)) as ComponentProps<
       typeof SummaryResultPanel
     >['t'];
     setup({
@@ -199,7 +194,7 @@ describe('SummaryResultPanel', () => {
         audioPlayer={null}
         t={tEmpty}
         markdownViewer={MarkdownViewer}
-      />
+      />,
     );
     expect(screen.getByText('Özet Sonucu')).toBeInTheDocument();
     expect(screen.getByText('İşlem Başarılı')).toBeInTheDocument();
@@ -221,7 +216,7 @@ describe('SummaryResultPanel', () => {
         audioPlayer={null}
         t={tEmpty}
         markdownViewer={MarkdownViewer}
-      />
+      />,
     );
     expect(screen.getByText('Özeti Dinle')).toBeInTheDocument();
   });

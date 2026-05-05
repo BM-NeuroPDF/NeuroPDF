@@ -8,6 +8,7 @@ from typing import Any, Optional
 import redis
 
 from .config import settings
+from .observability.cache_logger import log_cache_backend_error, log_cache_invalidate
 
 logger = logging.getLogger(__name__)
 
@@ -87,9 +88,12 @@ def stats_cache_get_json(key: str) -> Optional[dict[str, Any]]:
             return None
         return json.loads(raw)
     except Exception as e:
-        logger.debug(
-            "stats_cache_get_json failed for key=%s: %s", key, e, exc_info=True
+        log_cache_backend_error(
+            "stats_cache_get_json",
+            key,
+            error=str(e),
         )
+        logger.debug("stats_cache_get_json traceback", exc_info=True)
         return None
 
 
@@ -99,9 +103,12 @@ def stats_cache_set_json(key: str, payload: dict[str, Any], ttl_seconds: int) ->
     try:
         redis_client.setex(key, ttl_seconds, json.dumps(payload))
     except Exception as e:
-        logger.warning(
-            "stats_cache_set_json failed for key=%s: %s", key, e, exc_info=True
+        log_cache_backend_error(
+            "stats_cache_set_json",
+            key,
+            error=str(e),
         )
+        logger.warning("stats_cache_set_json traceback", exc_info=True)
 
 
 def stats_cache_delete_keys(*keys: str) -> None:
@@ -109,8 +116,15 @@ def stats_cache_delete_keys(*keys: str) -> None:
         return
     try:
         redis_client.delete(*keys)
+        log_cache_invalidate("stats_cache_redis", *keys)
     except Exception as e:
-        logger.warning("stats_cache_delete_keys failed: %s", e, exc_info=True)
+        log_cache_backend_error(
+            "stats_cache_delete_keys",
+            keys[0] if keys else None,
+            error=str(e),
+            extra={"key_count": len(keys)},
+        )
+        logger.warning("stats_cache_delete_keys traceback", exc_info=True)
 
 
 def invalidate_stats_caches_for_user(user_id: str) -> None:

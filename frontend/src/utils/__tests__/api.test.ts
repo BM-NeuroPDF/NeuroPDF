@@ -14,7 +14,7 @@ import {
 function testSession(
   overrides: Partial<Omit<Session, 'user'>> & {
     user?: Partial<Session['user']>;
-  } = {}
+  } = {},
 ): Session {
   const baseUser: Session['user'] = {
     name: null,
@@ -60,91 +60,83 @@ describe('sendRequest', () => {
   });
 
   it('prefers apiToken when accessToken is absent', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ apiToken: 'api-token-only' })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ apiToken: 'api-token-only' }));
     fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({ ok: true }),
     });
-    await sendRequest('/test', 'GET');
+    await sendRequest<unknown>('/test', 'GET');
     expect(global.fetch).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: 'Bearer api-token-only',
         }),
-      })
+      }),
     );
   });
 
   it('uses user.accessToken when session has no top-level tokens', async () => {
     vi.mocked(getSession).mockResolvedValue(
-      testSession({ user: { accessToken: 'nested-access' } })
+      testSession({ user: { accessToken: 'nested-access' } }),
     );
     fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({ ok: true }),
     });
-    await sendRequest('/test', 'GET');
+    await sendRequest<unknown>('/test', 'GET');
     expect(global.fetch).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: 'Bearer nested-access',
         }),
-      })
+      }),
     );
   });
 
   it('uses user.apiToken as last token fallback', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ user: { apiToken: 'nested-api' } })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ user: { apiToken: 'nested-api' } }));
     fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({ ok: true }),
     });
-    await sendRequest('/test', 'GET');
+    await sendRequest<unknown>('/test', 'GET');
     expect(global.fetch).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: 'Bearer nested-api',
         }),
-      })
+      }),
     );
   });
 
   it('omits Authorization when session user has no token fields', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ user: { id: 'user-1', name: 'Test' } })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ user: { id: 'user-1', name: 'Test' } }));
     fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({ ok: true }),
     });
-    await sendRequest('/test', 'GET');
+    await sendRequest<unknown>('/test', 'GET');
     const call = fetchMock.mock.calls[0];
     const headers = call[1].headers as Record<string, string>;
     expect(headers.Authorization).toBeUndefined();
   });
 
   it('sends GET request successfully', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ accessToken: 'test-token' })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 'test-token' }));
     fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({ data: 'test' }),
     });
 
-    const result = await sendRequest('/test', 'GET');
+    const result = await sendRequest<unknown>('/test', 'GET');
 
     expect(result).toEqual({ data: 'test' });
     expect(global.fetch).toHaveBeenCalledWith(
@@ -154,21 +146,19 @@ describe('sendRequest', () => {
         headers: expect.objectContaining({
           Authorization: 'Bearer test-token',
         }),
-      })
+      }),
     );
   });
 
   it('sends POST request with JSON body', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ accessToken: 'test-token' })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 'test-token' }));
     fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({ success: true }),
     });
 
-    const result = await sendRequest('/test', 'POST', { key: 'value' });
+    const result = await sendRequest<unknown>('/test', 'POST', { key: 'value' });
 
     expect(result).toEqual({ success: true });
     expect(global.fetch).toHaveBeenCalledWith(
@@ -179,7 +169,7 @@ describe('sendRequest', () => {
           'Content-Type': 'application/json',
         }),
         body: JSON.stringify({ key: 'value' }),
-      })
+      }),
     );
   });
 
@@ -192,7 +182,7 @@ describe('sendRequest', () => {
       json: async () => ({ data: 'test' }),
     });
 
-    await sendRequest('/test', 'GET');
+    await sendRequest<unknown>('/test', 'GET');
 
     expect(global.fetch).toHaveBeenCalledWith(
       expect.any(String),
@@ -200,14 +190,12 @@ describe('sendRequest', () => {
         headers: expect.objectContaining({
           'X-Guest-ID': 'guest-123',
         }),
-      })
+      }),
     );
   });
 
   it('sends file upload request', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ accessToken: 'test-token' })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 'test-token' }));
     fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/pdf' }),
@@ -217,7 +205,7 @@ describe('sendRequest', () => {
     const formData = new FormData();
     formData.append('file', new Blob(['test']));
 
-    const result = await sendRequest('/upload', 'POST', formData, true);
+    const result = await sendRequest<unknown>('/upload', 'POST', formData, true);
 
     expect(result).toBeInstanceOf(Blob);
     expect(global.fetch).toHaveBeenCalledWith(
@@ -225,7 +213,7 @@ describe('sendRequest', () => {
       expect.objectContaining({
         method: 'POST',
         body: formData,
-      })
+      }),
     );
     // Should not have Content-Type header for file uploads
     const callArgs = fetchMock.mock.calls[0][1];
@@ -233,9 +221,7 @@ describe('sendRequest', () => {
   });
 
   it('on 401 with skipAuthRedirectOn401 throws detail without signOut', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ accessToken: 'test-token' })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 'test-token' }));
     fetchMock.mockResolvedValue({
       ok: false,
       status: 401,
@@ -243,18 +229,16 @@ describe('sendRequest', () => {
     });
 
     await expect(
-      sendRequest('/auth/verify-and-delete', 'POST', { password: 'x' }, false, {
+      sendRequest<unknown>('/auth/verify-and-delete', 'POST', { password: 'x' }, false, {
         skipAuthRedirectOn401: true,
-      })
+      }),
     ).rejects.toThrow('Invalid password');
 
     expect(signOut).not.toHaveBeenCalled();
   });
 
   it('handles 401 error and redirects to login', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ accessToken: 'test-token' })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 'test-token' }));
     fetchMock.mockResolvedValue({
       ok: false,
       status: 401,
@@ -269,9 +253,7 @@ describe('sendRequest', () => {
       value: locationMock,
     });
 
-    await expect(sendRequest('/test', 'GET')).rejects.toThrow(
-      'Oturum süreniz dolmuş'
-    );
+    await expect(sendRequest<unknown>('/test', 'GET')).rejects.toThrow('Oturum süreniz dolmuş');
 
     expect(signOut).toHaveBeenCalledWith({
       callbackUrl: '/login',
@@ -286,22 +268,18 @@ describe('sendRequest', () => {
   });
 
   it('handles error response with detail string', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ accessToken: 'test-token' })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 'test-token' }));
     fetchMock.mockResolvedValue({
       ok: false,
       status: 400,
       json: async () => ({ detail: 'Bad request' }),
     });
 
-    await expect(sendRequest('/test', 'GET')).rejects.toThrow('Bad request');
+    await expect(sendRequest<unknown>('/test', 'GET')).rejects.toThrow('Bad request');
   });
 
   it('handles error response with detail array', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ accessToken: 'test-token' })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 'test-token' }));
     fetchMock.mockResolvedValue({
       ok: false,
       status: 422,
@@ -310,15 +288,11 @@ describe('sendRequest', () => {
       }),
     });
 
-    await expect(sendRequest('/test', 'GET')).rejects.toThrow(
-      'Error 1, Error 2'
-    );
+    await expect(sendRequest<unknown>('/test', 'GET')).rejects.toThrow('Error 1, Error 2');
   });
 
   it('422 detail array only includes items with string msg', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ accessToken: 'test-token' })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 'test-token' }));
     fetchMock.mockResolvedValue({
       ok: false,
       status: 422,
@@ -327,35 +301,29 @@ describe('sendRequest', () => {
       }),
     });
 
-    await expect(sendRequest('/test', 'GET')).rejects.toThrow('Valid');
+    await expect(sendRequest<unknown>('/test', 'GET')).rejects.toThrow('Valid');
   });
 
   it('handles error response without detail', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ accessToken: 'test-token' })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 'test-token' }));
     fetchMock.mockResolvedValue({
       ok: false,
       status: 500,
       json: async () => ({}),
     });
 
-    await expect(sendRequest('/test', 'GET')).rejects.toThrow('Hata: 500');
+    await expect(sendRequest<unknown>('/test', 'GET')).rejects.toThrow('Hata: 500');
   });
 
   it('handles network errors', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ accessToken: 'test-token' })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 'test-token' }));
     fetchMock.mockRejectedValue(new Error('Network error'));
 
-    await expect(sendRequest('/test', 'GET')).rejects.toThrow('Network error');
+    await expect(sendRequest<unknown>('/test', 'GET')).rejects.toThrow('Network error');
   });
 
   it('returns blob for non-JSON responses', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ accessToken: 'test-token' })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 'test-token' }));
     const blob = new Blob(['binary data'], { type: 'application/pdf' });
     fetchMock.mockResolvedValue({
       ok: true,
@@ -363,7 +331,7 @@ describe('sendRequest', () => {
       blob: async () => blob,
     });
 
-    const result = await sendRequest('/download', 'GET');
+    const result = await sendRequest<unknown>('/download', 'GET');
 
     expect(result).toBeInstanceOf(Blob);
   });
@@ -376,7 +344,7 @@ describe('sendRequest', () => {
       json: async () => ({ data: 'test' }),
     });
 
-    const result = await sendRequest('/test', 'GET');
+    const result = await sendRequest<unknown>('/test', 'GET');
 
     expect(result).toEqual({ data: 'test' });
     const callArgs = fetchMock.mock.calls[0][1];
@@ -384,9 +352,7 @@ describe('sendRequest', () => {
   });
 
   it('handles invalid JSON response gracefully', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ accessToken: 'test-token' })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 'test-token' }));
     fetchMock.mockResolvedValue({
       ok: false,
       status: 500,
@@ -395,7 +361,7 @@ describe('sendRequest', () => {
       },
     });
 
-    await expect(sendRequest('/test', 'GET')).rejects.toThrow('Hata: 500');
+    await expect(sendRequest<unknown>('/test', 'GET')).rejects.toThrow('Hata: 500');
   });
 
   it('maps 503 and 504 to temporary DB message', async () => {
@@ -406,8 +372,8 @@ describe('sendRequest', () => {
         status,
         json: async () => ({}),
       });
-      await expect(sendRequest('/test', 'GET')).rejects.toThrow(
-        'Veritabanı bağlantısı geçici'
+      await expect(sendRequest<unknown>('/test', 'GET')).rejects.toThrow(
+        'Veritabanı bağlantısı geçici',
       );
     }
   });
@@ -419,30 +385,28 @@ describe('sendRequest', () => {
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
     });
-    await sendRequest('/files/chat/message', 'POST', { x: 1 });
+    await sendRequest<unknown>('/files/chat/message', 'POST', { x: 1 });
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/proxy/chat/message'),
-      expect.any(Object)
+      expect.any(Object),
     );
   });
 
   it('uses user.accessToken when top-level token missing', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ user: { accessToken: 'from-user' } })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ user: { accessToken: 'from-user' } }));
     fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
     });
-    await sendRequest('/x', 'GET');
+    await sendRequest<unknown>('/x', 'GET');
     expect(global.fetch).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: 'Bearer from-user',
         }),
-      })
+      }),
     );
   });
 
@@ -453,9 +417,7 @@ describe('sendRequest', () => {
       status: 400,
       json: async () => ({ detail: { nested: true } }),
     });
-    await expect(sendRequest('/test', 'GET')).rejects.toThrow(
-      '{"nested":true}'
-    );
+    await expect(sendRequest<unknown>('/test', 'GET')).rejects.toThrow('{"nested":true}');
   });
 
   it('redirects via window.location when signOut throws on 401', async () => {
@@ -482,9 +444,7 @@ describe('sendRequest', () => {
         assign: vi.fn(),
       },
     });
-    await expect(sendRequest('/test', 'GET')).rejects.toThrow(
-      'Oturum süreniz dolmuş'
-    );
+    await expect(sendRequest<unknown>('/test', 'GET')).rejects.toThrow('Oturum süreniz dolmuş');
     expect(hrefSetter).toHaveBeenCalledWith('/login');
     if (originalDesc) Object.defineProperty(window, 'location', originalDesc);
   });
@@ -493,16 +453,16 @@ describe('sendRequest', () => {
     vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
     const err = new TypeError('fetch failed');
     fetchMock.mockRejectedValue(err);
-    await expect(sendRequest('/test', 'GET')).rejects.toThrow(
-      'Veritabanı bağlantısı geçici'
+    await expect(sendRequest<unknown>('/test', 'GET')).rejects.toThrow(
+      'Veritabanı bağlantısı geçici',
     );
   });
 
   it('maps TypeError socket hang up to temporary DB message', async () => {
     vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
     fetchMock.mockRejectedValue(new TypeError('socket hang up'));
-    await expect(sendRequest('/test', 'GET')).rejects.toThrow(
-      'Veritabanı bağlantısı geçici'
+    await expect(sendRequest<unknown>('/test', 'GET')).rejects.toThrow(
+      'Veritabanı bağlantısı geçici',
     );
   });
 
@@ -511,9 +471,7 @@ describe('sendRequest', () => {
     vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
     const err = new TypeError('unrelated failure');
     fetchMock.mockRejectedValue(err);
-    await expect(sendRequest('/test', 'GET')).rejects.toThrow(
-      'unrelated failure'
-    );
+    await expect(sendRequest<unknown>('/test', 'GET')).rejects.toThrow('unrelated failure');
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();
   });
@@ -532,7 +490,7 @@ describe('sendRequest', () => {
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
     });
-    await sendRequest('/only-path', 'GET');
+    await sendRequest<unknown>('/only-path', 'GET');
     expect(global.fetch).toHaveBeenCalledWith('/only-path', expect.any(Object));
     process.env.NEXT_PUBLIC_API_URL = prevEnv;
     Object.defineProperty(window, 'location', {
@@ -555,10 +513,10 @@ describe('sendRequest', () => {
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
     });
-    await sendRequest('/secure-path', 'GET');
+    await sendRequest<unknown>('/secure-path', 'GET');
     expect(global.fetch).toHaveBeenCalledWith(
       'https://api.example.com/secure-path',
-      expect.any(Object)
+      expect.any(Object),
     );
     process.env.NEXT_PUBLIC_API_URL = prevEnv;
     Object.defineProperty(window, 'location', {
@@ -581,11 +539,8 @@ describe('sendRequest', () => {
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
     });
-    await sendRequest('/https-no-env', 'GET');
-    expect(global.fetch).toHaveBeenCalledWith(
-      '/https-no-env',
-      expect.any(Object)
-    );
+    await sendRequest<unknown>('/https-no-env', 'GET');
+    expect(global.fetch).toHaveBeenCalledWith('/https-no-env', expect.any(Object));
     process.env.NEXT_PUBLIC_API_URL = prevEnv;
     Object.defineProperty(window, 'location', {
       configurable: true,
@@ -596,48 +551,44 @@ describe('sendRequest', () => {
   it('maps Error with econnreset message to temporary DB message', async () => {
     vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
     fetchMock.mockRejectedValue(new Error('ECONNRESET upstream'));
-    await expect(sendRequest('/test', 'GET')).rejects.toThrow(
-      'Veritabanı bağlantısı geçici'
+    await expect(sendRequest<unknown>('/test', 'GET')).rejects.toThrow(
+      'Veritabanı bağlantısı geçici',
     );
   });
 
   it('uses apiToken when accessToken is missing on session', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ apiToken: 'api-only-token' })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ apiToken: 'api-only-token' }));
     fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
     });
-    await sendRequest('/x', 'GET');
+    await sendRequest<unknown>('/x', 'GET');
     expect(global.fetch).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: 'Bearer api-only-token',
         }),
-      })
+      }),
     );
   });
 
   it('uses user.apiToken when nested token fields are used', async () => {
-    vi.mocked(getSession).mockResolvedValue(
-      testSession({ user: { apiToken: 'nested-api' } })
-    );
+    vi.mocked(getSession).mockResolvedValue(testSession({ user: { apiToken: 'nested-api' } }));
     fetchMock.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
     });
-    await sendRequest('/x', 'GET');
+    await sendRequest<unknown>('/x', 'GET');
     expect(global.fetch).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: 'Bearer nested-api',
         }),
-      })
+      }),
     );
   });
 
@@ -650,11 +601,8 @@ describe('sendRequest', () => {
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
     });
-    await sendRequest('/ping', 'GET');
-    expect(global.fetch).toHaveBeenCalledWith(
-      'http://localhost:8000/ping',
-      expect.any(Object)
-    );
+    await sendRequest<unknown>('/ping', 'GET');
+    expect(global.fetch).toHaveBeenCalledWith('http://localhost:8000/ping', expect.any(Object));
     process.env.NEXT_PUBLIC_API_URL = prev;
   });
 
@@ -665,15 +613,15 @@ describe('sendRequest', () => {
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
     });
-    await sendRequest('/files/chat/start', 'POST', {});
-    await sendRequest('/files/chat/general/start', 'POST', {});
+    await sendRequest<unknown>('/files/chat/start', 'POST', {});
+    await sendRequest<unknown>('/files/chat/general/start', 'POST', {});
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/proxy/chat/start'),
-      expect.any(Object)
+      expect.any(Object),
     );
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/proxy/chat/general/start'),
-      expect.any(Object)
+      expect.any(Object),
     );
   });
 
@@ -684,20 +632,20 @@ describe('sendRequest', () => {
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
     });
-    await sendRequest('/files/chat/message', 'POST', {});
-    await sendRequest('/files/chat/general/message', 'POST', {});
-    await sendRequest('/files/chat/translate-message', 'POST', {});
+    await sendRequest<unknown>('/files/chat/message', 'POST', {});
+    await sendRequest<unknown>('/files/chat/general/message', 'POST', {});
+    await sendRequest<unknown>('/files/chat/translate-message', 'POST', {});
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/proxy/chat/message'),
-      expect.any(Object)
+      expect.any(Object),
     );
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/proxy/chat/general/message'),
-      expect.any(Object)
+      expect.any(Object),
     );
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/proxy/chat/translate-message'),
-      expect.any(Object)
+      expect.any(Object),
     );
   });
 
@@ -708,15 +656,15 @@ describe('sendRequest', () => {
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({ messages: [] }),
     });
-    await sendRequest('/files/chat/sessions', 'GET');
-    await sendRequest('/files/chat/sessions/abc/messages', 'GET');
+    await sendRequest<unknown>('/files/chat/sessions', 'GET');
+    await sendRequest<unknown>('/files/chat/sessions/abc/messages', 'GET');
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/proxy/chat/sessions'),
-      expect.any(Object)
+      expect.any(Object),
     );
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringMatching(/\/api\/proxy\/chat\/sessions\/abc\/messages$/),
-      expect.any(Object)
+      expect.any(Object),
     );
   });
 
@@ -730,7 +678,7 @@ describe('sendRequest', () => {
         headers: new Headers({ 'content-type': 'application/json' }),
         json: async () => ({}),
       });
-      await sendRequest('/no-guest', 'GET');
+      await sendRequest<unknown>('/no-guest', 'GET');
       const headers = fetchMock.mock.calls[0][1].headers;
       expect(headers['X-Guest-ID']).toBeUndefined();
     } finally {
@@ -748,8 +696,8 @@ describe('sendRequest', () => {
     const prevWindow = global.window;
     vi.stubGlobal('window', undefined);
     try {
-      await expect(sendRequest('/401-nowin', 'GET')).rejects.toThrow(
-        'Oturum süreniz dolmuş'
+      await expect(sendRequest<unknown>('/401-nowin', 'GET')).rejects.toThrow(
+        'Oturum süreniz dolmuş',
       );
       expect(signOut).not.toHaveBeenCalled();
     } finally {
@@ -763,7 +711,7 @@ describe('sendRequest', () => {
     const err = new TypeError();
     err.message = '';
     fetchMock.mockRejectedValue(err);
-    await expect(sendRequest('/test', 'GET')).rejects.toThrow();
+    await expect(sendRequest<unknown>('/test', 'GET')).rejects.toThrow();
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();
   });
@@ -777,21 +725,19 @@ describe('sendRequest', () => {
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({}),
     });
-    await sendRequest('/env-undef', 'GET');
+    await sendRequest<unknown>('/env-undef', 'GET');
     expect(global.fetch).toHaveBeenCalledWith(
       'http://localhost:8000/env-undef',
-      expect.any(Object)
+      expect.any(Object),
     );
     process.env.NEXT_PUBLIC_API_URL = prev;
   });
 
   it('maps TypeError NetworkError to temporary DB message', async () => {
     vi.mocked(getSession).mockResolvedValue(testSession({ accessToken: 't' }));
-    fetchMock.mockRejectedValue(
-      new TypeError('NetworkError when attempting to fetch resource.')
-    );
-    await expect(sendRequest('/test', 'GET')).rejects.toThrow(
-      'Veritabanı bağlantısı geçici'
+    fetchMock.mockRejectedValue(new TypeError('NetworkError when attempting to fetch resource.'));
+    await expect(sendRequest<unknown>('/test', 'GET')).rejects.toThrow(
+      'Veritabanı bağlantısı geçici',
     );
   });
 

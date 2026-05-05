@@ -4,6 +4,7 @@ import type { Session } from 'next-auth';
 import { usePdfSummarize } from '../usePdfSummarize';
 import { sendRequest } from '@/utils/api';
 import { guestService } from '@/services/guestService';
+import { logError } from '@/utils/logger';
 
 vi.mock('@/utils/api', () => ({
   sendRequest: vi.fn(),
@@ -15,12 +16,15 @@ vi.mock('@/services/guestService', () => ({
   },
 }));
 
+vi.mock('@/utils/logger', () => ({
+  logError: vi.fn(),
+}));
+
 const mockedSendRequest = vi.mocked(sendRequest);
 const mockedIncrementUsage = vi.mocked(guestService.incrementUsage);
+const mockedLogError = vi.mocked(logError);
 
-function buildParams(
-  overrides: Partial<Parameters<typeof usePdfSummarize>[0]> = {}
-) {
+function buildParams(overrides: Partial<Parameters<typeof usePdfSummarize>[0]> = {}) {
   return {
     session: null as Session | null,
     status: 'unauthenticated' as const,
@@ -65,7 +69,7 @@ describe('usePdfSummarize', () => {
     mockedSendRequest.mockResolvedValueOnce({ role: 'Pro User' });
     const session = { user: { name: 'A' }, expires: '1' } as Session;
     const { result } = renderHook(() =>
-      usePdfSummarize(buildParams({ session, status: 'authenticated' }))
+      usePdfSummarize(buildParams({ session, status: 'authenticated' })),
     );
     await act(async () => {
       await Promise.resolve();
@@ -76,9 +80,7 @@ describe('usePdfSummarize', () => {
 
   it('does not fetch role when status is not authenticated', async () => {
     const session = { user: { name: 'A' }, expires: '1' } as Session;
-    renderHook(() =>
-      usePdfSummarize(buildParams({ session, status: 'loading' }))
-    );
+    renderHook(() => usePdfSummarize(buildParams({ session, status: 'loading' })));
     await act(async () => {
       await Promise.resolve();
     });
@@ -86,9 +88,7 @@ describe('usePdfSummarize', () => {
   });
 
   it('does not fetch role when authenticated but session is null', async () => {
-    renderHook(() =>
-      usePdfSummarize(buildParams({ session: null, status: 'authenticated' }))
-    );
+    renderHook(() => usePdfSummarize(buildParams({ session: null, status: 'authenticated' })));
     await act(async () => {
       await Promise.resolve();
     });
@@ -99,7 +99,7 @@ describe('usePdfSummarize', () => {
     mockedSendRequest.mockRejectedValueOnce(new Error('x'));
     const session = { user: { name: 'A' }, expires: '1' } as Session;
     const { result } = renderHook(() =>
-      usePdfSummarize(buildParams({ session, status: 'authenticated' }))
+      usePdfSummarize(buildParams({ session, status: 'authenticated' })),
     );
     await act(async () => {
       await Promise.resolve();
@@ -125,7 +125,7 @@ describe('usePdfSummarize', () => {
     const savePdf = vi.fn();
     const resetAudio = vi.fn();
     const { result } = renderHook(() =>
-      usePdfSummarize(buildParams({ setFile, savePdf, resetAudio }))
+      usePdfSummarize(buildParams({ setFile, savePdf, resetAudio })),
     );
     act(() => {
       result.current.resetState(pdfFile);
@@ -146,7 +146,7 @@ describe('usePdfSummarize', () => {
       '/files/summarize-guest',
       expect.anything(),
       expect.anything(),
-      expect.anything()
+      expect.anything(),
     );
   });
 
@@ -158,8 +158,8 @@ describe('usePdfSummarize', () => {
           file: pdfFile,
           session: null,
           checkLimit,
-        })
-      )
+        }),
+      ),
     );
     await act(async () => {
       await result.current.summarize();
@@ -176,8 +176,8 @@ describe('usePdfSummarize', () => {
           file: pdfFile,
           session: null,
           status: 'unauthenticated',
-        })
-      )
+        }),
+      ),
     );
     await act(async () => {
       await result.current.summarize();
@@ -186,7 +186,7 @@ describe('usePdfSummarize', () => {
       '/files/summarize-guest',
       'POST',
       expect.any(FormData),
-      true
+      true,
     );
     expect(result.current.summary).toBe('# Hi');
     expect(result.current.summarizing).toBe(false);
@@ -197,7 +197,7 @@ describe('usePdfSummarize', () => {
     mockedSendRequest.mockResolvedValueOnce({ summary: 's' });
     mockedIncrementUsage.mockRejectedValueOnce(new Error('usage'));
     const { result } = renderHook(() =>
-      usePdfSummarize(buildParams({ file: pdfFile, session: null }))
+      usePdfSummarize(buildParams({ file: pdfFile, session: null })),
     );
     await act(async () => {
       await result.current.summarize();
@@ -214,8 +214,8 @@ describe('usePdfSummarize', () => {
           file: pdfFile,
           session,
           status: 'authenticated',
-        })
-      )
+        }),
+      ),
     );
     await act(async () => {
       await result.current.summarize();
@@ -224,7 +224,7 @@ describe('usePdfSummarize', () => {
       '/files/summarize',
       'POST',
       expect.any(FormData),
-      true
+      true,
     );
     expect(mockedIncrementUsage).not.toHaveBeenCalled();
   });
@@ -232,7 +232,7 @@ describe('usePdfSummarize', () => {
   it('summarize sets SUMMARY_ERROR on failure', async () => {
     mockedSendRequest.mockRejectedValueOnce(new Error('api'));
     const { result } = renderHook(() =>
-      usePdfSummarize(buildParams({ file: pdfFile, session: null }))
+      usePdfSummarize(buildParams({ file: pdfFile, session: null })),
     );
     await act(async () => {
       await result.current.summarize();
@@ -244,7 +244,7 @@ describe('usePdfSummarize', () => {
   it('summarize throws path when response has no summary', async () => {
     mockedSendRequest.mockResolvedValueOnce({});
     const { result } = renderHook(() =>
-      usePdfSummarize(buildParams({ file: pdfFile, session: null }))
+      usePdfSummarize(buildParams({ file: pdfFile, session: null })),
     );
     await act(async () => {
       await result.current.summarize();
@@ -279,8 +279,8 @@ describe('usePdfSummarize', () => {
           setSessionId,
           setChatMessages,
           loadChatSessions,
-        })
-      )
+        }),
+      ),
     );
 
     await act(async () => {
@@ -310,8 +310,8 @@ describe('usePdfSummarize', () => {
           session,
           status: 'authenticated',
           setSessionId,
-        })
-      )
+        }),
+      ),
     );
 
     await act(async () => {
@@ -331,9 +331,7 @@ describe('usePdfSummarize', () => {
       .mockRejectedValueOnce(new Error('403 Forbidden Pro'));
 
     const { result } = renderHook(() =>
-      usePdfSummarize(
-        buildParams({ file: pdfFile, session, status: 'authenticated' })
-      )
+      usePdfSummarize(buildParams({ file: pdfFile, session, status: 'authenticated' })),
     );
 
     await act(async () => {
@@ -342,6 +340,7 @@ describe('usePdfSummarize', () => {
     });
 
     expect(console.warn).not.toHaveBeenCalled();
+    expect(mockedLogError).not.toHaveBeenCalled();
   });
 
   it('warns on generic chat session failure', async () => {
@@ -353,9 +352,7 @@ describe('usePdfSummarize', () => {
       .mockRejectedValueOnce(new Error('network'));
 
     const { result } = renderHook(() =>
-      usePdfSummarize(
-        buildParams({ file: pdfFile, session, status: 'authenticated' })
-      )
+      usePdfSummarize(buildParams({ file: pdfFile, session, status: 'authenticated' })),
     );
 
     await act(async () => {
@@ -364,13 +361,15 @@ describe('usePdfSummarize', () => {
     });
 
     expect(console.warn).toHaveBeenCalled();
+    expect(mockedLogError).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ scope: 'usePdfSummarize.chatBootstrap' }),
+    );
   });
 
   it('shows popup for resolved error message via useMemo + effect', async () => {
     const showError = vi.fn();
-    const { result } = renderHook(() =>
-      usePdfSummarize(buildParams({ showError }))
-    );
+    const { result } = renderHook(() => usePdfSummarize(buildParams({ showError })));
     act(() => {
       result.current.setErrorType('INVALID_TYPE');
     });
@@ -382,9 +381,7 @@ describe('usePdfSummarize', () => {
 
   it('maps customErrorMsg to showError', async () => {
     const showError = vi.fn();
-    const { result } = renderHook(() =>
-      usePdfSummarize(buildParams({ showError }))
-    );
+    const { result } = renderHook(() => usePdfSummarize(buildParams({ showError })));
     act(() => {
       result.current.setCustomErrorMsg('custom');
     });
@@ -397,7 +394,7 @@ describe('usePdfSummarize', () => {
   it('maps SIZE_EXCEEDED with maxBytes in message', async () => {
     const showError = vi.fn();
     const { result } = renderHook(() =>
-      usePdfSummarize(buildParams({ showError, maxBytes: 10 * 1024 * 1024 }))
+      usePdfSummarize(buildParams({ showError, maxBytes: 10 * 1024 * 1024 })),
     );
     act(() => {
       result.current.setErrorType('SIZE_EXCEEDED');
@@ -405,17 +402,13 @@ describe('usePdfSummarize', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(showError).toHaveBeenCalledWith(
-      expect.stringContaining('fileSizeExceeded')
-    );
+    expect(showError).toHaveBeenCalledWith(expect.stringContaining('fileSizeExceeded'));
     expect(showError).toHaveBeenCalledWith(expect.stringContaining('10'));
   });
 
   it('maps PANEL_ERROR', async () => {
     const showError = vi.fn();
-    const { result } = renderHook(() =>
-      usePdfSummarize(buildParams({ showError }))
-    );
+    const { result } = renderHook(() => usePdfSummarize(buildParams({ showError })));
     act(() => result.current.setErrorType('PANEL_ERROR'));
     await act(async () => {
       await Promise.resolve();
@@ -425,9 +418,7 @@ describe('usePdfSummarize', () => {
 
   it('maps UPLOAD_FIRST', async () => {
     const showError = vi.fn();
-    const { result } = renderHook(() =>
-      usePdfSummarize(buildParams({ showError }))
-    );
+    const { result } = renderHook(() => usePdfSummarize(buildParams({ showError })));
     act(() => result.current.setErrorType('UPLOAD_FIRST'));
     await act(async () => {
       await Promise.resolve();
@@ -437,9 +428,7 @@ describe('usePdfSummarize', () => {
 
   it('maps SUMMARY_ERROR', async () => {
     const showError = vi.fn();
-    const { result } = renderHook(() =>
-      usePdfSummarize(buildParams({ showError }))
-    );
+    const { result } = renderHook(() => usePdfSummarize(buildParams({ showError })));
     act(() => result.current.setErrorType('SUMMARY_ERROR'));
     await act(async () => {
       await Promise.resolve();
@@ -449,30 +438,22 @@ describe('usePdfSummarize', () => {
 
   it('maps AUDIO_ERROR', async () => {
     const showError = vi.fn();
-    const { result } = renderHook(() =>
-      usePdfSummarize(buildParams({ showError }))
-    );
+    const { result } = renderHook(() => usePdfSummarize(buildParams({ showError })));
     act(() => result.current.setErrorType('AUDIO_ERROR'));
     await act(async () => {
       await Promise.resolve();
     });
-    expect(showError).toHaveBeenCalledWith(
-      'Seslendirme servisine ulaşılamadı.'
-    );
+    expect(showError).toHaveBeenCalledWith('Seslendirme servisine ulaşılamadı.');
   });
 
   it('maps PDF_GEN_ERROR', async () => {
     const showError = vi.fn();
-    const { result } = renderHook(() =>
-      usePdfSummarize(buildParams({ showError }))
-    );
+    const { result } = renderHook(() => usePdfSummarize(buildParams({ showError })));
     act(() => result.current.setErrorType('PDF_GEN_ERROR'));
     await act(async () => {
       await Promise.resolve();
     });
-    expect(showError).toHaveBeenCalledWith(
-      'PDF oluşturulurken hata meydana geldi.'
-    );
+    expect(showError).toHaveBeenCalledWith('PDF oluşturulurken hata meydana geldi.');
   });
 
   it('does not call showError when error is NONE', async () => {
@@ -500,8 +481,8 @@ describe('usePdfSummarize', () => {
           session,
           status: 'authenticated',
           setSessionId,
-        })
-      )
+        }),
+      ),
     );
 
     await act(async () => {
@@ -530,8 +511,8 @@ describe('usePdfSummarize', () => {
           session,
           status: 'authenticated',
           setSessionId,
-        })
-      )
+        }),
+      ),
     );
 
     await act(async () => {
@@ -557,8 +538,8 @@ describe('usePdfSummarize', () => {
           session,
           status: 'authenticated',
           setSessionId,
-        })
-      )
+        }),
+      ),
     );
 
     await act(async () => {
@@ -571,7 +552,7 @@ describe('usePdfSummarize', () => {
     expect(mockedSendRequest).not.toHaveBeenCalledWith(
       '/files/chat/start-from-text',
       'POST',
-      expect.anything()
+      expect.anything(),
     );
   });
 
@@ -590,8 +571,8 @@ describe('usePdfSummarize', () => {
           session,
           status: 'authenticated',
           setSessionId,
-        })
-      )
+        }),
+      ),
     );
 
     await act(async () => {

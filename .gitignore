@@ -57,6 +57,11 @@ NeuroPDF_Final_Report.md
 .DS_Store
 Thumbs.db
 
+# === Local debug / merge artifacts (do not commit) ===
+*.patch
+*.orig
+*.rej
+stash-backup*
 
 backend/uploads/
-backend/static/avatars/
+backend/static/avatars/backend/app/static/avatars/test-user-id/

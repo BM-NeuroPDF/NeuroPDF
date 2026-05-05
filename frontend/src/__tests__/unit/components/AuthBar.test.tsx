@@ -185,9 +185,7 @@ describe('AuthBar', () => {
       renderWithProvider(<AuthBar />);
 
       // Profil butonu içinde SVG ikonu olmalı
-      const profileButton = screen
-        .getByText(/Profilim|My Profile/i)
-        .closest('button');
+      const profileButton = screen.getByText(/Profilim|My Profile/i).closest('button');
       const svgIcon = profileButton?.querySelector('svg');
       expect(svgIcon).toBeInTheDocument();
     });
@@ -217,9 +215,7 @@ describe('AuthBar', () => {
 
       renderWithProvider(<AuthBar />);
 
-      const profileButton = screen
-        .getByText(/Profilim|My Profile/i)
-        .closest('button');
+      const profileButton = screen.getByText(/Profilim|My Profile/i).closest('button');
       expect(profileButton).toHaveClass('flex');
     });
 

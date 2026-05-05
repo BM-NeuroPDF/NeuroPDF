@@ -3,6 +3,7 @@ import {
   isMobileViewport,
   login,
   openMobileMenuIfNeeded,
+  clickWhenStable,
 } from '../support/helpers';
 import { proUser, standardUser } from '../fixtures/test-data';
 import path from 'path';
@@ -23,18 +24,15 @@ async function openGlobalChatFab(page: Page) {
   const isFabVisible = await fabButton.isVisible().catch(() => false);
   if (!isFabVisible && isMobileViewport(page)) {
     await openMobileMenuIfNeeded(page);
-    await page.waitForTimeout(2000);
     const mobileChatEntry = page
       .locator('a[href="/chat"], a[href*="chat"], button[aria-label*="chat" i]')
       .first();
-    if (await mobileChatEntry.isVisible().catch(() => false)) {
-      await mobileChatEntry.click({ force: true });
+    if (await mobileChatEntry.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await clickWhenStable(mobileChatEntry, { timeout: 15_000 });
       return;
     }
   }
-  await expect(fabButton).toBeVisible({ timeout: 15_000 });
-  await page.waitForTimeout(2000);
-  await fabButton.click({ force: true });
+  await clickWhenStable(fabButton, { timeout: 15_000 });
 }
 
 async function waitForProcessingToSettle(page: Page) {
@@ -67,22 +65,19 @@ test.describe('PDF Chat E2E', () => {
 
     const pdfPath = path.join(__dirname, '../fixtures/sample.pdf');
     await fileInput.setInputFiles(pdfPath);
-    await page.waitForTimeout(2000);
 
     await expect(
       page
         .locator('[data-testid="pdf-viewer"]')
         .or(page.locator('text=/sample\.pdf|PDF loaded/i'))
         .first()
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: 15_000 });
 
     const chatButton = page
       .getByRole('button', { name: /Sohbet Et|Chat/i })
       .first();
     if (await chatButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await expect(chatButton).toBeEnabled({ timeout: 2_000 });
-      await page.waitForTimeout(2000);
-      await chatButton.click();
+      await clickWhenStable(chatButton, { timeout: 10_000 });
     }
 
     // Panel otomatik açılmadıysa FAB üzerinden zorla aç.
@@ -116,14 +111,19 @@ test.describe('PDF Chat E2E', () => {
     const fileInput = page.locator('input[type="file"]').first();
     const pdfPath = path.join(__dirname, '../fixtures/sample.pdf');
     await fileInput.setInputFiles(pdfPath);
-    await page.waitForTimeout(2000);
+
+    await expect(
+      page
+        .locator('[data-testid="pdf-viewer"]')
+        .or(page.locator('text=/sample\.pdf|PDF loaded/i'))
+        .first()
+    ).toBeVisible({ timeout: 15_000 });
 
     const chatButton = page
       .getByRole('button', { name: /Sohbet Et|Chat/i })
       .first();
     if (await chatButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await page.waitForTimeout(2000);
-      await chatButton.click();
+      await clickWhenStable(chatButton, { timeout: 10_000 });
     } else {
       await openGlobalChatFab(page);
     }

@@ -32,9 +32,7 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     const message =
-      error instanceof Error
-        ? error.message
-        : 'Proxy request failed for /files/chat/start';
+      error instanceof Error ? error.message : 'Proxy request failed for /files/chat/start';
     return new Response(JSON.stringify({ detail: message }), {
       status: 502,
       headers: { 'content-type': 'application/json' },

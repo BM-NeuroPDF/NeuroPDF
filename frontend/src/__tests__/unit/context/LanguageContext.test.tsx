@@ -248,9 +248,7 @@ describe('LanguageContext', () => {
     it('should handle localStorage errors gracefully', () => {
       // localStorage.setItem'ı mock'la ve hata fırlat
       const originalSetItem = localStorageMock.setItem;
-      const consoleErrorSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => {});
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       localStorageMock.setItem = vi.fn(() => {
         throw new Error('Storage error');
@@ -294,9 +292,7 @@ describe('LanguageContext', () => {
 
   describe('useLanguage guard', () => {
     it('throws when used outside LanguageProvider', () => {
-      expect(() => renderHook(() => useLanguage())).toThrow(
-        /LanguageProvider/i
-      );
+      expect(() => renderHook(() => useLanguage())).toThrow(/LanguageProvider/i);
     });
   });
 });

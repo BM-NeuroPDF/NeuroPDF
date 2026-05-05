@@ -140,11 +140,7 @@ class PDFService {
    * Extract Pages
    * Download sonrası guest usage artır
    */
-  async extractPages(
-    file: File,
-    pageRange: string,
-    apiToken?: string | null
-  ): Promise<void> {
+  async extractPages(file: File, pageRange: string, apiToken?: string | null): Promise<void> {
     const apiBaseUrl = resolveApiBaseUrl();
     const isLoggedIn = !!apiToken;
     const formData = new FormData();
@@ -240,7 +236,7 @@ class PDFService {
   async saveProcessed(
     blob: Blob,
     filename: string,
-    apiToken?: string | null
+    apiToken?: string | null,
   ): Promise<SaveProcessedResponse> {
     const apiBaseUrl = resolveApiBaseUrl();
     if (!apiToken) {
@@ -274,7 +270,7 @@ class PDFService {
   async createPdfFromMarkdown(
     markdown: string,
     filename: string = 'summary.pdf',
-    apiToken?: string | null
+    apiToken?: string | null,
   ): Promise<void> {
     const apiBaseUrl = resolveApiBaseUrl();
     const isLoggedIn = !!apiToken;
@@ -293,9 +289,7 @@ class PDFService {
 
     if (!response.ok) {
       const error = await response.json().catch(() => null);
-      throw new Error(
-        error?.detail || `Markdown PDF failed: ${response.status}`
-      );
+      throw new Error(error?.detail || `Markdown PDF failed: ${response.status}`);
     }
 
     const blob = await response.blob();

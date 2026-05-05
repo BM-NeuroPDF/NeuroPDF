@@ -1,4 +1,5 @@
 import { resolveApiBaseUrl } from '@/utils/api';
+import { logError } from '@/utils/logger';
 
 interface GuestSession {
   guest_id: string;
@@ -41,12 +42,9 @@ class GuestService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(
-          '❌ Session creation failed:',
-          response.status,
-          errorText
+        throw new Error(
+          `Failed to create guest session status=${response.status} ${errorText.slice(0, 300)}`,
         );
-        throw new Error('Failed to create guest session');
       }
 
       const data: GuestSession = await response.json();
@@ -58,7 +56,7 @@ class GuestService {
 
       return data;
     } catch (error) {
-      console.error('❌ Error creating guest session:', error);
+      logError(error, { scope: 'guestService.createSession' });
       throw error;
     }
   }
@@ -90,14 +88,15 @@ class GuestService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ Usage check failed:', response.status, errorText);
-        throw new Error('Failed to check usage');
+        throw new Error(
+          `Failed to check usage status=${response.status} ${errorText.slice(0, 300)}`,
+        );
       }
 
       const result = await response.json();
       return result;
     } catch (error) {
-      console.error('❌ Error checking guest usage:', error);
+      logError(error, { scope: 'guestService.checkUsage' });
       throw error;
     }
   }
@@ -119,14 +118,13 @@ class GuestService {
 
       if (!response.ok) {
         const error = await response.json();
-        console.error('❌ Increment failed:', error);
         throw new Error(error.detail || 'Usage limit reached');
       }
 
       const result = await response.json();
       return result;
     } catch (error) {
-      console.error('❌ Error incrementing usage:', error);
+      logError(error, { scope: 'guestService.incrementUsage' });
       throw error;
     }
   }
@@ -151,7 +149,7 @@ class GuestService {
 
       this.guestId = null;
     } catch (error) {
-      console.error('❌ Error clearing guest session:', error);
+      logError(error, { scope: 'guestService.clearSession' });
     }
   }
 
@@ -164,7 +162,7 @@ class GuestService {
     // NextAuth session bilgisini kontrol et
     // Bu bilgi client component'lerde useSession() ile alınmalı
     console.warn(
-      '⚠️ guestService.isLoggedIn() deprecated. Use useSession() from next-auth/react instead.'
+      '⚠️ guestService.isLoggedIn() deprecated. Use useSession() from next-auth/react instead.',
     );
 
     return false;

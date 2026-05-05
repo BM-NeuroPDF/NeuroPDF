@@ -14,10 +14,10 @@ const summarizeMarkdownChunkLoading = () => (
   <div className="animate-pulse bg-gray-200 rounded h-48" />
 );
 
-const DynamicMarkdownViewer = dynamic(
-  () => import('@/components/MarkdownViewer'),
-  { ssr: false, loading: summarizeMarkdownChunkLoading }
-);
+const DynamicMarkdownViewer = dynamic(() => import('@/components/MarkdownViewer'), {
+  ssr: false,
+  loading: summarizeMarkdownChunkLoading,
+});
 
 export interface SummaryResultPanelProps {
   summary: string;
@@ -49,8 +49,7 @@ export function SummaryResultPanel({
   t,
   markdownViewer: MarkdownViewerComp = DynamicMarkdownViewer,
 }: SummaryResultPanelProps) {
-  const isProUser =
-    userRole?.toLowerCase() === 'pro' || userRole?.toLowerCase() === 'pro user';
+  const isProUser = userRole?.toLowerCase() === 'pro' || userRole?.toLowerCase() === 'pro user';
 
   return (
     <div className="mt-6 space-y-6" data-filename={file?.name ?? ''}>
@@ -180,8 +179,7 @@ export function SummaryResultPanel({
               </svg>
               {isProUser
                 ? t('chatButton' as keyof typeof translations.tr) || 'Sohbet Et'
-                : t('upgradeToChat' as keyof typeof translations.tr) ||
-                  "Sohbet için Pro'ya geç"}
+                : t('upgradeToChat' as keyof typeof translations.tr) || "Sohbet için Pro'ya geç"}
             </button>
           ) : null}
 
@@ -198,11 +196,7 @@ export function SummaryResultPanel({
               stroke="currentColor"
               className="w-5 h-5"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 4.5v15m7.5-7.5h-15"
-              />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
             {t('newProcess') || 'Yeni İşlem'}
           </button>

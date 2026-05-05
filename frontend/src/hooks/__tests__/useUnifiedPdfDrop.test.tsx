@@ -4,14 +4,12 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { useUnifiedPdfDrop } from '../useUnifiedPdfDrop';
 
-type UnifiedRootProps = ReturnType<
-  ReturnType<typeof useUnifiedPdfDrop>['getRootProps']
->;
+type UnifiedRootProps = ReturnType<ReturnType<typeof useUnifiedPdfDrop>['getRootProps']>;
 
 const panelFile = new File(['%PDF'], 'panel.pdf', { type: 'application/pdf' });
 
 vi.mock('@/context/PdfContext', () => ({
-  usePdf: () => ({
+  usePdfData: () => ({
     pdfFile: panelFile,
     pdfList: [panelFile],
   }),
@@ -60,8 +58,7 @@ describe('useUnifiedPdfDrop', () => {
     render(<Probe />);
     captured.root?.onDropCapture?.({
       dataTransfer: {
-        getData: (mime: string) =>
-          mime === 'application/x-neuro-pdf' ? 'not-json{' : '',
+        getData: (mime: string) => (mime === 'application/x-neuro-pdf' ? 'not-json{' : ''),
       },
       preventDefault: vi.fn(),
       stopPropagation: vi.fn(),
@@ -85,9 +82,7 @@ describe('useUnifiedPdfDrop', () => {
     captured.root?.onDropCapture?.({
       dataTransfer: {
         getData: (mime: string) =>
-          mime === 'application/x-neuro-pdf'
-            ? JSON.stringify({ name: 'panel.pdf' })
-            : '',
+          mime === 'application/x-neuro-pdf' ? JSON.stringify({ name: 'panel.pdf' }) : '',
       },
       preventDefault,
       stopPropagation,
@@ -112,9 +107,7 @@ describe('useUnifiedPdfDrop', () => {
       );
     }
     render(<Probe />);
-    const input = document.querySelector(
-      '[data-testid="inp"]'
-    ) as HTMLInputElement;
+    const input = document.querySelector('[data-testid="inp"]') as HTMLInputElement;
     await user.upload(input, pdf);
     expect(onFiles).toHaveBeenCalled();
   });
@@ -135,7 +128,7 @@ describe('useUnifiedPdfDrop', () => {
         dataTransfer: { getData: () => '' },
         preventDefault: vi.fn(),
         stopPropagation: vi.fn(),
-      } as unknown as React.DragEvent<HTMLDivElement>)
+      } as unknown as React.DragEvent<HTMLDivElement>),
     ).not.toThrow();
   });
 });

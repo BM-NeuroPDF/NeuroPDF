@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { sendRequest } from '@/utils/api';
+import type { Session } from 'next-auth';
+import {
+  sendRequest,
+  type ChatGeneralStartResponse,
+  type ChatStartFromTextResponse,
+} from '@/utils/api';
 import type { Message } from '@/context/PdfContext';
+import { useUserStats, type UserStats } from '@/hooks/useUserStats';
 
 type UseChatSessionBootstrapParams<K extends string> = {
   session: {
@@ -28,10 +34,7 @@ type UseChatSessionBootstrapParams<K extends string> = {
   setActiveSessionDbId: (id: string | null) => void;
   setPdfChatMessages: Dispatch<SetStateAction<Message[]>>;
   setGeneralChatMessages: Dispatch<SetStateAction<Message[]>>;
-  makeAssistantMessage: (
-    key: string,
-    params?: Record<string, string>
-  ) => Message;
+  makeAssistantMessage: (key: string, params?: Record<string, string>) => Message;
   loadChatSessions: () => Promise<void>;
   setInitializing: Dispatch<SetStateAction<boolean>>;
 };
@@ -60,10 +63,13 @@ export function useChatSessionBootstrap<K extends string>({
   setInitializing,
 }: UseChatSessionBootstrapParams<K>) {
   const [userRole, setUserRole] = useState<string | null>(null);
-  const [isRoleLoading, setIsRoleLoading] = useState(true);
+  const [isRoleLoading, setIsRoleLoading] = useState(status === 'loading');
   const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
-  const isProUser =
-    userRole?.toLowerCase() === 'pro' || userRole?.toLowerCase() === 'pro user';
+  const { data: statsData, isLoading: statsLoading } = useUserStats(
+    session as Session | null,
+    status,
+  );
+  const isProUser = userRole?.toLowerCase() === 'pro' || userRole?.toLowerCase() === 'pro user';
 
   const activeSessionId = pdfSessionId || generalSessionId;
 
@@ -71,7 +77,7 @@ export function useChatSessionBootstrap<K extends string>({
     if (activeSessionId) return;
     setInitializing(true);
     try {
-      const res = await sendRequest('/files/chat/general/start', 'POST', {
+      const res = await sendRequest<ChatGeneralStartResponse>('/files/chat/general/start', 'POST', {
         llm_provider: 'cloud',
         mode: 'flash',
         language: language,
@@ -108,24 +114,27 @@ export function useChatSessionBootstrap<K extends string>({
     (async () => {
       setInitializing(true);
       try {
-        let chatRes: { session_id?: string; db_session_id?: string } | null =
-          null;
+        let chatRes: ChatStartFromTextResponse | null = null;
         if (existingDocumentId) {
-          chatRes = await sendRequest('/files/chat/start-from-text', 'POST', {
-            pdf_text: ' ',
-            filename: pdfFile.name,
-            pdf_id: existingDocumentId,
-            language: language,
-          });
+          chatRes = await sendRequest<ChatStartFromTextResponse>(
+            '/files/chat/start-from-text',
+            'POST',
+            {
+              pdf_text: ' ',
+              filename: pdfFile.name,
+              pdf_id: existingDocumentId,
+              language: language,
+            },
+          );
         } else {
           const formData = new FormData();
           formData.append('file', pdfFile);
           formData.append('language', language);
-          chatRes = await sendRequest(
+          chatRes = await sendRequest<ChatStartFromTextResponse>(
             '/files/chat/start',
             'POST',
             formData,
-            true
+            true,
           );
         }
         if (cancelled) return;
@@ -136,9 +145,7 @@ export function useChatSessionBootstrap<K extends string>({
             setActiveSessionDbId(chatRes.db_session_id);
           }
           void loadChatSessions();
-          setPdfChatMessages([
-            makeAssistantMessage('chatWelcomePdf', { name: pdfFile.name }),
-          ]);
+          setPdfChatMessages([makeAssistantMessage('chatWelcomePdf', { name: pdfFile.name })]);
         }
       } catch (e) {
         if (!cancelled) console.error('PDF chat otomatik başlatma hatası:', e);
@@ -165,56 +172,32 @@ export function useChatSessionBootstrap<K extends string>({
   ]);
 
   useEffect(() => {
-    const fetchUserRole = async () => {
-      if (status === 'loading' || status === 'unauthenticated') {
-        setIsRoleLoading(status === 'loading');
-        setUserRole(null);
-        return;
+    if (status === 'unauthenticated') {
+      setUserRole(null);
+      setIsRoleLoading(false);
+      return;
+    }
+    setUserRole(statsData?.role ?? null);
+    setIsRoleLoading(status === 'loading' || statsLoading);
+  }, [statsData?.role, statsLoading, status]);
+
+  useEffect(() => {
+    if (status !== 'authenticated' || statsData?.role) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await sendRequest<UserStats>('/files/user/stats', 'GET');
+        if (!cancelled) setUserRole(data?.role ?? null);
+      } catch {
+        if (!cancelled) setUserRole(null);
+      } finally {
+        if (!cancelled) setIsRoleLoading(false);
       }
-      if (!session) {
-        setIsRoleLoading(false);
-        setUserRole(null);
-        return;
-      }
-
-      setIsRoleLoading(true);
-      const maxAttempts = 3;
-      let attempt = 0;
-      while (attempt < maxAttempts) {
-        attempt += 1;
-        try {
-          const data = await sendRequest('/files/user/stats', 'GET');
-          setUserRole(data?.role ?? null);
-          setIsRoleLoading(false);
-          return;
-        } catch (error: unknown) {
-          const msg =
-            error && typeof error === 'object' && 'message' in error
-              ? String((error as { message?: string }).message)
-              : '';
-          const isAuthExpired =
-            msg.includes('Oturum süreniz dolmuş') ||
-            msg.includes('expired') ||
-            msg.includes('401');
-
-          if (isAuthExpired) {
-            setUserRole(null);
-            setIsRoleLoading(false);
-            return;
-          }
-
-          if (attempt < maxAttempts) {
-            await new Promise((r) => setTimeout(r, 1200));
-            continue;
-          }
-
-          console.error('Rol kontrolü hatası (retry bitti):', error);
-          setIsRoleLoading(false);
-        }
-      }
+    })();
+    return () => {
+      cancelled = true;
     };
-    void fetchUserRole();
-  }, [session, status]);
+  }, [status, statsData?.role]);
 
   const userId = session?.user?.id ?? null;
 
@@ -224,10 +207,7 @@ export function useChatSessionBootstrap<K extends string>({
     let cancelled = false;
     (async () => {
       try {
-        const blob = (await sendRequest(
-          `/api/v1/user/${uid}/avatar`,
-          'GET'
-        )) as Blob;
+        const blob = await sendRequest<Blob>(`/api/v1/user/${uid}/avatar`, 'GET');
         if (cancelled) return;
         if (blob && blob.size > 0) {
           setAvatarSrc((prev) => {

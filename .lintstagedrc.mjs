@@ -29,7 +29,7 @@ export default {
       `npx prettier --write ${prettierArgs}`,
     ];
   },
-  'frontend/**/*.{css,json}': (filenames) => {
+  'frontend/**/*.{css,json,md}': (filenames) => {
     if (filenames.length === 0) return [];
     const args = filenames.map((f) => shellQuote(path.resolve(__dirname, f))).join(' ');
     return [`npx prettier --write ${args}`];

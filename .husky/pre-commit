@@ -1,2 +1,12 @@
 #!/usr/bin/env sh
+
+# Block accidental commits of local patches, conflict rejects, stash dumps.
+bad="$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(patch|orig|rej)$|stash-backup' || true)"
+if [ -n "$bad" ]; then
+  printf '%s\n' "error: refusing to commit local/debug artifacts:" >&2
+  printf '%s\n' "$bad" >&2
+  printf '%s\n' "  See README → “Local debug artifacts”. Keep these outside the repo (e.g. ~/.local/state/)." >&2
+  exit 1
+fi
+
 npx lint-staged

@@ -14,6 +14,11 @@ from sqlalchemy.engine import URL
 from fastapi.testclient import TestClient
 from unittest.mock import MagicMock
 from typing import Generator
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Ensure backend/.env is loaded before any os.getenv(...) lookups below.
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 # Ortam: Supabase kapalı; gerçek Postgres URL'si TEST_DB_* / DB_* ile (varsayılan DB: neuropdf_test)
 os.environ["USE_SUPABASE"] = "false"

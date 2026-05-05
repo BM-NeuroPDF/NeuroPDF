@@ -1,26 +1,43 @@
-# Adım 1: Temel İmaj Seçimi
-# Python backend için 3.11 slim tabanlı imaj
-FROM python:3.13.2-slim
+FROM python:3.13.2-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /build
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends gcc build-essential libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Adım 2: Çalışma dizini
+COPY requirements.runtime.txt .
+RUN pip wheel --wheel-dir /wheels -r requirements.runtime.txt
+
+FROM python:3.13.2-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
 WORKDIR /app
 
-# Adım 3: Gereksinimleri kopyala ve yükle
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl libpq5 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Adım 4: Uygulama kodunu kopyala
+COPY --from=builder /wheels /wheels
+COPY requirements.runtime.txt .
+RUN pip install --no-index --find-links=/wheels -r requirements.runtime.txt \
+    && rm -rf /wheels
+
 COPY . .
 
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 USER appuser
 
-# Adım 5: Backend portunu aç (FastAPI için örnek 8000)
 EXPOSE 8000
 
-# Adım 6: Sunucuyu başlat
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8000/health/ready || exit 1
+
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

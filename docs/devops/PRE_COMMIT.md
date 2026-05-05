@@ -1,6 +1,8 @@
 # Pre-commit hooks (Husky + lint-staged)
 
-Kök dizinde `npm install` çalıştırdığınızda `prepare` script’i Husky’yi kurar ve `.husky/pre-commit` her `git commit` öncesinde **`npx lint-staged`** çalıştırır.
+Kök dizinde `npm install` çalıştırdığınızda `prepare` script’i Husky’yi kurar ve `.husky/pre-commit` her `git commit` öncesinde önce **yerel artefakt kontrolü** yapar, ardından **`npx lint-staged`** çalıştırır.
+
+**Artefakt guard:** `*.patch`, `*.orig`, `*.rej` ve adı `stash-backup` içeren yollar stage’deyse commit reddedilir (bkz. README, “Local debug artifacts”).
 
 ## Ne yapılır?
 

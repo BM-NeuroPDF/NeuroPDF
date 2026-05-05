@@ -5,10 +5,12 @@ import os
 import random
 import time
 import uuid
+from collections.abc import Iterator
 from fastapi import HTTPException
 
 import google.generativeai as genai
 from ..config import settings
+from .local_llm_service import stream_openai_compatible_chat
 
 flash_model = None
 pro_model = None
@@ -46,6 +48,16 @@ def _gemini_via_local_openai(text_content: str, prompt_instruction: str) -> str:
         instruction=prompt_instruction,
     )
     return (r.get("answer") or r.get("summary") or "").strip()
+
+
+def _gemini_via_local_openai_stream(
+    text_content: str, prompt_instruction: str
+) -> Iterator[str]:
+    messages = [
+        {"role": "system", "content": prompt_instruction},
+        {"role": "user", "content": text_content},
+    ]
+    yield from stream_openai_compatible_chat(messages)
 
 
 # ==========================================
@@ -200,6 +212,41 @@ def gemini_generate(
         )
     except HTTPException:
         raise
+    except Exception as e:
+        if _is_quota_or_rate_limit_error(e):
+            raise HTTPException(
+                status_code=429, detail=f"Gemini servis yoğunluğu: {str(e)}"
+            )
+        raise HTTPException(status_code=500, detail=f"Gemini servisinde hata: {str(e)}")
+
+
+def gemini_generate_stream(
+    text_content: str,
+    prompt_instruction: str,
+    mode: str = "flash",
+    language: str = "tr",
+) -> Iterator[str]:
+    if _local_llm_configured():
+        if not text_content:
+            raise HTTPException(status_code=400, detail="Boş içerik gönderildi.")
+        yield from _gemini_via_local_openai_stream(text_content, prompt_instruction)
+        return
+
+    _require_cloud()
+    if not text_content:
+        raise HTTPException(status_code=400, detail="Boş içerik gönderildi.")
+    MAX_TEXT_LENGTH = 50000
+    if len(text_content) > MAX_TEXT_LENGTH:
+        text_content = text_content[:MAX_TEXT_LENGTH]
+    text_label = "TEXT" if language == "en" else "METİN"
+    full_prompt = f"{prompt_instruction}\n\n{text_label}:\n---\n{text_content}\n---"
+    model = flash_model if mode == "flash" else pro_model
+    try:
+        response = model.generate_content(full_prompt, stream=True)
+        for chunk in response:
+            txt = getattr(chunk, "text", "") or ""
+            if txt:
+                yield txt
     except Exception as e:
         if _is_quota_or_rate_limit_error(e):
             raise HTTPException(

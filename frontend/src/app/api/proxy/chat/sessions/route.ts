@@ -18,14 +18,11 @@ function buildProxyHeaders(incoming: Headers): Headers {
 
 export async function GET(req: Request) {
   try {
-    const backendResponse = await fetch(
-      `${backendBaseUrl}/files/chat/sessions`,
-      {
-        method: 'GET',
-        headers: buildProxyHeaders(req.headers),
-        cache: 'no-store',
-      }
-    );
+    const backendResponse = await fetch(`${backendBaseUrl}/files/chat/sessions`, {
+      method: 'GET',
+      headers: buildProxyHeaders(req.headers),
+      cache: 'no-store',
+    });
 
     return new Response(backendResponse.body, {
       status: backendResponse.status,
@@ -34,9 +31,7 @@ export async function GET(req: Request) {
     });
   } catch (error) {
     const message =
-      error instanceof Error
-        ? error.message
-        : 'Proxy request failed for /files/chat/sessions';
+      error instanceof Error ? error.message : 'Proxy request failed for /files/chat/sessions';
     return new Response(JSON.stringify({ detail: message }), {
       status: 502,
       headers: { 'content-type': 'application/json' },

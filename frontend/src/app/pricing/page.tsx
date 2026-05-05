@@ -4,8 +4,8 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
-import { sendRequest } from '@/utils/api';
 import { translations } from '@/utils/translations';
+import { useUserStats } from '@/hooks/useUserStats';
 
 type FeatureKey =
   | 'monthlyUpload'
@@ -16,9 +16,10 @@ type FeatureKey =
   | 'prioritySupport';
 
 export default function PricingPage() {
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const { t } = useLanguage();
   const router = useRouter();
+  const { data: statsData, isLoading: statsLoading } = useUserStats(session ?? null, status);
 
   // Rol durumunu state'te tutuyoruz
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -26,25 +27,16 @@ export default function PricingPage() {
 
   // ✅ Backend'den Güncel Rolü Çekme
   useEffect(() => {
-    const fetchUserRole = async () => {
-      if (status === 'authenticated') {
-        try {
-          const data = await sendRequest('/files/user/stats');
-          setUserRole(data.role);
-        } catch (error) {
-          console.error('Rol bilgisi alınamadı:', error);
-          setUserRole('Standart');
-        } finally {
-          setLoading(false);
-        }
-      } else if (status === 'unauthenticated') {
-        setUserRole('Guest');
-        setLoading(false);
-      }
-    };
-
-    fetchUserRole();
-  }, [status]);
+    if (status === 'authenticated') {
+      setUserRole(statsData?.role ?? 'Standart');
+      setLoading(statsLoading);
+      return;
+    }
+    if (status === 'unauthenticated') {
+      setUserRole('Guest');
+      setLoading(false);
+    }
+  }, [status, statsData?.role, statsLoading]);
 
   // --- ÖZELLİK LİSTESİ ---
   const features: Array<{
@@ -110,9 +102,7 @@ export default function PricingPage() {
                 {t('currentPlan') || 'Mevcut Plan'}
               </div>
             )}
-            <h3 className="text-xl font-bold mb-2 text-gray-500">
-              {t('planGuest') || 'Misafir'}
-            </h3>
+            <h3 className="text-xl font-bold mb-2 text-gray-500">{t('planGuest') || 'Misafir'}</h3>
             <div className="text-4xl font-extrabold mb-6 text-[var(--foreground)]">
               ₺0<span className="text-lg font-normal opacity-50">/mo</span>
             </div>

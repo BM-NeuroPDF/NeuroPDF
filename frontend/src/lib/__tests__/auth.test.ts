@@ -2,9 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Session } from 'next-auth';
 import { authOptions } from '../auth';
 
-type JwtCallbackArg = Parameters<
-  NonNullable<NonNullable<typeof authOptions.callbacks>['jwt']>
->[0];
+type JwtCallbackArg = Parameters<NonNullable<NonNullable<typeof authOptions.callbacks>['jwt']>>[0];
 type SessionCallbackArg = Parameters<
   NonNullable<NonNullable<typeof authOptions.callbacks>['session']>
 >[0];
@@ -79,9 +77,7 @@ describe('CredentialsProvider authorize', () => {
     vi.stubEnv('BACKEND_API_URL', 'http://api.test/');
     const authorize = getCredentialsAuthorize();
     const mockFetch = vi.mocked(fetch);
-    mockFetch.mockResolvedValue(
-      new Response(JSON.stringify({}), { status: 400 })
-    );
+    mockFetch.mockResolvedValue(new Response(JSON.stringify({}), { status: 400 }));
 
     await authorize({
       email: 'u@test.com',
@@ -89,10 +85,7 @@ describe('CredentialsProvider authorize', () => {
       tempToken: 'tok',
     } as Record<string, string>);
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      'http://api.test/auth/verify-2fa',
-      expect.any(Object)
-    );
+    expect(mockFetch).toHaveBeenCalledWith('http://api.test/auth/verify-2fa', expect.any(Object));
   });
 
   it('returns user data when verify-2fa succeeds', async () => {
@@ -108,8 +101,8 @@ describe('CredentialsProvider authorize', () => {
           access_token: 'jwt',
           eula_accepted: true,
         }),
-        { status: 200 }
-      )
+        { status: 200 },
+      ),
     );
 
     const result = (await authorize({
@@ -138,8 +131,8 @@ describe('CredentialsProvider authorize', () => {
           access_token: 't',
           eula_accepted: false,
         }),
-        { status: 200 }
-      )
+        { status: 200 },
+      ),
     );
 
     const result = (await authorize({
@@ -193,9 +186,7 @@ describe('CredentialsProvider authorize', () => {
       tempToken: '2',
     } as Record<string, string>);
 
-    expect(vi.mocked(fetch).mock.calls[0][0]).toBe(
-      'http://localhost:8000/auth/verify-2fa'
-    );
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe('http://localhost:8000/auth/verify-2fa');
   });
 });
 
@@ -244,8 +235,8 @@ describe('authOptions.callbacks.jwt', () => {
           user_id: 'g1',
           eula_accepted: false,
         }),
-        { status: 200 }
-      )
+        { status: 200 },
+      ),
     );
 
     const token: Record<string, unknown> = {};
@@ -264,7 +255,7 @@ describe('authOptions.callbacks.jwt', () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ id_token: 'google-id' }),
-      })
+      }),
     );
     expect(out.accessToken).toBe('api-jwt');
     expect(out.userId).toBe('g1');

@@ -162,7 +162,7 @@ describe('LanguageSwitcher', () => {
         <div>
           <LanguageSwitcher />
           <div data-testid="outside">Outside Element</div>
-        </div>
+        </div>,
       );
 
       const button = screen.getByText('TR').closest('button');
@@ -185,9 +185,7 @@ describe('LanguageSwitcher', () => {
       await user.click(button!);
       expect(screen.getAllByText('TR').length).toBe(2);
 
-      const dropdown = screen
-        .getAllByText('TR')[1]
-        .closest('div[class*="absolute"]');
+      const dropdown = screen.getAllByText('TR')[1].closest('div[class*="absolute"]');
 
       expect(dropdown).toBeInTheDocument();
     });

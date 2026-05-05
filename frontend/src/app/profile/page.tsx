@@ -6,13 +6,11 @@ import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { useLanguage } from '@/context/LanguageContext';
 import { swrFetcher } from '@/utils/api';
-import { usePdf } from '@/context/PdfContext';
+import { usePdfActions } from '@/context/PdfContext';
 import { useProfileAvatar } from '@/hooks/useProfileAvatar';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { DeleteAccountModal } from '@/components/DeleteAccountModal';
-import {
-  LlmPreferenceCard,
-  type LlmChoiceData,
-} from '@/components/LlmPreferenceCard';
+import { LlmPreferenceCard, type LlmChoiceData } from '@/components/LlmPreferenceCard';
 import { ProfileHeroCard } from '@/components/ProfileHeroCard';
 import { ProfileStatsCards } from '@/components/ProfileStatsCards';
 import { AccountSettingsSection } from '@/components/AccountSettingsSection';
@@ -31,7 +29,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const { t } = useLanguage();
 
-  const { savePdf } = usePdf();
+  const { savePdf } = usePdfActions();
   useEffect(() => {
     savePdf(null);
   }, [savePdf]);
@@ -47,9 +45,11 @@ export default function ProfilePage() {
     role: string;
   }>(status === 'authenticated' ? '/files/user/stats' : null, swrFetcher);
 
+  useCurrentUser(status === 'authenticated' && !!session?.user);
+
   const { data: llmData, mutate: mutateLlm } = useSWR<LlmChoiceData>(
     status === 'authenticated' ? '/files/user/llm-choice' : null,
-    swrFetcher
+    swrFetcher,
   );
 
   const [mounted, setMounted] = useState(false);
@@ -101,9 +101,7 @@ export default function ProfilePage() {
       />
 
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl tracking-tight">
-          {t('profileTitle') || 'Profilim'}
-        </h1>
+        <h1 className="text-3xl tracking-tight">{t('profileTitle') || 'Profilim'}</h1>
         <button
           type="button"
           onClick={() => router.back()}

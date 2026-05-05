@@ -1,24 +1,24 @@
-"use client";
+'use client';
 
-import { useState } from "react";
+import { useState } from 'react';
 
 export function usePopup() {
   const [popup, setPopup] = useState({
     open: false,
-    type: "info" as "error" | "info" | "success",
-    message: "",
+    type: 'info' as 'error' | 'info' | 'success',
+    message: '',
   });
 
   const showError = (message: string) => {
-    setPopup({ open: true, type: "error", message });
+    setPopup({ open: true, type: 'error', message });
   };
 
   const showInfo = (message: string) => {
-    setPopup({ open: true, type: "info", message });
+    setPopup({ open: true, type: 'info', message });
   };
 
   const showSuccess = (message: string) => {
-    setPopup({ open: true, type: "success", message });
+    setPopup({ open: true, type: 'success', message });
   };
 
   const close = () => {

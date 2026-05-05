@@ -5,7 +5,7 @@ Prompt injection kontrolleri: kullanıcı girdisinin sistem prompt'unu bozmadı�
 import pytest
 
 pytestmark = [pytest.mark.llm_mock]
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from app.services.llm_manager import (
     summarize_text,

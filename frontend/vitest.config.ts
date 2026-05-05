@@ -47,6 +47,7 @@ export default defineConfig({
          * ana akışlar mevcut bileşen + E2E testleriyle doğrulanır.
          */
         'src/components/ProGlobalChat.tsx',
+        'src/components/ProGlobalChatGate.tsx',
         'src/components/ProGlobalChatFab.tsx',
         /**
          * ProGlobalChat ile birlikte kullanılan istemci orkestrasyon kancaları;

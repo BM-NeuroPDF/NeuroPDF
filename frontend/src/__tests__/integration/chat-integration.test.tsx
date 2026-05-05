@@ -8,11 +8,7 @@ vi.mock('react-markdown', () => {
   const React = require('react');
   return {
     default: (props: { children?: string }) =>
-      React.createElement(
-        'div',
-        { 'data-testid': 'react-markdown-mock' },
-        props.children
-      ),
+      React.createElement('div', { 'data-testid': 'react-markdown-mock' }, props.children),
   };
 });
 
@@ -27,8 +23,7 @@ import { LanguageProvider } from '@/context/LanguageContext';
 import { PopupProvider } from '@/context/PopupContext';
 
 vi.mock('next/image', () => ({
-  default: ({ src, alt }: { src: string; alt: string }) =>
-    React.createElement('img', { src, alt }),
+  default: ({ src, alt }: { src: string; alt: string }) => React.createElement('img', { src, alt }),
 }));
 
 vi.mock('@/assets/icons/NeuroPDF-Chat.svg', () => ({
@@ -36,13 +31,10 @@ vi.mock('@/assets/icons/NeuroPDF-Chat.svg', () => ({
 }));
 
 const motionCmp = (tag: string) => {
-  const C = ({
-    children,
-    ...props
-  }: { children?: React.ReactNode } & Record<string, unknown>) => {
+  const C = ({ children, ...props }: { children?: React.ReactNode } & Record<string, unknown>) => {
     const domProps = { ...props };
     ['whileTap', 'initial', 'animate', 'exit', 'transition', 'layout'].forEach(
-      (p) => delete domProps[p]
+      (p) => delete domProps[p],
     );
     return React.createElement(tag, domProps, children);
   };
@@ -59,17 +51,13 @@ vi.mock('framer-motion', () => ({
 
 function renderWithProviders(ui: React.ReactElement) {
   return render(
-    <SessionProvider
-      session={null}
-      refetchInterval={0}
-      refetchOnWindowFocus={false}
-    >
+    <SessionProvider session={null} refetchInterval={0} refetchOnWindowFocus={false}>
       <LanguageProvider>
         <PdfProvider>
           <PopupProvider>{ui}</PopupProvider>
         </PdfProvider>
       </LanguageProvider>
-    </SessionProvider>
+    </SessionProvider>,
   );
 }
 
@@ -100,18 +88,12 @@ describe('Chat Integration (ProChatPanel)', () => {
   describe('Panel visibility', () => {
     it('renders panel when isOpen is true', () => {
       renderWithProviders(<ProChatPanel {...defaultPanelProps} />);
-      expect(
-        screen.getByPlaceholderText('Sorunuzu yazın...')
-      ).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Sorunuzu yazın...')).toBeInTheDocument();
     });
 
     it('does not render panel when isOpen is false', () => {
-      renderWithProviders(
-        <ProChatPanel {...defaultPanelProps} isOpen={false} />
-      );
-      expect(
-        screen.queryByPlaceholderText('Sorunuzu yazın...')
-      ).not.toBeInTheDocument();
+      renderWithProviders(<ProChatPanel {...defaultPanelProps} isOpen={false} />);
+      expect(screen.queryByPlaceholderText('Sorunuzu yazın...')).not.toBeInTheDocument();
     });
   });
 
@@ -126,11 +108,9 @@ describe('Chat Integration (ProChatPanel)', () => {
               content: '👋 Merhaba! Ben NeuroPDF AI asistanıyım.',
             },
           ]}
-        />
+        />,
       );
-      expect(
-        screen.getByText(/Merhaba! Ben NeuroPDF AI asistanıyım/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Merhaba! Ben NeuroPDF AI asistanıyım/i)).toBeInTheDocument();
     });
 
     it('displays user and assistant messages', () => {
@@ -141,7 +121,7 @@ describe('Chat Integration (ProChatPanel)', () => {
             { role: 'user', content: 'Test sorusu' },
             { role: 'assistant', content: 'Test yanıtı' },
           ]}
-        />
+        />,
       );
       expect(screen.getByText('Test sorusu')).toBeInTheDocument();
       expect(screen.getByText('Test yanıtı')).toBeInTheDocument();
@@ -154,12 +134,7 @@ describe('Chat Integration (ProChatPanel)', () => {
       const onSend = vi.fn();
       const setInput = vi.fn();
       renderWithProviders(
-        <ProChatPanel
-          {...defaultPanelProps}
-          input=""
-          setInput={setInput}
-          onSend={onSend}
-        />
+        <ProChatPanel {...defaultPanelProps} input="" setInput={setInput} onSend={onSend} />,
       );
       const input = screen.getByPlaceholderText('Sorunuzu yazın...');
       await user.type(input, 'Merhaba');
@@ -175,9 +150,7 @@ describe('Chat Integration (ProChatPanel)', () => {
     });
 
     it('send button is disabled when loading', () => {
-      renderWithProviders(
-        <ProChatPanel {...defaultPanelProps} input="test" loading={true} />
-      );
+      renderWithProviders(<ProChatPanel {...defaultPanelProps} input="test" loading={true} />);
       expect(screen.getByTestId('chat-send-button')).toBeDisabled();
     });
   });
@@ -186,9 +159,7 @@ describe('Chat Integration (ProChatPanel)', () => {
     it('calls onClose when close button is clicked', async () => {
       const user = userEvent.setup();
       const onClose = vi.fn();
-      renderWithProviders(
-        <ProChatPanel {...defaultPanelProps} onClose={onClose} />
-      );
+      renderWithProviders(<ProChatPanel {...defaultPanelProps} onClose={onClose} />);
       await user.click(screen.getByRole('button', { name: /close/i }));
       expect(onClose).toHaveBeenCalledTimes(1);
     });
@@ -199,7 +170,7 @@ describe('Chat Integration (ProChatPanel)', () => {
           {...defaultPanelProps}
           headerTitle="Neuro AI"
           headerSubtitle="PDF AI Asistanı"
-        />
+        />,
       );
       expect(screen.getByText('Neuro AI')).toBeInTheDocument();
       expect(screen.getByText('PDF AI Asistanı')).toBeInTheDocument();
@@ -208,19 +179,13 @@ describe('Chat Integration (ProChatPanel)', () => {
 
   describe('Loading and initializing states', () => {
     it('shows initializing label when initializing is true', () => {
-      renderWithProviders(
-        <ProChatPanel {...defaultPanelProps} initializing={true} />
-      );
+      renderWithProviders(<ProChatPanel {...defaultPanelProps} initializing={true} />);
       expect(screen.getByText('Başlatılıyor...')).toBeInTheDocument();
     });
 
     it('shows typing label when loading is true', () => {
       renderWithProviders(
-        <ProChatPanel
-          {...defaultPanelProps}
-          loading={true}
-          typingLabel="Neuro yanıt yazıyor..."
-        />
+        <ProChatPanel {...defaultPanelProps} loading={true} typingLabel="Neuro yanıt yazıyor..." />,
       );
       expect(screen.getByText('Neuro yanıt yazıyor...')).toBeInTheDocument();
     });

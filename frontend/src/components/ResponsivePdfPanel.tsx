@@ -4,17 +4,15 @@ import { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { PanelRightOpen, X } from 'lucide-react';
-import ClientPdfPanel, {
-  CLIENT_PDF_PANEL_HIDDEN_PATHS,
-} from '@/components/ClientPdfPanel';
-import { usePdf } from '@/context/PdfContext';
+import ClientPdfPanel, { CLIENT_PDF_PANEL_HIDDEN_PATHS } from '@/components/ClientPdfPanel';
+import { usePdfData } from '@/context/PdfContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { cn } from '@/lib/utils';
 
 export default function ResponsivePdfPanel() {
   const pathname = usePathname();
   const { status } = useSession();
-  const { pdfList } = usePdf();
+  const { pdfList } = usePdfData();
   const { t } = useLanguage();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -30,7 +28,7 @@ export default function ResponsivePdfPanel() {
         type="button"
         className={cn(
           'lg:hidden fixed right-0 top-1/2 z-[851] -translate-y-1/2 rounded-l-xl border border-r-0 border-[var(--navbar-border)] bg-[var(--background)] px-1.5 py-3 shadow-md text-[var(--foreground)]',
-          mobileOpen && 'hidden'
+          mobileOpen && 'hidden',
         )}
         onClick={() => setMobileOpen(true)}
         aria-label={t('mobilePdfPanelOpen')}
@@ -52,10 +50,8 @@ export default function ResponsivePdfPanel() {
           'flex h-full w-80 max-w-[min(100vw,20rem)] flex-col bg-[var(--background)] shadow-xl transition-transform duration-300 ease-out',
           'fixed inset-y-0 right-0 z-[850] lg:relative lg:inset-auto lg:z-20 lg:max-w-none',
           /* Kapalı çekmece: tam genişlikte fixed katman — pointer-events-none olmadan trigger üstü bloklanır */
-          mobileOpen
-            ? 'translate-x-0 pointer-events-auto'
-            : 'translate-x-full pointer-events-none',
-          'lg:translate-x-0 lg:pointer-events-auto'
+          mobileOpen ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none',
+          'lg:translate-x-0 lg:pointer-events-auto',
         )}
       >
         <div

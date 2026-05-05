@@ -36,9 +36,7 @@ export function usePdfClientActions<K extends string>({
         const src = await PDFDocument.load(buffer);
         const pageCount = src.getPageCount();
         if (startPage > pageCount || endPage > pageCount) {
-          toast.error(
-            t('toastPdfLimit' as K).replace('{count}', pageCount.toString())
-          );
+          toast.error(t('toastPdfLimit' as K).replace('{count}', pageCount.toString()));
           return;
         }
         const dest = await PDFDocument.create();
@@ -61,7 +59,7 @@ export function usePdfClientActions<K extends string>({
         toast.error(t('toastExtractError' as K));
       }
     },
-    [pdfFile, savePdf, t]
+    [pdfFile, savePdf, t],
   );
 
   const handleMergePdfsLocal = useCallback(async () => {
@@ -79,13 +77,9 @@ export function usePdfClientActions<K extends string>({
         copied.forEach((page) => mergedPdf.addPage(page));
       }
       const outBytes = await mergedPdf.save();
-      const outFile = new File(
-        [new Uint8Array(outBytes)],
-        'merged_document.pdf',
-        {
-          type: 'application/pdf',
-        }
-      );
+      const outFile = new File([new Uint8Array(outBytes)], 'merged_document.pdf', {
+        type: 'application/pdf',
+      });
       await savePdf(outFile);
       toast.success(t('toastMergeSuccess' as K));
     } catch (e) {
@@ -114,9 +108,7 @@ export function usePdfClientActions<K extends string>({
         const src = await PDFDocument.load(buffer);
         const pageCount = src.getPageCount();
         if (pageA > pageCount || pageB > pageCount) {
-          toast.error(
-            t('toastPdfLimit' as K).replace('{count}', pageCount.toString())
-          );
+          toast.error(t('toastPdfLimit' as K).replace('{count}', pageCount.toString()));
           return;
         }
         const order = Array.from({ length: pageCount }, (_, i) => i + 1);
@@ -127,7 +119,7 @@ export function usePdfClientActions<K extends string>({
         const dest = await PDFDocument.create();
         const copied = await dest.copyPages(
           src,
-          next.map((o) => o - 1)
+          next.map((o) => o - 1),
         );
         copied.forEach((page) => dest.addPage(page));
         const outBytes = await dest.save();
@@ -141,7 +133,7 @@ export function usePdfClientActions<K extends string>({
         toast.error(t('toastSwapError' as K));
       }
     },
-    [pdfFile, savePdf, t]
+    [pdfFile, savePdf, t],
   );
 
   const applyClientActions = useCallback(
@@ -177,12 +169,7 @@ export function usePdfClientActions<K extends string>({
         }
       }
     },
-    [
-      handleClearAllPdfs,
-      handleExtractPagesLocal,
-      handleMergePdfsLocal,
-      handleSwapPagesLocal,
-    ]
+    [handleClearAllPdfs, handleExtractPagesLocal, handleMergePdfsLocal, handleSwapPagesLocal],
   );
 
   return {

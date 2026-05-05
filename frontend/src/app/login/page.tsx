@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { guestService } from '@/services/guestService';
 import { useLanguage } from '@/context/LanguageContext';
-import { usePdf } from '@/context/PdfContext';
+import { usePdfActions } from '@/context/PdfContext';
 
 import Popup from '@/components/ui/Popup';
 import { usePopup } from '@/hooks/usePopup';
@@ -16,7 +16,7 @@ export default function LoginPage() {
   const { status } = useSession();
   const router = useRouter();
   const { t } = useLanguage();
-  const { savePdf } = usePdf();
+  const { savePdf } = usePdfActions();
 
   const { popup, showError, showSuccess, close } = usePopup();
 
@@ -72,9 +72,7 @@ export default function LoginPage() {
 
       if (!res.ok) {
         const detail = data.detail;
-        showError(
-          typeof detail === 'string' && detail.trim() ? detail : t('loginError')
-        );
+        showError(typeof detail === 'string' && detail.trim() ? detail : t('loginError'));
         return;
       }
 
@@ -130,16 +128,12 @@ export default function LoginPage() {
           style={{ backgroundColor: 'var(--container-bg)' }}
         >
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold tracking-tight mb-2">
-              {t('appTitle')}
-            </h1>
+            <h1 className="text-3xl font-bold tracking-tight mb-2">{t('appTitle')}</h1>
             <p className="opacity-70 font-medium">
               {step === 'password' ? t('loginTitle') : t('loginOtpTitle')}
             </p>
             {step === 'otp' && (
-              <p className="mt-2 text-sm opacity-80">
-                {t('loginOtpDescription')}
-              </p>
+              <p className="mt-2 text-sm opacity-80">{t('loginOtpDescription')}</p>
             )}
           </div>
 
@@ -266,9 +260,7 @@ export default function LoginPage() {
                   className="text-sm font-semibold hover:underline opacity-80 hover:opacity-100 transition-opacity"
                 >
                   {t('noAccount')}{' '}
-                  <span style={{ color: 'var(--button-bg)' }}>
-                    {t('createAccount')}
-                  </span>
+                  <span style={{ color: 'var(--button-bg)' }}>{t('createAccount')}</span>
                 </button>
               </div>
             </>
@@ -276,12 +268,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <Popup
-        type={popup.type}
-        message={popup.message}
-        open={popup.open}
-        onClose={close}
-      />
+      <Popup type={popup.type} message={popup.message} open={popup.open} onClose={close} />
     </main>
   );
 }

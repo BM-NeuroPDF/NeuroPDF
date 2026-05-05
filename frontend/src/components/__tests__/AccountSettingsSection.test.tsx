@@ -12,7 +12,7 @@ describe('AccountSettingsSection', () => {
       <AccountSettingsSection
         onRequestDelete={onRequestDelete}
         t={t as ComponentProps<typeof AccountSettingsSection>['t']}
-      />
+      />,
     );
     fireEvent.click(screen.getByRole('button', { name: /deleteAccount/i }));
     expect(onRequestDelete).toHaveBeenCalled();
@@ -23,7 +23,7 @@ describe('AccountSettingsSection', () => {
       <AccountSettingsSection
         onRequestDelete={vi.fn()}
         t={t as ComponentProps<typeof AccountSettingsSection>['t']}
-      />
+      />,
     );
     const disabled = screen
       .getAllByRole('button', { hidden: false })
@@ -32,19 +32,13 @@ describe('AccountSettingsSection', () => {
   });
 
   it('uses Turkish fallbacks when t returns empty', () => {
-    const tEmpty = (() => '') as ComponentProps<
-      typeof AccountSettingsSection
-    >['t'];
+    const tEmpty = (() => '') as ComponentProps<typeof AccountSettingsSection>['t'];
     render(<AccountSettingsSection onRequestDelete={vi.fn()} t={tEmpty} />);
     expect(screen.getByText('Hesap Ayarları')).toBeInTheDocument();
-    expect(
-      screen.getByText(/Google.*ayarlarını kullanmanız/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Google.*ayarlarını kullanmanız/i)).toBeInTheDocument();
     expect(screen.getByText('E-posta Değiştir')).toBeInTheDocument();
     expect(screen.getByText('Verilerimi İndir')).toBeInTheDocument();
     expect(screen.getAllByText('Yakında').length).toBe(2);
-    expect(
-      screen.getByRole('button', { name: /Hesabımı Sil/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Hesabımı Sil/i })).toBeInTheDocument();
   });
 });

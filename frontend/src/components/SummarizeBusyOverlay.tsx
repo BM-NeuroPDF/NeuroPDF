@@ -8,11 +8,7 @@ export interface SummarizeBusyOverlayProps {
   t: (key: keyof (typeof translations)['tr']) => string;
 }
 
-export function SummarizeBusyOverlay({
-  open,
-  audioLoading,
-  t,
-}: SummarizeBusyOverlayProps) {
+export function SummarizeBusyOverlay({ open, audioLoading, t }: SummarizeBusyOverlayProps) {
   if (!open) return null;
 
   return (
@@ -32,8 +28,7 @@ export function SummarizeBusyOverlay({
         <p className="mt-2 text-sm font-medium opacity-60 max-w-xs text-center text-[var(--foreground)]">
           {audioLoading
             ? t('waitAudioGen') || 'Bu işlem biraz sürebilir...'
-            : t('waitMessage') ||
-              'PDF içeriği analiz ediliyor, lütfen bekleyin...'}
+            : t('waitMessage') || 'PDF içeriği analiz ediliyor, lütfen bekleyin...'}
         </p>
       </div>
     </div>

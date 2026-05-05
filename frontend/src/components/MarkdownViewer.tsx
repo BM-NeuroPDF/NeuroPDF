@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { pdfService } from '@/services/pdfService';
+import { logError } from '@/utils/logger';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -59,7 +60,7 @@ export default function MarkdownViewer({
       // PDF oluştur ve indir
       await pdfService.createPdfFromMarkdown(processedMarkdown, defaultPdfName);
     } catch (err: unknown) {
-      console.error('❌ PDF oluşturulamadı:', err);
+      logError(err, { scope: 'MarkdownViewer.downloadPdf' });
       setError('PDF oluşturulamadı. Lütfen tekrar deneyin.');
     } finally {
       setLoading(false);
@@ -86,9 +87,7 @@ export default function MarkdownViewer({
           color: 'var(--foreground)',
         }}
       >
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-          {processedMarkdown}
-        </ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{processedMarkdown}</ReactMarkdown>
       </div>
 
       <div className="flex justify-end">

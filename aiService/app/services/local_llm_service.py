@@ -1,6 +1,8 @@
 import os
 import ollama
 import httpx
+import json
+from collections.abc import Iterator
 
 from ..config import settings
 
@@ -44,6 +46,52 @@ def _openai_compatible_chat(messages: list) -> str:
         r.raise_for_status()
         data = r.json()
         return data["choices"][0]["message"]["content"]
+
+
+def stream_openai_compatible_chat(messages: list) -> Iterator[str]:
+    """OpenAI-compatible stream reader yielding token deltas."""
+    base = _local_openai_base_url().rstrip("/")
+    url = f"{base}/chat/completions"
+    api_key = (
+        os.getenv("OPENAI_API_KEY")
+        or os.getenv("GEMINI_API_KEY")
+        or getattr(settings, "GEMINI_API_KEY", None)
+        or "dummy-key"
+    )
+    payload = {
+        "model": OLLAMA_MODEL,
+        "messages": messages,
+        "temperature": 0.3,
+        "stream": True,
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    timeout = httpx.Timeout(120.0, connect=15.0)
+    with httpx.Client(timeout=timeout) as client:
+        with client.stream("POST", url, json=payload, headers=headers) as r:
+            r.raise_for_status()
+            for raw_line in r.iter_lines():
+                if not raw_line:
+                    continue
+                line = raw_line.decode("utf-8", errors="ignore")
+                if not line.startswith("data:"):
+                    continue
+                data_part = line[5:].strip()
+                if data_part == "[DONE]":
+                    break
+                try:
+                    obj = json.loads(data_part)
+                except Exception:
+                    continue
+                delta = (
+                    obj.get("choices", [{}])[0]
+                    .get("delta", {})
+                    .get("content")
+                )
+                if delta:
+                    yield str(delta)
 
 
 def _truncate_text(text: str, max_chars: int = MAX_INPUT_CHARS) -> str:

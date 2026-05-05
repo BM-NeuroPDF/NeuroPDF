@@ -26,9 +26,7 @@ describe('pdfService', () => {
     window.URL.revokeObjectURL = vi.fn();
     const link = document.createElement('a');
     link.click = vi.fn();
-    vi.spyOn(document, 'createElement').mockReturnValue(
-      link as HTMLAnchorElement
-    );
+    vi.spyOn(document, 'createElement').mockReturnValue(link as HTMLAnchorElement);
   });
 
   afterEach(() => {
@@ -49,7 +47,7 @@ describe('pdfService', () => {
     expect(r.temp_id).toBe('t1');
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/files/upload'),
-      expect.objectContaining({ method: 'POST' })
+      expect.objectContaining({ method: 'POST' }),
     );
     const call = fetchMock.mock.calls[0];
     expect(call[1].headers['Authorization']).toBe('Bearer tok');
@@ -76,9 +74,7 @@ describe('pdfService', () => {
     });
     const { pdfService } = await import('../pdfService');
     const file = new File(['x'], 'a.pdf', { type: 'application/pdf' });
-    await expect(pdfService.upload(file, null)).rejects.toThrow(
-      'Upload failed: 502'
-    );
+    await expect(pdfService.upload(file, null)).rejects.toThrow('Upload failed: 502');
   });
 
   it('convertToText downloads blob and increments guest usage', async () => {
@@ -105,9 +101,7 @@ describe('pdfService', () => {
     });
     const { pdfService } = await import('../pdfService');
     const file = new File(['x'], 'doc.pdf', { type: 'application/pdf' });
-    await expect(pdfService.convertToText(file, null)).rejects.toThrow(
-      'Conversion failed: 503'
-    );
+    await expect(pdfService.convertToText(file, null)).rejects.toThrow('Conversion failed: 503');
   });
 
   it('convertToText throws when response not ok', async () => {
@@ -118,9 +112,7 @@ describe('pdfService', () => {
     });
     const { pdfService } = await import('../pdfService');
     const file = new File(['x'], 'doc.pdf', { type: 'application/pdf' });
-    await expect(pdfService.convertToText(file, 'tok')).rejects.toThrow(
-      'conv bad'
-    );
+    await expect(pdfService.convertToText(file, 'tok')).rejects.toThrow('conv bad');
   });
 
   it('convertToText skips increment when logged in', async () => {
@@ -181,9 +173,7 @@ describe('pdfService', () => {
     });
     const { pdfService } = await import('../pdfService');
     const file = new File(['x'], 'doc.pdf', { type: 'application/pdf' });
-    await expect(pdfService.extractPages(file, '1-2', null)).rejects.toThrow(
-      'extract bad'
-    );
+    await expect(pdfService.extractPages(file, '1-2', null)).rejects.toThrow('extract bad');
   });
 
   it('mergePDFs throws status message when error JSON is null', async () => {
@@ -199,9 +189,7 @@ describe('pdfService', () => {
       new File(['a'], 'a.pdf', { type: 'application/pdf' }),
       new File(['b'], 'b.pdf', { type: 'application/pdf' }),
     ];
-    await expect(pdfService.mergePDFs(files, null)).rejects.toThrow(
-      'Merge failed: 503'
-    );
+    await expect(pdfService.mergePDFs(files, null)).rejects.toThrow('Merge failed: 503');
   });
 
   it('extractPages throws status message when error JSON is null', async () => {
@@ -215,7 +203,7 @@ describe('pdfService', () => {
     const { pdfService } = await import('../pdfService');
     const file = new File(['x'], 'doc.pdf', { type: 'application/pdf' });
     await expect(pdfService.extractPages(file, '1', null)).rejects.toThrow(
-      'Extraction failed: 502'
+      'Extraction failed: 502',
     );
   });
 
@@ -228,9 +216,9 @@ describe('pdfService', () => {
       },
     });
     const { pdfService } = await import('../pdfService');
-    await expect(
-      pdfService.saveProcessed(new Blob(['x']), 'out.pdf', 'tok')
-    ).rejects.toThrow('Save failed: 400');
+    await expect(pdfService.saveProcessed(new Blob(['x']), 'out.pdf', 'tok')).rejects.toThrow(
+      'Save failed: 400',
+    );
   });
 
   it('createPdfFromMarkdown throws status when error JSON is null', async () => {
@@ -242,9 +230,9 @@ describe('pdfService', () => {
       },
     });
     const { pdfService } = await import('../pdfService');
-    await expect(
-      pdfService.createPdfFromMarkdown('# x', 's.pdf', null)
-    ).rejects.toThrow('Markdown PDF failed: 418');
+    await expect(pdfService.createPdfFromMarkdown('# x', 's.pdf', null)).rejects.toThrow(
+      'Markdown PDF failed: 418',
+    );
   });
 
   it('mergePDFs throws on failed response', async () => {
@@ -258,9 +246,7 @@ describe('pdfService', () => {
       new File(['a'], 'a.pdf', { type: 'application/pdf' }),
       new File(['b'], 'b.pdf', { type: 'application/pdf' }),
     ];
-    await expect(pdfService.mergePDFs(files, null)).rejects.toThrow(
-      'merge bad'
-    );
+    await expect(pdfService.mergePDFs(files, null)).rejects.toThrow('merge bad');
   });
 
   it('extractPages does not increment guest usage when logged in', async () => {
@@ -336,9 +322,7 @@ describe('pdfService', () => {
 
   it('saveProcessed throws without token', async () => {
     const { pdfService } = await import('../pdfService');
-    await expect(
-      pdfService.saveProcessed(new Blob(), 'f.pdf', null)
-    ).rejects.toThrow('logged in');
+    await expect(pdfService.saveProcessed(new Blob(), 'f.pdf', null)).rejects.toThrow('logged in');
   });
 
   it('saveProcessed posts file when token present', async () => {
@@ -358,9 +342,9 @@ describe('pdfService', () => {
       json: async () => ({ detail: 'save bad' }),
     });
     const { pdfService } = await import('../pdfService');
-    await expect(
-      pdfService.saveProcessed(new Blob(['x']), 'out.pdf', 'tok')
-    ).rejects.toThrow('save bad');
+    await expect(pdfService.saveProcessed(new Blob(['x']), 'out.pdf', 'tok')).rejects.toThrow(
+      'save bad',
+    );
   });
 
   it('createPdfFromMarkdown downloads pdf blob', async () => {
@@ -382,9 +366,7 @@ describe('pdfService', () => {
       json: async () => ({ detail: 'nope' }),
     });
     const { pdfService } = await import('../pdfService');
-    await expect(
-      pdfService.createPdfFromMarkdown('# x', 's.pdf', null)
-    ).rejects.toThrow('nope');
+    await expect(pdfService.createPdfFromMarkdown('# x', 's.pdf', null)).rejects.toThrow('nope');
   });
 
   it('createPdfFromMarkdown appends .pdf when filename has no extension', async () => {
@@ -392,9 +374,7 @@ describe('pdfService', () => {
     const click = vi.fn();
     const link = document.createElement('a');
     link.click = click;
-    vi.spyOn(document, 'createElement').mockReturnValue(
-      link as HTMLAnchorElement
-    );
+    vi.spyOn(document, 'createElement').mockReturnValue(link as HTMLAnchorElement);
     fetchMock.mockResolvedValue({
       ok: true,
       blob: async () => new Blob(['%PDF'], { type: 'application/pdf' }),
@@ -424,7 +404,7 @@ describe('pdfService', () => {
     await pdfService.upload(file, null);
     expect(global.fetch).toHaveBeenCalledWith(
       'http://localhost:8000/files/upload',
-      expect.any(Object)
+      expect.any(Object),
     );
     process.env.NEXT_PUBLIC_API_URL = prevEnv;
   });
@@ -444,10 +424,7 @@ describe('pdfService', () => {
     const { pdfService } = await import('../pdfService');
     const file = new File(['x'], 'a.pdf', { type: 'application/pdf' });
     await pdfService.upload(file, null);
-    expect(global.fetch).toHaveBeenCalledWith(
-      '/files/upload',
-      expect.any(Object)
-    );
+    expect(global.fetch).toHaveBeenCalledWith('/files/upload', expect.any(Object));
     process.env.NEXT_PUBLIC_API_URL = prev;
   });
 });

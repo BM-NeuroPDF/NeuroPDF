@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/context/LanguageContext';
 import { sendRequest } from '@/utils/api'; // ✅ Merkezi API
-import { usePdf } from '@/context/PdfContext'; // ✅ YENİ: Paneli kapatmak için
+import { usePdfActions } from '@/context/PdfContext';
 
 import Popup from '@/components/ui/Popup';
 import { usePopup } from '@/hooks/usePopup';
@@ -12,7 +12,7 @@ import { usePopup } from '@/hooks/usePopup';
 export default function RegisterPage() {
   const router = useRouter();
   const { t, language } = useLanguage();
-  const { savePdf } = usePdf(); // Context'i aldık
+  const { savePdf } = usePdfActions();
 
   // Form State
   const [form, setForm] = useState({
@@ -51,19 +51,13 @@ export default function RegisterPage() {
       const fetchEula = async () => {
         try {
           // sendRequest Blob veya JSON dönebilir
-          const response = await sendRequest(
-            `/auth/eula?lang=${language}`,
-            'GET'
-          );
+          const response = await sendRequest<unknown>(`/auth/eula?lang=${language}`, 'GET');
 
           let text = '';
           if (response instanceof Blob) {
             text = await response.text();
           } else {
-            text =
-              typeof response === 'string'
-                ? response
-                : JSON.stringify(response);
+            text = typeof response === 'string' ? response : JSON.stringify(response);
           }
 
           setEulaContent(text);
@@ -121,7 +115,7 @@ export default function RegisterPage() {
 
     try {
       // ✅ sendRequest ile Kayıt
-      await sendRequest('/auth/register', 'POST', {
+      await sendRequest<unknown>('/auth/register', 'POST', {
         ...form,
         eula_accepted: true,
       });
@@ -147,18 +141,14 @@ export default function RegisterPage() {
           style={{ backgroundColor: 'var(--container-bg)' }}
         >
           <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold tracking-tight mb-2">
-              {t('registerTitle')}
-            </h2>
+            <h2 className="text-3xl font-bold tracking-tight mb-2">{t('registerTitle')}</h2>
             <p className="opacity-70 font-medium">{t('registerSubtitle')}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Username Input */}
             <div>
-              <label className="block text-sm font-medium mb-1 opacity-80">
-                {t('username')}
-              </label>
+              <label className="block text-sm font-medium mb-1 opacity-80">{t('username')}</label>
               <input
                 type="text"
                 name="username"
@@ -178,9 +168,7 @@ export default function RegisterPage() {
 
             {/* Email Input */}
             <div>
-              <label className="block text-sm font-medium mb-1 opacity-80">
-                {t('email')}
-              </label>
+              <label className="block text-sm font-medium mb-1 opacity-80">{t('email')}</label>
               <input
                 type="email"
                 name="email"
@@ -200,9 +188,7 @@ export default function RegisterPage() {
 
             {/* Password Input */}
             <div>
-              <label className="block text-sm font-medium mb-1 opacity-80">
-                {t('password')}
-              </label>
+              <label className="block text-sm font-medium mb-1 opacity-80">{t('password')}</label>
               <input
                 type="password"
                 name="password"
@@ -230,9 +216,7 @@ export default function RegisterPage() {
                 className="w-5 h-5 rounded border-gray-300 text-[var(--button-bg)] focus:ring-[var(--button-bg)]"
               />
               <span className="text-sm opacity-80">
-                {language === 'tr'
-                  ? 'Okudum ve onaylıyorum: '
-                  : 'I have read and agree to: '}
+                {language === 'tr' ? 'Okudum ve onaylıyorum: ' : 'I have read and agree to: '}
                 <button
                   type="button"
                   onClick={() => setShowEulaModal(true)}
@@ -280,9 +264,7 @@ export default function RegisterPage() {
             {/* Modal Header */}
             <div className="p-6 border-b border-[var(--navbar-border)] flex justify-between items-center">
               <h3 className="text-xl font-bold">
-                {language === 'tr'
-                  ? 'Kullanıcı Sözleşmesi'
-                  : 'Terms of Service'}
+                {language === 'tr' ? 'Kullanıcı Sözleşmesi' : 'Terms of Service'}
               </h3>
               <button
                 onClick={() => setShowEulaModal(false)}
@@ -308,9 +290,7 @@ export default function RegisterPage() {
               <div className="text-xs opacity-70 flex flex-col gap-1">
                 <span
                   className={
-                    timeLeft > 0
-                      ? 'text-red-400 font-semibold'
-                      : 'text-green-500 font-semibold'
+                    timeLeft > 0 ? 'text-red-400 font-semibold' : 'text-green-500 font-semibold'
                   }
                 >
                   {timeLeft > 0
@@ -362,12 +342,7 @@ export default function RegisterPage() {
           </div>
         </div>
       )}
-      <Popup
-        type={popup.type}
-        message={popup.message}
-        open={popup.open}
-        onClose={close}
-      />
+      <Popup type={popup.type} message={popup.message} open={popup.open} onClose={close} />
     </main>
   );
 }

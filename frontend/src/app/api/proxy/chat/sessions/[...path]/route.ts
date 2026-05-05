@@ -21,10 +21,7 @@ function targetUrl(path: string[]) {
   return `${backendBaseUrl}/files/chat/sessions/${suffix}`;
 }
 
-export async function GET(
-  req: Request,
-  context: { params: Promise<{ path: string[] }> }
-) {
+export async function GET(req: Request, context: { params: Promise<{ path: string[] }> }) {
   try {
     const { path } = await context.params;
     const backendResponse = await fetch(targetUrl(path), {
@@ -40,9 +37,7 @@ export async function GET(
     });
   } catch (error) {
     const message =
-      error instanceof Error
-        ? error.message
-        : 'Proxy request failed for /files/chat/sessions/*';
+      error instanceof Error ? error.message : 'Proxy request failed for /files/chat/sessions/*';
     return new Response(JSON.stringify({ detail: message }), {
       status: 502,
       headers: { 'content-type': 'application/json' },
@@ -50,10 +45,7 @@ export async function GET(
   }
 }
 
-export async function POST(
-  req: Request,
-  context: { params: Promise<{ path: string[] }> }
-) {
+export async function POST(req: Request, context: { params: Promise<{ path: string[] }> }) {
   try {
     const { path } = await context.params;
     const rawBody = await req.text();
@@ -71,9 +63,7 @@ export async function POST(
     });
   } catch (error) {
     const message =
-      error instanceof Error
-        ? error.message
-        : 'Proxy request failed for /files/chat/sessions/*';
+      error instanceof Error ? error.message : 'Proxy request failed for /files/chat/sessions/*';
     return new Response(JSON.stringify({ detail: message }), {
       status: 502,
       headers: { 'content-type': 'application/json' },

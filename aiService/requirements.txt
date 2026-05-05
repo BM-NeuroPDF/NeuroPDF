@@ -5,7 +5,7 @@ python-multipart
 celery
 redis
 google-generativeai
-PyPDF2
+pypdf>=4
 zemberek-python
 httpx
 
@@ -21,6 +21,7 @@ pillow
 
 # RAG / Vector store
 chromadb>=0.4.22
+prometheus_client
 
 # Test dependencies
 pytest>=7.4.0

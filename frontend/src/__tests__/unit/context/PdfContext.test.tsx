@@ -28,11 +28,7 @@ import * as api from '@/utils/api';
 
 function TestProviders({ children }: { children: React.ReactNode }) {
   return (
-    <SessionProvider
-      refetchInterval={0}
-      refetchOnWindowFocus={false}
-      session={null}
-    >
+    <SessionProvider refetchInterval={0} refetchOnWindowFocus={false} session={null}>
       <PdfProvider>{children}</PdfProvider>
     </SessionProvider>
   );
@@ -468,9 +464,7 @@ describe('PdfContext', () => {
         throw new Error('Storage error');
       });
 
-      const consoleSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       renderHook(() => usePdf(), {
         wrapper: TestProviders,
@@ -496,9 +490,7 @@ describe('PdfContext', () => {
         throw new Error('QuotaExceededError');
       });
 
-      const consoleWarnSpy = vi
-        .spyOn(console, 'warn')
-        .mockImplementation(() => {});
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const mockFile = createMockPdfFile('large.pdf');
 
@@ -531,7 +523,7 @@ describe('PdfContext', () => {
         filename: 'report.pdf',
       });
       vi.mocked(api.fetchStoredPdfBlob).mockResolvedValue(
-        new Blob(['%PDF'], { type: 'application/pdf' })
+        new Blob(['%PDF'], { type: 'application/pdf' }),
       );
 
       const { result } = renderHook(() => usePdf(), {
@@ -543,9 +535,7 @@ describe('PdfContext', () => {
       });
 
       expect(result.current.sessionId).toBe('sid');
-      expect(
-        result.current.chatMessages.some((m) => m.content.includes('hello'))
-      ).toBe(true);
+      expect(result.current.chatMessages.some((m) => m.content.includes('hello'))).toBe(true);
       expect(api.fetchStoredPdfBlob).toHaveBeenCalledWith('pdf-1');
       expect(toast.success).toHaveBeenCalled();
     });
@@ -567,11 +557,9 @@ describe('PdfContext', () => {
         await result.current.restoreSession('row-2');
       });
 
-      expect(
-        result.current.chatMessages.some((m) =>
-          m.content.includes('WELCOME_PDF:doc')
-        )
-      ).toBe(true);
+      expect(result.current.chatMessages.some((m) => m.content.includes('WELCOME_PDF:doc'))).toBe(
+        true,
+      );
     });
 
     it('appends .pdf to filename when extension missing', async () => {
@@ -585,7 +573,7 @@ describe('PdfContext', () => {
         filename: 'noext',
       });
       vi.mocked(api.fetchStoredPdfBlob).mockResolvedValue(
-        new Blob(['%PDF'], { type: 'application/pdf' })
+        new Blob(['%PDF'], { type: 'application/pdf' }),
       );
 
       const { result } = renderHook(() => usePdf(), {
@@ -706,9 +694,7 @@ describe('PdfContext', () => {
     });
 
     it('throws when usePdf is used outside PdfProvider', () => {
-      expect(() => renderHook(() => usePdf())).toThrow(
-        /usePdf must be used within a PdfProvider/
-      );
+      expect(() => renderHook(() => usePdf())).toThrow(/usePdf must be used within a PdfProvider/);
     });
 
     it('addPdfs with empty array does not change pdf list', async () => {
@@ -743,7 +729,7 @@ describe('PdfContext', () => {
 
     it('restoreSession handles API response without messages field', async () => {
       vi.mocked(api.fetchSessionMessages).mockResolvedValue(
-        {} as Awaited<ReturnType<typeof api.fetchSessionMessages>>
+        {} as Awaited<ReturnType<typeof api.fetchSessionMessages>>,
       );
       vi.mocked(api.resumeChatSession).mockResolvedValue({
         session_id: 'sid',
@@ -774,7 +760,7 @@ describe('PdfContext', () => {
         filename: undefined,
       });
       vi.mocked(api.fetchStoredPdfBlob).mockResolvedValue(
-        new Blob(['%PDF'], { type: 'application/pdf' })
+        new Blob(['%PDF'], { type: 'application/pdf' }),
       );
 
       const { result } = renderHook(() => usePdf(), {
@@ -944,11 +930,9 @@ describe('PdfContext', () => {
         await result.current.restoreSession('row-trim');
       });
 
-      expect(
-        result.current.chatMessages.some((m) =>
-          m.content.includes('document.pdf')
-        )
-      ).toBe(true);
+      expect(result.current.chatMessages.some((m) => m.content.includes('document.pdf'))).toBe(
+        true,
+      );
     });
 
     it('restoreSession keeps filename when it already ends with .pdf', async () => {
@@ -962,7 +946,7 @@ describe('PdfContext', () => {
         filename: 'Already.PDF',
       });
       vi.mocked(api.fetchStoredPdfBlob).mockResolvedValue(
-        new Blob(['%PDF'], { type: 'application/pdf' })
+        new Blob(['%PDF'], { type: 'application/pdf' }),
       );
 
       const { result } = renderHook(() => usePdf(), {

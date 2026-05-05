@@ -4,10 +4,12 @@ import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import NeuroLogo from '@/components/NeuroLogo';
-import { sendRequest } from '@/utils/api';
+import { sendRequest, type GlobalStatsResponse } from '@/utils/api';
+import { useUserStats } from '@/hooks/useUserStats';
 
 export default function HomePage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
+  const { data: statsData } = useUserStats(session ?? null, status);
   const { t } = useLanguage();
 
   // Hangi istatistiği gösteriyoruz? (false: Global, true: Kişisel)
@@ -31,8 +33,8 @@ export default function HomePage() {
   useEffect(() => {
     const fetchGlobalStats = async () => {
       try {
-        const data = await sendRequest('/files/global-stats', 'GET');
-        if (data) setGlobalStats(data);
+        const data = await sendRequest<GlobalStatsResponse>('/files/global-stats', 'GET');
+        if (data) setGlobalStats((prev) => ({ ...prev, ...data }));
       } catch (error) {
         console.error('Global istatistik hatası:', error);
       }
@@ -42,18 +44,10 @@ export default function HomePage() {
 
   // 2. Kullanıcı Giriş Yaptıysa Kişisel Verileri Çek
   useEffect(() => {
-    if (session) {
-      const fetchUserStats = async () => {
-        try {
-          const data = await sendRequest('/files/user/stats', 'GET');
-          if (data) setUserStats(data);
-        } catch (error) {
-          console.error('Kullanıcı istatistik hatası:', error);
-        }
-      };
-      fetchUserStats();
+    if (statsData) {
+      setUserStats((prev) => ({ ...prev, ...statsData }));
     }
-  }, [session]);
+  }, [statsData]);
 
   // 3. Otomatik Döngü (15 Saniyede Bir)
   useEffect(() => {
@@ -89,11 +83,7 @@ export default function HomePage() {
         title: t('myStats') || 'İstatistiklerim',
 
         // ✅ DEĞİŞİKLİK 3: Backend'den gelen Rol bilgisini renkli göster
-        col1_val: (
-          <span className={getRoleColorClass(userStats.role)}>
-            {userStats.role}
-          </span>
-        ),
+        col1_val: <span className={getRoleColorClass(userStats.role)}>{userStats.role}</span>,
         col1_label: t('accountType') || 'Hesap Türü', // "Hesap Durumu" yerine "Hesap Türü"
 
         col2_val: userStats.tools_count,
@@ -164,9 +154,7 @@ export default function HomePage() {
                 />
               </svg>
             </div>
-            <span className="text-3xl font-extrabold">
-              {currentStats.col1_val}
-            </span>
+            <span className="text-3xl font-extrabold">{currentStats.col1_val}</span>
             <span className="text-sm opacity-60 font-medium uppercase tracking-wide">
               {currentStats.col1_label}
             </span>
@@ -190,9 +178,7 @@ export default function HomePage() {
                 />
               </svg>
             </div>
-            <span className="text-3xl font-extrabold">
-              {currentStats.col2_val}
-            </span>
+            <span className="text-3xl font-extrabold">{currentStats.col2_val}</span>
             <span className="text-sm opacity-60 font-medium uppercase tracking-wide">
               {currentStats.col2_label}
             </span>
@@ -216,9 +202,7 @@ export default function HomePage() {
                 />
               </svg>
             </div>
-            <span className="text-3xl font-extrabold">
-              {currentStats.col3_val}
-            </span>
+            <span className="text-3xl font-extrabold">{currentStats.col3_val}</span>
             <span className="text-sm opacity-60 font-medium uppercase tracking-wide">
               {currentStats.col3_label}
             </span>
@@ -227,8 +211,7 @@ export default function HomePage() {
 
         {/* Copyright Alanı */}
         <p className="mt-6 text-[10px] opacity-40 font-mono tracking-wider">
-          Copyright &copy; {new Date().getFullYear()} Abdulsamet KIR - Süleyman
-          GÜLTER
+          Copyright &copy; {new Date().getFullYear()} Abdulsamet KIR - Süleyman GÜLTER
         </p>
       </div>
     </main>

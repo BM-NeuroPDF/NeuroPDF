@@ -1,7 +1,6 @@
 """
 Unit tests for tts_manager.py
 """
-import pytest
 from unittest.mock import patch, MagicMock
 import io
 

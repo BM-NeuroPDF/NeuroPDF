@@ -18,9 +18,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('@/context/LanguageContext', () => ({
-  LanguageProvider: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
+  LanguageProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useLanguage: () => ({
     language: 'tr' as const,
     setLanguage: vi.fn(),

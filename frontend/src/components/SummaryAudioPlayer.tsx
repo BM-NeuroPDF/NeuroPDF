@@ -50,15 +50,14 @@ export function SummaryAudioPlayer({
           disabled={controlsDisabled}
           className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-[var(--button-bg)] disabled:opacity-50 disabled:cursor-not-allowed"
         />
-        <span className="text-xs font-mono opacity-70 w-10">
-          {formatTime(duration)}
-        </span>
+        <span className="text-xs font-mono opacity-70 w-10">{formatTime(duration)}</span>
       </div>
       <div className="flex justify-center items-center gap-6">
         <button
           type="button"
           onClick={() => onSkip(-10)}
           disabled={controlsDisabled}
+          aria-label={t('audioRewindAria')}
           className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg
@@ -69,17 +68,14 @@ export function SummaryAudioPlayer({
             stroke="currentColor"
             className="w-6 h-6"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15 19l-7-7 7-7"
-            />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
         <button
           type="button"
           onClick={onTogglePlay}
           disabled={controlsDisabled}
+          aria-label={t('audioPlayPauseAria')}
           className="w-12 h-12 flex items-center justify-center rounded-full bg-[var(--button-bg)] text-white hover:scale-110 transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
         >
           {isPlaying ? (
@@ -118,6 +114,7 @@ export function SummaryAudioPlayer({
           type="button"
           onClick={() => onSkip(10)}
           disabled={controlsDisabled}
+          aria-label={t('audioForwardAria')}
           className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg
@@ -128,11 +125,7 @@ export function SummaryAudioPlayer({
             stroke="currentColor"
             className="w-6 h-6"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M9 5l7 7-7 7"
-            />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
           </svg>
         </button>
       </div>
@@ -142,6 +135,7 @@ export function SummaryAudioPlayer({
           type="button"
           onClick={onDownload}
           title={t('downloadAudio') || 'Sesi İndir (MP3)'}
+          aria-label={t('audioDownloadAria')}
           className="absolute bottom-4 right-4 text-gray-400 hover:text-[var(--button-bg)] hover:bg-gray-100 dark:hover:bg-gray-700 p-2 rounded-full transition-all"
         >
           <svg

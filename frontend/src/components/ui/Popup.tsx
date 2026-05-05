@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-type PopupType = "success" | "error" | "info";
+type PopupType = 'success' | 'error' | 'info';
 
 interface Props {
   type: PopupType;
@@ -10,13 +10,12 @@ interface Props {
 }
 
 export default function Popup({ type, message, open, onClose }: Props) {
-
   if (!open) return null;
 
   const styles = {
-    success: "bg-green-50 border-green-500 text-green-700",
-    error: "bg-red-50 border-red-500 text-red-700",
-    info: "bg-blue-50 border-blue-500 text-blue-700",
+    success: 'bg-green-50 border-green-500 text-green-700',
+    error: 'bg-red-50 border-red-500 text-red-700',
+    info: 'bg-blue-50 border-blue-500 text-blue-700',
   };
 
   return (
@@ -26,10 +25,7 @@ export default function Popup({ type, message, open, onClose }: Props) {
       >
         <span>{message}</span>
 
-        <button
-          onClick={onClose}
-          className="ml-3 opacity-60 hover:opacity-100"
-        >
+        <button onClick={onClose} className="ml-3 opacity-60 hover:opacity-100">
           ✕
         </button>
       </div>

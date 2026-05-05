@@ -1,20 +1,35 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactElement } from 'react';
 import type { Session } from 'next-auth';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { SWRConfig } from 'swr';
 import { DeleteAccountModal } from '../DeleteAccountModal';
-import { sendRequest } from '@/utils/api';
+import { fetchAuthMe } from '@/services/authMeService';
+import {
+  requestAccountDeletionOtp,
+  verifyAndDeleteAccountWithPassword,
+  verifyAndDeleteAccountWithOtp,
+} from '@/services/accountDeletionService';
 import { signOut } from 'next-auth/react';
 
-vi.mock('@/utils/api', () => ({
-  sendRequest: vi.fn(),
+vi.mock('@/services/authMeService', () => ({
+  fetchAuthMe: vi.fn(),
+}));
+
+vi.mock('@/services/accountDeletionService', () => ({
+  requestAccountDeletionOtp: vi.fn(),
+  verifyAndDeleteAccountWithPassword: vi.fn(),
+  verifyAndDeleteAccountWithOtp: vi.fn(),
 }));
 
 vi.mock('next-auth/react', () => ({
   signOut: vi.fn(),
 }));
 
-const mockedSendRequest = vi.mocked(sendRequest);
+const mockedFetchAuthMe = vi.mocked(fetchAuthMe);
+const mockedRequestOtp = vi.mocked(requestAccountDeletionOtp);
+const mockedVerifyPwd = vi.mocked(verifyAndDeleteAccountWithPassword);
+const mockedVerifyOtp = vi.mocked(verifyAndDeleteAccountWithOtp);
 const mockedSignOut = vi.mocked(signOut);
 
 const t = (k: string) => k;
@@ -24,9 +39,13 @@ const baseSession = {
   expires: '1',
 } as Session;
 
-function setup(
-  overrides: Partial<ComponentProps<typeof DeleteAccountModal>> = {}
-) {
+function renderWithFreshSwr(ui: ReactElement) {
+  return render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>{ui}</SWRConfig>,
+  );
+}
+
+function setup(overrides: Partial<ComponentProps<typeof DeleteAccountModal>> = {}) {
   const onClose = vi.fn();
   const props = {
     isOpen: true,
@@ -35,7 +54,7 @@ function setup(
     t: t as ComponentProps<typeof DeleteAccountModal>['t'],
     ...overrides,
   };
-  render(<DeleteAccountModal {...props} />);
+  renderWithFreshSwr(<DeleteAccountModal {...props} />);
   return { onClose, props };
 }
 
@@ -51,129 +70,88 @@ describe('DeleteAccountModal', () => {
         onClose={vi.fn()}
         session={baseSession}
         t={t as ComponentProps<typeof DeleteAccountModal>['t']}
-      />
+      />,
     );
     expect(container.firstChild).toBeNull();
   });
 
   it('calls onClose when cancel clicked', async () => {
-    mockedSendRequest.mockResolvedValue({ provider: 'local' });
+    mockedFetchAuthMe.mockResolvedValue({ provider: 'local' });
     const { onClose } = setup();
     await waitFor(() => {
-      expect(mockedSendRequest).toHaveBeenCalledWith('/auth/me', 'GET');
+      expect(mockedFetchAuthMe).toHaveBeenCalled();
     });
     fireEvent.click(screen.getByText('cancel'));
     expect(onClose).toHaveBeenCalled();
   });
 
   it('local: verify-and-delete with password after acknowledge', async () => {
-    mockedSendRequest.mockImplementation(
-      async (endpoint, method, body, _f, opts) => {
-        if (endpoint === '/auth/me' && method === 'GET') {
-          return { provider: 'local' };
-        }
-        if (endpoint === '/auth/verify-and-delete' && method === 'POST') {
-          expect(body).toEqual({ password: 'correct-password' });
-          expect(opts).toEqual({ skipAuthRedirectOn401: true });
-          return { message: 'Deleted' };
-        }
-        throw new Error(`unexpected ${endpoint} ${method}`);
-      }
-    );
+    mockedFetchAuthMe.mockResolvedValue({ provider: 'local' });
+    mockedVerifyPwd.mockResolvedValue({ message: 'Deleted' });
     mockedSignOut.mockResolvedValue(undefined);
     const { onClose } = setup();
 
     await waitFor(() => {
-      expect(
-        screen.getByPlaceholderText('deleteAccountPasswordPlaceholder')
-      ).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('deleteAccountPasswordPlaceholder')).toBeInTheDocument();
     });
 
-    fireEvent.change(
-      screen.getByPlaceholderText('deleteAccountPasswordPlaceholder'),
-      { target: { value: 'correct-password' } }
-    );
+    fireEvent.change(screen.getByPlaceholderText('deleteAccountPasswordPlaceholder'), {
+      target: { value: 'correct-password' },
+    });
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByText('confirmDelete'));
 
     await waitFor(() => {
-      expect(mockedSendRequest).toHaveBeenCalledWith(
-        '/auth/verify-and-delete',
-        'POST',
-        { password: 'correct-password' },
-        false,
-        { skipAuthRedirectOn401: true }
-      );
+      expect(mockedVerifyPwd).toHaveBeenCalledWith('correct-password');
     });
     expect(onClose).toHaveBeenCalled();
     expect(mockedSignOut).toHaveBeenCalledWith({ callbackUrl: '/' });
   });
 
   it('local: delete stays disabled until password is entered', async () => {
-    mockedSendRequest.mockResolvedValue({ provider: 'local' });
+    mockedFetchAuthMe.mockResolvedValue({ provider: 'local' });
     setup();
 
     await waitFor(() => {
-      expect(
-        screen.getByPlaceholderText('deleteAccountPasswordPlaceholder')
-      ).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('deleteAccountPasswordPlaceholder')).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole('checkbox'));
     expect(screen.getByText('confirmDelete').closest('button')).toBeDisabled();
 
-    expect(
-      mockedSendRequest.mock.calls.filter(
-        (c) => c[0] === '/auth/verify-and-delete'
-      )
-    ).toHaveLength(0);
+    expect(mockedVerifyPwd).not.toHaveBeenCalled();
   });
 
   it('local: shows inline error when acknowledge missing', async () => {
-    mockedSendRequest.mockResolvedValue({ provider: 'local' });
+    mockedFetchAuthMe.mockResolvedValue({ provider: 'local' });
     setup();
 
     await waitFor(() => {
-      expect(
-        screen.getByPlaceholderText('deleteAccountPasswordPlaceholder')
-      ).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('deleteAccountPasswordPlaceholder')).toBeInTheDocument();
     });
 
-    fireEvent.change(
-      screen.getByPlaceholderText('deleteAccountPasswordPlaceholder'),
-      { target: { value: 'pw' } }
-    );
+    fireEvent.change(screen.getByPlaceholderText('deleteAccountPasswordPlaceholder'), {
+      target: { value: 'pw' },
+    });
     fireEvent.click(screen.getByText('confirmDelete'));
 
     await waitFor(() => {
-      expect(
-        screen.getByText('deleteAccountAcknowledgeRequired')
-      ).toBeInTheDocument();
+      expect(screen.getByText('deleteAccountAcknowledgeRequired')).toBeInTheDocument();
     });
   });
 
   it('local: shows API error on verify failure without signing out', async () => {
-    mockedSendRequest.mockImplementation(async (endpoint, method) => {
-      if (endpoint === '/auth/me' && method === 'GET') {
-        return { provider: 'local' };
-      }
-      if (endpoint === '/auth/verify-and-delete' && method === 'POST') {
-        throw new Error('Invalid password');
-      }
-      throw new Error('unexpected');
-    });
+    mockedFetchAuthMe.mockResolvedValue({ provider: 'local' });
+    mockedVerifyPwd.mockRejectedValue(new Error('Invalid password'));
     setup();
 
     await waitFor(() => {
-      expect(
-        screen.getByPlaceholderText('deleteAccountPasswordPlaceholder')
-      ).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('deleteAccountPasswordPlaceholder')).toBeInTheDocument();
     });
 
-    fireEvent.change(
-      screen.getByPlaceholderText('deleteAccountPasswordPlaceholder'),
-      { target: { value: 'pw' } }
-    );
+    fireEvent.change(screen.getByPlaceholderText('deleteAccountPasswordPlaceholder'), {
+      target: { value: 'pw' },
+    });
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByText('confirmDelete'));
 
@@ -184,22 +162,9 @@ describe('DeleteAccountModal', () => {
   });
 
   it('oauth: request OTP then verify-and-delete', async () => {
-    mockedSendRequest.mockImplementation(
-      async (endpoint, method, body, _f, opts) => {
-        if (endpoint === '/auth/me' && method === 'GET') {
-          return { provider: 'google' };
-        }
-        if (endpoint === '/auth/request-deletion-otp' && method === 'POST') {
-          return { message: 'OTP sent' };
-        }
-        if (endpoint === '/auth/verify-and-delete' && method === 'POST') {
-          expect(body).toEqual({ otp: '888777' });
-          expect(opts).toEqual({ skipAuthRedirectOn401: true });
-          return { message: 'Deleted' };
-        }
-        throw new Error(`unexpected ${endpoint}`);
-      }
-    );
+    mockedFetchAuthMe.mockResolvedValue({ provider: 'google' });
+    mockedRequestOtp.mockResolvedValue({ message: 'OTP sent' });
+    mockedVerifyOtp.mockResolvedValue({ message: 'Deleted' });
     mockedSignOut.mockResolvedValue(undefined);
     const { onClose } = setup();
 
@@ -210,45 +175,25 @@ describe('DeleteAccountModal', () => {
     fireEvent.click(screen.getByText('deleteAccountSendCode'));
 
     await waitFor(() => {
-      expect(mockedSendRequest).toHaveBeenCalledWith(
-        '/auth/request-deletion-otp',
-        'POST',
-        {}
-      );
+      expect(mockedRequestOtp).toHaveBeenCalled();
     });
 
-    fireEvent.change(
-      screen.getByPlaceholderText('deleteAccountOtpPlaceholder'),
-      {
-        target: { value: '888777' },
-      }
-    );
+    fireEvent.change(screen.getByPlaceholderText('deleteAccountOtpPlaceholder'), {
+      target: { value: '888777' },
+    });
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByText('confirmDelete'));
 
     await waitFor(() => {
-      expect(mockedSendRequest).toHaveBeenCalledWith(
-        '/auth/verify-and-delete',
-        'POST',
-        { otp: '888777' },
-        false,
-        { skipAuthRedirectOn401: true }
-      );
+      expect(mockedVerifyOtp).toHaveBeenCalledWith('888777');
     });
     expect(onClose).toHaveBeenCalled();
     expect(mockedSignOut).toHaveBeenCalledWith({ callbackUrl: '/' });
   });
 
   it('oauth: shows error when request-deletion-otp fails', async () => {
-    mockedSendRequest.mockImplementation(async (endpoint, method) => {
-      if (endpoint === '/auth/me' && method === 'GET') {
-        return { provider: 'google' };
-      }
-      if (endpoint === '/auth/request-deletion-otp' && method === 'POST') {
-        throw new Error('Password required for local accounts');
-      }
-      throw new Error('unexpected');
-    });
+    mockedFetchAuthMe.mockResolvedValue({ provider: 'google' });
+    mockedRequestOtp.mockRejectedValue(new Error('Password required for local accounts'));
     setup();
 
     await waitFor(() => {
@@ -257,29 +202,24 @@ describe('DeleteAccountModal', () => {
     fireEvent.click(screen.getByText('deleteAccountSendCode'));
 
     await waitFor(() => {
-      expect(
-        screen.getByText('Password required for local accounts')
-      ).toBeInTheDocument();
+      expect(screen.getByText('Password required for local accounts')).toBeInTheDocument();
     });
   });
 
   it('does not call verify when session has no user', async () => {
-    mockedSendRequest.mockResolvedValue({ provider: 'local' });
+    mockedFetchAuthMe.mockResolvedValue({ provider: 'local' });
     setup({ session: null });
 
     await waitFor(() => {
-      expect(mockedSendRequest).toHaveBeenCalledWith('/auth/me', 'GET');
+      expect(mockedFetchAuthMe).toHaveBeenCalled();
     });
     fireEvent.click(screen.getByText('confirmDelete'));
-    expect(
-      mockedSendRequest.mock.calls.filter(
-        (c) => c[0] === '/auth/verify-and-delete'
-      )
-    ).toHaveLength(0);
+    expect(mockedVerifyPwd).not.toHaveBeenCalled();
+    expect(mockedVerifyOtp).not.toHaveBeenCalled();
   });
 
   it('shows provider load error from /auth/me', async () => {
-    mockedSendRequest.mockRejectedValue(new Error('network down'));
+    mockedFetchAuthMe.mockRejectedValue(new Error('network down'));
     setup();
 
     await waitFor(() => {
@@ -288,21 +228,14 @@ describe('DeleteAccountModal', () => {
   });
 
   it('uses copy fallbacks when t returns empty', async () => {
-    mockedSendRequest.mockResolvedValue({ provider: 'local' });
+    mockedFetchAuthMe.mockResolvedValue({ provider: 'local' });
     const tEmpty = (() => '') as ComponentProps<typeof DeleteAccountModal>['t'];
-    render(
-      <DeleteAccountModal
-        isOpen
-        onClose={vi.fn()}
-        session={baseSession}
-        t={tEmpty}
-      />
+    renderWithFreshSwr(
+      <DeleteAccountModal isOpen onClose={vi.fn()} session={baseSession} t={tEmpty} />,
     );
 
     await waitFor(() => {
-      expect(
-        screen.getByText('Hesabınızı Silmek İstiyor musunuz?')
-      ).toBeInTheDocument();
+      expect(screen.getByText('Hesabınızı Silmek İstiyor musunuz?')).toBeInTheDocument();
     });
   });
 });

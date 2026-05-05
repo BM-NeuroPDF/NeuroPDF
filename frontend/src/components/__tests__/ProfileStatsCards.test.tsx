@@ -18,7 +18,7 @@ describe('ProfileStatsCards', () => {
         stats={stats}
         userPlan="Premium"
         t={t as ComponentProps<typeof ProfileStatsCards>['t']}
-      />
+      />,
     );
     expect(screen.getByText('Premium')).toBeInTheDocument();
     expect(screen.getByText(/3/)).toBeInTheDocument();

@@ -1,5 +1,7 @@
 import type { NextConfig } from 'next';
 import path from 'path';
+import bundleAnalyzer from '@next/bundle-analyzer';
+import { withSentryConfig } from '@sentry/nextjs';
 
 const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:8000';
 
@@ -22,6 +24,12 @@ const maxUploadMb = readMbEnv(
   50
 );
 const maxUploadBytes = Math.floor(maxUploadMb * 1024 * 1024);
+
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
+  openAnalyzer: false,
+  analyzerMode: 'static',
+});
 
 const nextConfig: NextConfig = {
   output: 'standalone',
@@ -89,4 +97,15 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+const analyzedConfig = withBundleAnalyzer(nextConfig);
+
+export default withSentryConfig(analyzedConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  release: {
+    name: process.env.GIT_SHA || process.env.NEXT_PUBLIC_SENTRY_RELEASE || 'dev',
+  },
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+});

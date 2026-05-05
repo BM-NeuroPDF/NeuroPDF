@@ -15,11 +15,7 @@ type UseVoiceInputParams<K extends string> = {
   setInput: Dispatch<SetStateAction<string>>;
 };
 
-export function useVoiceInput<K extends string>({
-  language,
-  t,
-  setInput,
-}: UseVoiceInputParams<K>) {
+export function useVoiceInput<K extends string>({ language, t, setInput }: UseVoiceInputParams<K>) {
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const isManuallyStopped = useRef(false);
@@ -52,9 +48,7 @@ export function useVoiceInput<K extends string>({
         }
       }
 
-      const prefix = committedTranscriptRef.current
-        ? `${committedTranscriptRef.current} `
-        : '';
+      const prefix = committedTranscriptRef.current ? `${committedTranscriptRef.current} ` : '';
       const merged = `${prefix}${finalTranscript}${interimTranscript}`.trim();
 
       if (merged) {
@@ -121,15 +115,11 @@ export function useVoiceInput<K extends string>({
     } catch (error) {
       const err = error as DOMException;
       if (err?.name === 'NotAllowedError') {
-        alert(
-          'Mikrofon izni reddedildi. Lütfen site ayarlarından mikrofona izin verin.'
-        );
+        alert('Mikrofon izni reddedildi. Lütfen site ayarlarından mikrofona izin verin.');
       } else if (err?.name === 'NotFoundError') {
         alert('Mikrofon bulunamadı. Lütfen bir mikrofon bağlayın.');
       } else {
-        alert(
-          'Mikrofon başlatılamadı. Lütfen tarayıcı izinlerini kontrol edin.'
-        );
+        alert('Mikrofon başlatılamadı. Lütfen tarayıcı izinlerini kontrol edin.');
       }
       return false;
     }

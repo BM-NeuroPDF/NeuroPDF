@@ -7,7 +7,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useGuestLimit } from '@/hooks/useGuestLimit';
 import UsageLimitModal from '@/components/UsageLimitModal';
-import { usePdf } from '@/context/PdfContext';
+import { usePdfActions, usePdfData, usePdfUi } from '@/context/PdfContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { sendRequest } from '@/utils/api';
 import { usePdfSummarize } from '@/hooks/usePdfSummarize';
@@ -21,9 +21,7 @@ import { SummarizePdfWorkArea } from '@/components/SummarizePdfWorkArea';
 import { SummaryAudioPlayer } from '@/components/SummaryAudioPlayer';
 import { SummaryResultPanel } from '@/components/SummaryResultPanel';
 
-const summarizePageChunkLoading = () => (
-  <div className="animate-pulse bg-gray-200 rounded h-48" />
-);
+const summarizePageChunkLoading = () => <div className="animate-pulse bg-gray-200 rounded h-48" />;
 
 const PdfViewer = dynamic(() => import('@/components/PdfViewer'), {
   ssr: false,
@@ -43,25 +41,13 @@ export default function SummarizePdfPage() {
 
   const { t } = useLanguage();
   const { popup, showError, close } = usePopup();
-  const {
-    usageInfo,
-    showLimitModal,
-    checkLimit,
-    closeLimitModal,
-    redirectToLogin,
-  } = useGuestLimit();
+  const { usageInfo, showLimitModal, checkLimit, closeLimitModal, redirectToLogin } =
+    useGuestLimit();
 
-  const {
-    pdfFile,
-    savePdf,
-    clearPdf,
-    setSessionId,
-    setIsChatActive,
-    setChatMessages,
-    setProChatOpen,
-    setActiveSessionDbId,
-    loadChatSessions,
-  } = usePdf();
+  const { pdfFile, setChatMessages, setSessionId, setIsChatActive, setActiveSessionDbId } =
+    usePdfData();
+  const { savePdf, clearPdf, loadChatSessions } = usePdfActions();
+  const { setProChatOpen } = usePdfUi();
 
   const [file, setFile] = useState<File | null>(null);
 
@@ -96,8 +82,7 @@ export default function SummarizePdfPage() {
     loadChatSessions,
   });
 
-  const isProUser =
-    userRole?.toLowerCase() === 'pro' || userRole?.toLowerCase() === 'pro user';
+  const isProUser = userRole?.toLowerCase() === 'pro' || userRole?.toLowerCase() === 'pro user';
 
   const {
     audioUrl,
@@ -165,12 +150,10 @@ export default function SummarizePdfPage() {
         resetState(f);
       }
     },
-    [maxBytes, resetState, clearError, setErrorType, setCustomErrorMsg, setFile]
+    [maxBytes, resetState, clearError, setErrorType, setCustomErrorMsg, setFile],
   );
 
-  const handleDropFromPanel = (
-    e?: React.DragEvent<HTMLDivElement> | React.MouseEvent
-  ) => {
+  const handleDropFromPanel = (e?: React.DragEvent<HTMLDivElement> | React.MouseEvent) => {
     clearError();
     if (pdfFile) {
       if (pdfFile.type !== 'application/pdf') {
@@ -198,10 +181,7 @@ export default function SummarizePdfPage() {
     clearError();
     const f = e.target.files?.[0];
     if (f) {
-      if (
-        f.type !== 'application/pdf' &&
-        !f.name.toLowerCase().endsWith('.pdf')
-      ) {
+      if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
         setFile(null);
         setErrorType('INVALID_TYPE');
         e.target.value = '';
@@ -223,7 +203,7 @@ export default function SummarizePdfPage() {
     if (!summary) return;
     clearError();
     try {
-      const blob = await sendRequest('/files/markdown-to-pdf', 'POST', {
+      const blob = await sendRequest<Blob>('/files/markdown-to-pdf', 'POST', {
         markdown: summary,
       });
       if (!(blob instanceof Blob)) throw new Error('PDF oluşturulamadı.');
@@ -262,15 +242,9 @@ export default function SummarizePdfPage() {
         className="hidden"
       />
 
-      <SummarizeBusyOverlay
-        open={summarizing || audioLoading}
-        audioLoading={audioLoading}
-        t={t}
-      />
+      <SummarizeBusyOverlay open={summarizing || audioLoading} audioLoading={audioLoading} t={t} />
 
-      <h1 className="text-3xl mb-6 tracking-tight">
-        {t('summarizeTitle') || 'PDF Özetleyici'}
-      </h1>
+      <h1 className="text-3xl mb-6 tracking-tight">{t('summarizeTitle') || 'PDF Özetleyici'}</h1>
 
       {usageInfo && !showLimitModal && !session && (
         <div className="info-box mb-4">{usageInfo.message}</div>
@@ -342,12 +316,7 @@ export default function SummarizePdfPage() {
         maxUsage={3}
       />
 
-      <Popup
-        type={popup.type}
-        message={popup.message}
-        open={popup.open}
-        onClose={close}
-      />
+      <Popup type={popup.type} message={popup.message} open={popup.open} onClose={close} />
     </main>
   );
 }

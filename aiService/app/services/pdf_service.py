@@ -1,7 +1,8 @@
 # ai_service/app/services/pdf_service.py
 
 import io
-import PyPDF2
+from pypdf import PdfReader
+from pypdf.errors import PdfReadError
 from fastapi import HTTPException
 
 def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
@@ -13,8 +14,13 @@ def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
         # Bayt verisini bellekte bir dosya gibi aç
         pdf_file = io.BytesIO(pdf_bytes)
         
-        # PyPDF2 ile oku
-        reader = PyPDF2.PdfReader(pdf_file)
+        # pypdf ile oku
+        reader = PdfReader(pdf_file)
+        if reader.is_encrypted and reader.decrypt("") == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Şifreli PDF desteklenmiyor veya parola gerekli.",
+            )
         
         text_parts = []
         for page in reader.pages:
@@ -33,7 +39,7 @@ def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
             
         return full_text
 
-    except PyPDF2.errors.PdfReadError:
+    except PdfReadError:
         raise HTTPException(status_code=400, detail="Geçersiz veya bozuk PDF dosyası.")
     except HTTPException:
         # Re-raise HTTPException as-is (don't wrap it)
@@ -51,8 +57,13 @@ def extract_text_from_pdf_path(storage_path: str) -> str:
         # Dosyayı paylaşılan diskten (shared_uploads) aç
         with open(storage_path, "rb") as pdf_file:
             
-            # PyPDF2 ile oku
-            reader = PyPDF2.PdfReader(pdf_file)
+            # pypdf ile oku
+            reader = PdfReader(pdf_file)
+            if reader.is_encrypted and reader.decrypt("") == 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Şifreli PDF desteklenmiyor veya parola gerekli.",
+                )
             
             text_parts = []
             for page in reader.pages:
@@ -72,7 +83,7 @@ def extract_text_from_pdf_path(storage_path: str) -> str:
 
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Dosya bulunamadı: {storage_path}")
-    except PyPDF2.errors.PdfReadError:
+    except PdfReadError:
         raise HTTPException(status_code=400, detail="Geçersiz veya bozuk PDF dosyası.")
     except HTTPException:
         # Re-raise HTTPException as-is (don't wrap it)

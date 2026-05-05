@@ -12,12 +12,7 @@ type InputOTP6Props = {
   'aria-label'?: string;
 };
 
-export function InputOTP6({
-  value,
-  onChange,
-  disabled,
-  'aria-label': ariaLabel,
-}: InputOTP6Props) {
+export function InputOTP6({ value, onChange, disabled, 'aria-label': ariaLabel }: InputOTP6Props) {
   return (
     <OTPInput
       value={value}
@@ -41,7 +36,7 @@ export function InputOTP6({
               className={cn(
                 'flex h-12 w-10 items-center justify-center rounded-lg border border-[var(--navbar-border)] bg-[var(--background)] text-lg font-semibold text-[var(--foreground)]',
                 slot.isActive &&
-                  'ring-2 ring-[var(--button-bg)] ring-offset-2 ring-offset-[var(--background)]'
+                  'ring-2 ring-[var(--button-bg)] ring-offset-2 ring-offset-[var(--background)]',
               )}
             >
               {slot.char ?? '\u00a0'}

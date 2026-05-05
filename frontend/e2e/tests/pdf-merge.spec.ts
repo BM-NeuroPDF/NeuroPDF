@@ -1,18 +1,15 @@
 import { test, expect } from '@playwright/test';
+import { loginAsTestUser } from '../support/auth';
 import {
   dismissFabIfPresent,
   isMobileViewport,
-  login,
   openMobileMenuIfNeeded,
 } from '../support/helpers';
 import path from 'path';
 
-const TEST_EMAIL = process.env.E2E_TEST_EMAIL || 'test1@gmail.com';
-const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD || 'Test1234.';
-
 test.describe('PDF Merge E2E', () => {
   test('user can merge two PDFs and download result', async ({ page }) => {
-    await login(page, TEST_EMAIL, TEST_PASSWORD);
+    await loginAsTestUser(page);
 
     if (isMobileViewport(page)) {
       await openMobileMenuIfNeeded(page);

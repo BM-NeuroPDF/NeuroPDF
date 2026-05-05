@@ -156,3 +156,17 @@ def test_async_summarize_local_language_en(mock_client_cls, _extract, mock_sum):
     assert kw.get("language") == "en"
     prompt_instruction = pos[1] if len(pos) > 1 else kw.get("prompt_instruction", "")
     assert "Analyze the following text in detail" in prompt_instruction
+
+
+def test_sign_callback_payload_adds_legacy_secret_header(monkeypatch):
+    from app.tasks.pdf_tasks import _sign_callback_payload, settings
+
+    monkeypatch.setattr(settings, "CALLBACK_SECRET", "legacy-secret", raising=False)
+    body, headers = _sign_callback_payload(
+        callback_url="http://localhost/files/callback/9",
+        method="post",
+        payload={"status": "ok"},
+    )
+
+    assert body
+    assert headers["X-Callback-Secret"] == "legacy-secret"

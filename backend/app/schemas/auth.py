@@ -25,6 +25,10 @@ class AuthOut(BaseModel):
     created_at: datetime | None = None
 
 
+class RefreshIn(BaseModel):
+    refresh_token: str | None = None
+
+
 class RegisterIn(BaseModel):
     username: str
     email: EmailStr

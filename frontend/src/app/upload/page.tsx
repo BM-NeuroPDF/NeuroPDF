@@ -1,30 +1,28 @@
-"use client";
+'use client';
 
-import { useCallback, useState } from "react";
-import { useSession } from "next-auth/react";
-import dynamic from "next/dynamic";
-import { useUnifiedPdfDrop } from "@/hooks/useUnifiedPdfDrop";
+import { useCallback, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import dynamic from 'next/dynamic';
+import { useUnifiedPdfDrop } from '@/hooks/useUnifiedPdfDrop';
 
-import { useGuestLimit } from "@/hooks/useGuestLimit";
-import UsageLimitModal from "@/components/UsageLimitModal";
-import { usePdf } from "@/context/PdfContext";
-import { useLanguage } from "@/context/LanguageContext";
-import { getMaxUploadBytes } from "@/app/config/fileLimits";
+import { useGuestLimit } from '@/hooks/useGuestLimit';
+import UsageLimitModal from '@/components/UsageLimitModal';
+import { usePdfActions } from '@/context/PdfContext';
+import { useLanguage } from '@/context/LanguageContext';
+import { getMaxUploadBytes } from '@/app/config/fileLimits';
 
-import Popup from "@/components/ui/Popup";
-import { usePopup } from "@/hooks/usePopup";
+import Popup from '@/components/ui/Popup';
+import { usePopup } from '@/hooks/usePopup';
 
-const PdfViewer = dynamic(() => import("@/components/PdfViewer"), { ssr: false });
+const PdfViewer = dynamic(() => import('@/components/PdfViewer'), { ssr: false });
 
 function isPdfFile(f: File): boolean {
-  return (
-    f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf")
-  );
+  return f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
 }
 
 export default function UploadPage() {
   const { data: session, status } = useSession();
-  const { addPdfs } = usePdf();
+  const { addPdfs } = usePdfActions();
   const { t } = useLanguage();
 
   const { popup, showError, showSuccess, showInfo, close } = usePopup();
@@ -32,11 +30,10 @@ export default function UploadPage() {
   const [stagingFiles, setStagingFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
 
-  const isGuest = status !== "authenticated";
+  const isGuest = status !== 'authenticated';
   const maxBytes = getMaxUploadBytes(isGuest);
 
-  const { usageInfo, showLimitModal, closeLimitModal, redirectToLogin } =
-    useGuestLimit();
+  const { usageInfo, showLimitModal, closeLimitModal, redirectToLogin } = useGuestLimit();
 
   const onDrop = useCallback(
     (acceptedFiles: File[], fileRejections: unknown[]) => {
@@ -46,13 +43,13 @@ export default function UploadPage() {
         };
         const err = rej.errors[0];
 
-        if (err.code === "file-invalid-type") {
-          showError(t("invalidFileType"));
+        if (err.code === 'file-invalid-type') {
+          showError(t('invalidFileType'));
           return;
         }
 
-        if (err.code === "file-too-large") {
-          showError(t("fileSizeExceeded"));
+        if (err.code === 'file-too-large') {
+          showError(t('fileSizeExceeded'));
           return;
         }
 
@@ -64,25 +61,25 @@ export default function UploadPage() {
 
       const pdfs = acceptedFiles.filter(isPdfFile);
       if (pdfs.length === 0) {
-        showError(t("invalidFileType"));
+        showError(t('invalidFileType'));
         return;
       }
 
       const oversized = pdfs.find((f) => f.size > maxBytes);
       if (oversized) {
-        showError(t("fileSizeExceeded"));
+        showError(t('fileSizeExceeded'));
         return;
       }
 
       setStagingFiles(pdfs);
     },
-    [maxBytes, t, showError]
+    [maxBytes, t, showError],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useUnifiedPdfDrop({
     options: {
       multiple: true,
-      accept: { "application/pdf": [".pdf"] },
+      accept: { 'application/pdf': ['.pdf'] },
       maxSize: maxBytes,
     },
     onFiles: onDrop,
@@ -90,19 +87,19 @@ export default function UploadPage() {
 
   const handleSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const list = Array.from(e.target.files || []);
-    e.target.value = "";
+    e.target.value = '';
 
     if (!list.length) return;
 
     const pdfs = list.filter(isPdfFile);
     if (pdfs.length === 0) {
-      showError(t("invalidFileType"));
+      showError(t('invalidFileType'));
       return;
     }
 
     const oversized = pdfs.find((f) => f.size > maxBytes);
     if (oversized) {
-      showError(t("fileSizeExceeded"));
+      showError(t('fileSizeExceeded'));
       return;
     }
 
@@ -111,7 +108,7 @@ export default function UploadPage() {
 
   const handleAddToPanel = () => {
     if (!stagingFiles.length) {
-      showInfo(t("selectFile"));
+      showInfo(t('selectFile'));
       return;
     }
 
@@ -120,9 +117,9 @@ export default function UploadPage() {
     try {
       addPdfs(stagingFiles);
       setStagingFiles([]);
-      showSuccess(t("uploadSuccess") || "PDF added to panel");
+      showSuccess(t('uploadSuccess') || 'PDF added to panel');
     } catch {
-      showError(t("uploadError") || "Error adding file");
+      showError(t('uploadError') || 'Error adding file');
     } finally {
       setUploading(false);
     }
@@ -132,7 +129,7 @@ export default function UploadPage() {
 
   return (
     <main className="min-h-screen p-6 max-w-4xl mx-auto font-bold text-[var(--foreground)]">
-      <h1 className="text-3xl mb-6 tracking-tight">{t("uploadPageTitle")}</h1>
+      <h1 className="text-3xl mb-6 tracking-tight">{t('uploadPageTitle')}</h1>
 
       {usageInfo && !showLimitModal && !session && (
         <div className="info-box mb-4">{usageInfo.message}</div>
@@ -143,8 +140,8 @@ export default function UploadPage() {
         className={`container-card border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-300
         ${
           isDragActive
-            ? "border-[var(--button-bg)] bg-[var(--background)] opacity-80"
-            : "border-[var(--navbar-border)] hover:border-[var(--button-bg)]"
+            ? 'border-[var(--button-bg)] bg-[var(--background)] opacity-80'
+            : 'border-[var(--navbar-border)] hover:border-[var(--button-bg)]'
         }`}
       >
         <input {...getInputProps()} accept="application/pdf,.pdf" multiple />
@@ -165,22 +162,17 @@ export default function UploadPage() {
             />
           </svg>
 
-          {isDragActive ? (
-            <p>{t("dropActive")}</p>
-          ) : (
-            <p>{t("dropPassive")}</p>
-          )}
+          {isDragActive ? <p>{t('dropActive')}</p> : <p>{t('dropPassive')}</p>}
         </div>
 
         {stagingFiles.length > 0 && !isDragActive && (
           <p className="mt-4 text-sm opacity-60 font-normal">
-            {t("pdfFilesSelectedCount")}{" "}
-            <b>{stagingFiles.length}</b>
+            {t('pdfFilesSelectedCount')} <b>{stagingFiles.length}</b>
             {previewFile && (
               <>
-                {" "}
-                · {t("currentFile")} <b>{previewFile.name}</b>
-                {stagingFiles.length > 1 ? " …" : ""}
+                {' '}
+                · {t('currentFile')} <b>{previewFile.name}</b>
+                {stagingFiles.length > 1 ? ' …' : ''}
               </>
             )}
           </p>
@@ -189,7 +181,7 @@ export default function UploadPage() {
 
       <div className="mt-6 flex justify-start">
         <label className="btn-primary cursor-pointer shadow-md hover:scale-105 flex items-center gap-2">
-          {t("selectFile")}
+          {t('selectFile')}
           <input
             type="file"
             className="hidden"
@@ -212,9 +204,7 @@ export default function UploadPage() {
             disabled={uploading}
             className="btn-primary w-full sm:w-auto px-8 py-3 shadow-lg hover:scale-105"
           >
-            {uploading
-              ? t("uploading") || "Uploading..."
-              : t("uploadButton")}
+            {uploading ? t('uploading') || 'Uploading...' : t('uploadButton')}
           </button>
         </div>
       )}
@@ -227,12 +217,7 @@ export default function UploadPage() {
         maxUsage={3}
       />
 
-      <Popup
-        type={popup.type}
-        message={popup.message}
-        open={popup.open}
-        onClose={close}
-      />
+      <Popup type={popup.type} message={popup.message} open={popup.open} onClose={close} />
     </main>
   );
 }

@@ -9,9 +9,7 @@ export type SummarizePdfViewerProps = {
   height?: number | string;
 };
 
-const summarizePdfChunkLoading = () => (
-  <div className="animate-pulse bg-gray-200 rounded h-48" />
-);
+const summarizePdfChunkLoading = () => <div className="animate-pulse bg-gray-200 rounded h-48" />;
 
 const DynamicPdfViewer = dynamic(() => import('@/components/PdfViewer'), {
   ssr: false,
@@ -38,9 +36,7 @@ export function SummarizePdfWorkArea({
     <div className="mt-6 space-y-6">
       <div className="rounded-xl overflow-hidden border border-[var(--container-border)] shadow-lg">
         <div className="p-4 border-b border-[var(--navbar-border)] bg-[var(--container-bg)]">
-          <h3 className="text-xl font-semibold opacity-90">
-            {t('pdfPreviewTitle')}
-          </h3>
+          <h3 className="text-xl font-semibold opacity-90">{t('pdfPreviewTitle')}</h3>
         </div>
         <PdfViewerComp file={file} height={550} />
       </div>

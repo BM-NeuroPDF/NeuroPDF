@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from 'react';
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { sendRequest } from '@/utils/api';
 
 export interface UseProfileAvatarUser {
@@ -28,10 +22,7 @@ export function useProfileAvatar({ status, user }: UseProfileAvatarParams): {
     if (!user) return;
     const uid = user.id || 'me';
     try {
-      const blob = (await sendRequest(
-        `/api/v1/user/${uid}/avatar`,
-        'GET'
-      )) as Blob;
+      const blob = await sendRequest<Blob>(`/api/v1/user/${uid}/avatar`, 'GET');
       setAvatarSrc((prev) => {
         if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
         return URL.createObjectURL(blob);

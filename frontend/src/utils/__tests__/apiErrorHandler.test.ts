@@ -5,9 +5,7 @@ describe('handleApiError', () => {
   it('maps 401 to session message', () => {
     const showError = vi.fn();
     handleApiError(401, showError);
-    expect(showError).toHaveBeenCalledWith(
-      'Session expired. Please login again.'
-    );
+    expect(showError).toHaveBeenCalledWith('Session expired. Please login again.');
   });
 
   it('maps 403 to access denied', () => {
@@ -19,9 +17,7 @@ describe('handleApiError', () => {
   it('maps 500 to server error', () => {
     const showError = vi.fn();
     handleApiError(500, showError);
-    expect(showError).toHaveBeenCalledWith(
-      'Server error. Please try again later.'
-    );
+    expect(showError).toHaveBeenCalledWith('Server error. Please try again later.');
   });
 
   it('maps unknown status to generic message', () => {

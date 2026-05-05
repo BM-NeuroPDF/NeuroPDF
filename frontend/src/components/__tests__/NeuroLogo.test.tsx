@@ -25,9 +25,7 @@ describe('NeuroLogo', () => {
   });
 
   it('applies custom className and sizes', () => {
-    const { container } = render(
-      <NeuroLogo className="extra" iconSize={32} textSize="text-2xl" />
-    );
+    const { container } = render(<NeuroLogo className="extra" iconSize={32} textSize="text-2xl" />);
     expect(container.firstChild).toHaveClass('extra');
   });
 });

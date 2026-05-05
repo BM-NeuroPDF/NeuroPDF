@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.db import get_supabase, get_db
 from app.deps import get_current_user
+from app.routers.auth import get_current_user_dep
 
 client = TestClient(app)
 
@@ -38,8 +39,8 @@ class TestAuthEndpoints:
     @patch(
         "app.routers.auth.security.create_2fa_pending_token", return_value="temp_jwt"
     )
-    @patch("app.routers.auth.set_redis_otp", new_callable=AsyncMock)
-    @patch("app.routers.auth.send_login_otp_email")
+    @patch("app.routers.auth._legacy.set_redis_otp", new_callable=AsyncMock)
+    @patch("app.routers.auth._legacy.send_login_otp_email")
     def test_login_success_requires_2fa(
         self,
         mock_send_email,
@@ -135,11 +136,11 @@ class TestAuthEndpoints:
             yield mock_session
 
         with (
-            patch("app.routers.auth.settings.USE_SUPABASE", False),
-            patch("app.routers.auth.check_rate_limit", return_value=True),
-            patch("app.routers.auth.security.verify_password", return_value=True),
+            patch("app.routers.auth._legacy.settings.USE_SUPABASE", False),
+            patch("app.routers.auth._legacy.check_rate_limit", return_value=True),
+            patch("app.routers.auth._legacy.security.verify_password", return_value=True),
             patch(
-                "app.routers.auth.set_redis_otp",
+                "app.routers.auth._legacy.set_redis_otp",
                 new_callable=AsyncMock,
             ) as set_redis_mock,
         ):
@@ -164,12 +165,12 @@ class TestAuthEndpoints:
     @patch("app.routers.auth.settings.USE_SUPABASE", True)
     @patch("app.routers.auth.check_rate_limit", return_value=True)
     @patch("app.routers.auth.is_2fa_verify_locked", return_value=False)
-    @patch("app.routers.auth.user_repo.mark_email_as_verified", new_callable=AsyncMock)
-    @patch("app.routers.auth.delete_redis_otp", new_callable=AsyncMock)
-    @patch("app.routers.auth.get_redis_otp", new_callable=AsyncMock)
-    @patch("app.routers.auth.security.create_jwt", return_value="access_jwt")
-    @patch("app.routers.auth.security.decode_2fa_pending_token")
-    @patch("app.routers.auth.clear_2fa_verify_failures")
+    @patch("app.routers.auth._legacy.user_repo.mark_email_as_verified", new_callable=AsyncMock)
+    @patch("app.routers.auth._legacy.delete_redis_otp", new_callable=AsyncMock)
+    @patch("app.routers.auth._legacy.get_redis_otp", new_callable=AsyncMock)
+    @patch("app.routers.auth._legacy.security.create_jwt", return_value="access_jwt")
+    @patch("app.routers.auth._legacy.security.decode_2fa_pending_token")
+    @patch("app.routers.auth._legacy.clear_2fa_verify_failures")
     def test_verify_2fa_success(
         self,
         mock_clear_fails,
@@ -237,7 +238,7 @@ class TestAuthEndpoints:
 
     @patch("app.routers.auth.settings.USE_SUPABASE", True)
     @patch("app.routers.auth.check_rate_limit", return_value=True)
-    @patch("app.routers.auth.is_2fa_verify_locked", return_value=True)
+    @patch("app.routers.auth._legacy.is_2fa_verify_locked", return_value=True)
     def test_verify_2fa_locked(self, mock_locked, override_get_supabase):
         response = client.post(
             "/auth/verify-2fa",
@@ -247,9 +248,9 @@ class TestAuthEndpoints:
 
     @patch("app.routers.auth.settings.USE_SUPABASE", True)
     @patch("app.routers.auth.check_rate_limit", return_value=True)
-    @patch("app.routers.auth.is_2fa_verify_locked", return_value=False)
-    @patch("app.routers.auth.record_2fa_verify_failure")
-    @patch("app.routers.auth.security.decode_2fa_pending_token", side_effect=ValueError)
+    @patch("app.routers.auth._legacy.is_2fa_verify_locked", return_value=False)
+    @patch("app.routers.auth._legacy.record_2fa_verify_failure")
+    @patch("app.routers.auth._legacy.security.decode_2fa_pending_token", side_effect=ValueError)
     def test_verify_2fa_invalid_token(
         self, mock_decode, mock_record_fail, mock_locked, override_get_supabase
     ):
@@ -546,7 +547,13 @@ class TestAuthEndpoints:
         mock_user = MagicMock()
         mock_session = MagicMock()
         mock_session.get.return_value = mock_user
+        auth_lookup = MagicMock()
+        auth_lookup.mappings.return_value.first.return_value = {
+            "password_hash": "9f735e0df9a1ddc702bf0a1a7b83033f9f7153a00c29de82cedadc9957289b05"
+        }
+        mock_session.execute.return_value = auth_lookup
         app.dependency_overrides[get_current_user] = lambda: {"sub": "u-del"}
+        app.dependency_overrides[get_current_user_dep] = lambda: {"sub": "u-del"}
         app.dependency_overrides[get_supabase] = lambda: MagicMock()
 
         def _db():
@@ -554,7 +561,11 @@ class TestAuthEndpoints:
 
         app.dependency_overrides[get_db] = _db
         try:
-            response = client.delete("/auth/delete-account")
+            response = client.request(
+                "DELETE",
+                "/auth/delete-account",
+                json={"password": "testpassword"},
+            )
             assert response.status_code == 200
             mock_session.delete.assert_called_once_with(mock_user)
             mock_session.commit.assert_called_once()
@@ -565,7 +576,13 @@ class TestAuthEndpoints:
     def test_delete_account_local_no_user(self):
         mock_session = MagicMock()
         mock_session.get.return_value = None
+        auth_lookup = MagicMock()
+        auth_lookup.mappings.return_value.first.return_value = {
+            "password_hash": "9f735e0df9a1ddc702bf0a1a7b83033f9f7153a00c29de82cedadc9957289b05"
+        }
+        mock_session.execute.return_value = auth_lookup
         app.dependency_overrides[get_current_user] = lambda: {"sub": "gone"}
+        app.dependency_overrides[get_current_user_dep] = lambda: {"sub": "gone"}
         app.dependency_overrides[get_supabase] = lambda: MagicMock()
 
         def _db():
@@ -573,7 +590,11 @@ class TestAuthEndpoints:
 
         app.dependency_overrides[get_db] = _db
         try:
-            response = client.delete("/auth/delete-account")
+            response = client.request(
+                "DELETE",
+                "/auth/delete-account",
+                json={"password": "testpassword"},
+            )
             assert response.status_code == 200
             mock_session.delete.assert_not_called()
             mock_session.commit.assert_not_called()

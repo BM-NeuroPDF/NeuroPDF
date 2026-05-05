@@ -7,13 +7,10 @@ import dynamic from 'next/dynamic';
 import { guestService } from '@/services/guestService';
 import { useGuestLimit } from '@/hooks/useGuestLimit';
 import UsageLimitModal from '@/components/UsageLimitModal';
-import { usePdf } from '@/context/PdfContext';
+import { usePdfActions, usePdfData } from '@/context/PdfContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { sendRequest } from '@/utils/api';
-import {
-  getMaxMergeTotalBytes,
-  getMaxUploadBytes,
-} from '@/app/config/fileLimits';
+import { getMaxMergeTotalBytes, getMaxUploadBytes } from '@/app/config/fileLimits';
 
 const PdfViewer = dynamic(() => import('@/components/PdfViewer'), {
   ssr: false,
@@ -35,7 +32,8 @@ type ErrorType =
 export default function MergePdfPage() {
   const { data: session, status } = useSession();
   const { t } = useLanguage();
-  const { pdfFile, savePdf } = usePdf();
+  const { pdfFile } = usePdfData();
+  const { savePdf } = usePdfActions();
 
   const [files, setFiles] = useState<File[]>([]);
   const [processedBlob, setProcessedBlob] = useState<Blob | null>(null);
@@ -49,13 +47,8 @@ export default function MergePdfPage() {
   const maxBytesPerFile = getMaxUploadBytes(isGuest);
   const maxTotalBytes = getMaxMergeTotalBytes(isGuest);
 
-  const {
-    usageInfo,
-    showLimitModal,
-    checkLimit,
-    closeLimitModal,
-    redirectToLogin,
-  } = useGuestLimit();
+  const { usageInfo, showLimitModal, checkLimit, closeLimitModal, redirectToLogin } =
+    useGuestLimit();
 
   const clearError = () => {
     setErrorType('NONE');
@@ -102,10 +95,7 @@ export default function MergePdfPage() {
 
       for (const file of acceptedFiles) {
         // Çift Güvenlik (Manuel Type Kontrolü)
-        if (
-          file.type !== 'application/pdf' &&
-          !file.name.toLowerCase().endsWith('.pdf')
-        ) {
+        if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
           setErrorType('INVALID_TYPE');
           return;
         }
@@ -126,7 +116,7 @@ export default function MergePdfPage() {
 
       setFiles((prev) => [...prev, ...newFiles]);
     },
-    [files, maxBytesPerFile, maxTotalBytes]
+    [files, maxBytesPerFile, maxTotalBytes],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -146,15 +136,12 @@ export default function MergePdfPage() {
   };
 
   const handleDropFromPanel = (
-    e?: React.DragEvent<HTMLDivElement> | React.MouseEvent<HTMLButtonElement>
+    e?: React.DragEvent<HTMLDivElement> | React.MouseEvent<HTMLButtonElement>,
   ) => {
     clearError();
     if (pdfFile) {
       // Panelden gelen dosya için de tip kontrolü
-      if (
-        pdfFile.type !== 'application/pdf' &&
-        !pdfFile.name.toLowerCase().endsWith('.pdf')
-      ) {
+      if (pdfFile.type !== 'application/pdf' && !pdfFile.name.toLowerCase().endsWith('.pdf')) {
         setErrorType('INVALID_TYPE');
         return;
       }
@@ -170,9 +157,7 @@ export default function MergePdfPage() {
         return;
       }
 
-      const isAlreadyInList = files.some(
-        (f) => f.name === pdfFile.name && f.size === pdfFile.size
-      );
+      const isAlreadyInList = files.some((f) => f.name === pdfFile.name && f.size === pdfFile.size);
 
       if (!isAlreadyInList) {
         setFiles((prev) => [...prev, pdfFile]);
@@ -206,12 +191,7 @@ export default function MergePdfPage() {
       const formData = new FormData();
       files.forEach((file) => formData.append('files', file));
 
-      const blob = await sendRequest(
-        '/files/merge-pdfs',
-        'POST',
-        formData,
-        true
-      );
+      const blob = await sendRequest<Blob>('/files/merge-pdfs', 'POST', formData, true);
 
       if (blob.size === 0) throw new Error('Received empty blob from server');
 
@@ -265,11 +245,11 @@ export default function MergePdfPage() {
       formData.append('file', fileToSave);
       formData.append('filename', filename);
 
-      const result = await sendRequest(
+      const result = await sendRequest<{ size_kb?: number }>(
         '/files/save-processed',
         'POST',
         formData,
-        true
+        true,
       );
 
       alert(`${t('saveSuccess')}\n${t('fileSize')}: ${result.size_kb} KB`);
@@ -327,9 +307,7 @@ export default function MergePdfPage() {
           <div
             {...getRootProps({
               onDrop: (e) => {
-                const isPanel = e.dataTransfer.getData(
-                  'application/x-neuro-pdf'
-                );
+                const isPanel = e.dataTransfer.getData('application/x-neuro-pdf');
                 if (isPanel) {
                   handleDropFromPanel(e);
                 }
@@ -359,11 +337,7 @@ export default function MergePdfPage() {
                   d="M16.5 8.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v8.25A2.25 2.25 0 006 16.5h2.25m8.25-8.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-7.5A2.25 2.25 0 018.25 18v-1.5m8.25-8.25h-6a2.25 2.25 0 00-2.25 2.25v6"
                 />
               </svg>
-              {isDragActive ? (
-                <p>{t('dropFilesActive')}</p>
-              ) : (
-                <p>{t('dropFilesPassive')}</p>
-              )}
+              {isDragActive ? <p>{t('dropFilesActive')}</p> : <p>{t('dropFilesPassive')}</p>}
             </div>
           </div>
 
@@ -378,11 +352,7 @@ export default function MergePdfPage() {
                 stroke="currentColor"
                 className="w-5 h-5"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 4.5v15m7.5-7.5h-15"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
               {t('selectFile')}
               <input
@@ -399,10 +369,7 @@ export default function MergePdfPage() {
           {files.length > 0 && (
             <div className="mt-6">
               <div className="flex justify-between items-center mb-2">
-                <h2
-                  className="text-lg opacity-90"
-                  style={{ color: 'var(--foreground)' }}
-                >
+                <h2 className="text-lg opacity-90" style={{ color: 'var(--foreground)' }}>
                   {t('selectedFiles')} ({files.length})
                 </h2>
 
@@ -448,16 +415,10 @@ export default function MergePdfPage() {
                         {index + 1}.
                       </span>
                       <div className="flex flex-col">
-                        <span
-                          className="font-bold"
-                          style={{ color: 'var(--foreground)' }}
-                        >
+                        <span className="font-bold" style={{ color: 'var(--foreground)' }}>
                           {file.name}
                         </span>
-                        <span
-                          className="text-xs opacity-70"
-                          style={{ color: 'var(--foreground)' }}
-                        >
+                        <span className="text-xs opacity-70" style={{ color: 'var(--foreground)' }}>
                           ({Math.round(file.size / 1024)} KB)
                         </span>
                       </div>
@@ -572,9 +533,7 @@ export default function MergePdfPage() {
       {hasProcessed && processedBlob && (
         <div className="mt-6 space-y-6">
           <div className="container-card p-6">
-            <h3 className="text-xl mb-4 font-semibold">
-              {t('mergedPdfPreview')}
-            </h3>
+            <h3 className="text-xl mb-4 font-semibold">{t('mergedPdfPreview')}</h3>
             <div className="rounded-lg overflow-hidden border border-[var(--navbar-border)]">
               <PdfViewer
                 file={
@@ -690,11 +649,7 @@ export default function MergePdfPage() {
                   stroke="currentColor"
                   className="w-5 h-5"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M12 4.5v15m7.5-7.5h-15"
-                  />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                 </svg>
                 {t('newProcess')}
               </button>

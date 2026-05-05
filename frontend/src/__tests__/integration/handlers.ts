@@ -47,20 +47,17 @@ export const handlers = [
     return HttpResponse.json(mockSummaryResponse, { status: 200 });
   }),
 
-  http.post(
-    `${BASE_URL}/files/summarize-start/:file_id`,
-    async ({ params }) => {
-      await delay(500);
-      return HttpResponse.json(
-        {
-          status: 'processing',
-          message: 'Özetleme başlatıldı',
-          file_id: params.file_id,
-        },
-        { status: 200 }
-      );
-    }
-  ),
+  http.post(`${BASE_URL}/files/summarize-start/:file_id`, async ({ params }) => {
+    await delay(500);
+    return HttpResponse.json(
+      {
+        status: 'processing',
+        message: 'Özetleme başlatıldı',
+        file_id: params.file_id,
+      },
+      { status: 200 },
+    );
+  }),
 
   http.get(`${BASE_URL}/files/summary/:file_id`, async () => {
     await delay(300);
@@ -69,7 +66,7 @@ export const handlers = [
         summary: 'Mock summary text',
         status: 'completed',
       },
-      { status: 200 }
+      { status: 200 },
     );
   }),
 
@@ -107,7 +104,7 @@ export const handlers = [
           },
         ],
       },
-      { status: 200 }
+      { status: 200 },
     );
   }),
 
@@ -124,7 +121,7 @@ export const handlers = [
           },
         ],
       },
-      { status: 200 }
+      { status: 200 },
     );
   }),
 
@@ -137,7 +134,7 @@ export const handlers = [
         db_session_id: 'mock-db-session-1',
         filename: 'test.pdf',
       },
-      { status: 200 }
+      { status: 200 },
     );
   }),
 
@@ -214,7 +211,7 @@ export const handlers = [
         filename: 'saved.pdf',
         status: 'saved',
       },
-      { status: 200 }
+      { status: 200 },
     );
   }),
 
@@ -228,7 +225,7 @@ export const handlers = [
         status: 'requires_2fa',
         temp_token: 'mock-temp-token-for-msw',
       },
-      { status: 200 }
+      { status: 200 },
     );
   }),
 
@@ -244,7 +241,7 @@ export const handlers = [
         eula_accepted: true,
         created_at: null,
       },
-      { status: 200 }
+      { status: 200 },
     );
   }),
 
@@ -260,7 +257,7 @@ export const handlers = [
           username: 'newuser',
         },
       },
-      { status: 201 }
+      { status: 201 },
     );
   }),
 
@@ -276,7 +273,7 @@ export const handlers = [
           username: 'googleuser',
         },
       },
-      { status: 200 }
+      { status: 200 },
     );
   }),
 
@@ -288,7 +285,7 @@ export const handlers = [
         email: 'test@example.com',
         username: 'testuser',
       },
-      { status: 200 }
+      { status: 200 },
     );
   }),
 
@@ -317,7 +314,7 @@ export const handlers = [
         guest_id: 'mock-guest-123',
         created_at: new Date().toISOString(),
       },
-      { status: 201 }
+      { status: 201 },
     );
   }),
 
@@ -329,7 +326,7 @@ export const handlers = [
         max_usage: 3,
         can_use: true,
       },
-      { status: 200 }
+      { status: 200 },
     );
   }),
 
@@ -341,7 +338,7 @@ export const handlers = [
         max_usage: 3,
         can_use: false,
       },
-      { status: 200 }
+      { status: 200 },
     );
   }),
 

@@ -3,6 +3,7 @@ import {
   isMobileViewport,
   login,
   openMobileMenuIfNeeded,
+  clickWhenStable,
 } from '../support/helpers';
 import { proUser, standardUser } from '../fixtures/test-data';
 import path from 'path';
@@ -103,16 +104,12 @@ async function openGlobalChatFab(page: Page) {
     const mobileChatTrigger = page
       .getByRole('button', { name: /Belgelerim|Documents/i })
       .or(page.locator('button:has(img[alt="AI Chat"])').first());
-    await expect(mobileChatTrigger).toBeVisible({ timeout: 15_000 });
-    await page.waitForTimeout(1000);
-    await mobileChatTrigger.click({ force: true });
+    await clickWhenStable(mobileChatTrigger, { timeout: 15_000 });
     return;
   }
 
   const desktopFab = page.getByTestId('global-chat-fab');
-  await expect(desktopFab).toBeVisible({ timeout: 15_000 });
-  await page.waitForTimeout(1000);
-  await desktopFab.click();
+  await clickWhenStable(desktopFab, { timeout: 15_000 });
 }
 
 async function waitForProcessingToSettle(page: Page) {

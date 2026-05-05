@@ -11,16 +11,7 @@ import { useLanguage } from '@/context/LanguageContext';
 // import NeuroLogo from "@/components/NeuroLogo"; // Logo bileşeni varsa açabilirsiniz
 
 // ✅ Lucide iconları
-import {
-  UploadCloud,
-  Merge,
-  Scissors,
-  FilePenLine,
-  FileText,
-  Crown,
-  Menu,
-  X,
-} from 'lucide-react';
+import { UploadCloud, Merge, Scissors, FilePenLine, FileText, Crown, Menu, X } from 'lucide-react';
 
 type NavLink = {
   href: string;
@@ -30,10 +21,7 @@ type NavLink = {
 };
 
 /** Pure helper — exported for unit tests (home `/` vs prefix routes). */
-export function isNavLinkActive(
-  pathname: string | null | undefined,
-  href: string
-): boolean {
+export function isNavLinkActive(pathname: string | null | undefined, href: string): boolean {
   return href === '/' ? pathname === '/' : Boolean(pathname?.startsWith(href));
 }
 
@@ -152,9 +140,7 @@ export default function NavBar() {
                       className={[
                         'w-4 h-4',
                         active ? 'opacity-100' : 'opacity-70',
-                        isPro
-                          ? 'text-orange-500 dark:text-yellow-400 w-5 h-5'
-                          : '',
+                        isPro ? 'text-orange-500 dark:text-yellow-400 w-5 h-5' : '',
                         // ✅ Summarize ikonu rengi
                         isSummarize && !active
                           ? '!opacity-100 text-yellow-600 dark:text-yellow-500'
@@ -184,7 +170,7 @@ export default function NavBar() {
             <button
               onClick={() => setOpen((v) => !v)}
               className="lg:hidden flex items-center justify-center w-10 h-10 rounded-xl hover:bg-[var(--container-bg)] transition-colors text-[var(--foreground)]"
-              aria-label={open ? 'Menüyü kapat' : 'Menüyü aç'}
+              aria-label={open ? t('navMenuClose') : t('navMenuOpen')}
               type="button"
             >
               {open ? <X className="w-7 h-7" /> : <Menu className="w-7 h-7" />}
@@ -248,9 +234,7 @@ export default function NavBar() {
 
             <div className="flex flex-col gap-3 pt-4 border-t border-[var(--navbar-border)]">
               <div className="flex justify-between items-center px-2">
-                <span className="text-sm font-semibold opacity-70">
-                  Ayarlar
-                </span>
+                <span className="text-sm font-semibold opacity-70">Ayarlar</span>
                 <ThemeToggle />
               </div>
 

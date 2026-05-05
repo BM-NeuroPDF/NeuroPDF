@@ -8,13 +8,57 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _parse_csv_list(raw: str) -> list[str]:
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
 class Settings(BaseSettings):
     # --- API Configuration ---
     API_NAME: str = os.getenv("API_NAME", "PDF Project API")
     FRONTEND_ORIGIN: str = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+    CORS_ALLOWED_ORIGINS_RAW: str = os.getenv(
+        "CORS_ALLOWED_ORIGINS", "http://localhost:3000"
+    )
+    CORS_ALLOWED_METHODS_RAW: str = os.getenv(
+        "CORS_ALLOWED_METHODS", "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+    )
+    CORS_ALLOWED_HEADERS_RAW: str = os.getenv(
+        "CORS_ALLOWED_HEADERS", "Authorization,Content-Type,X-Request-Id"
+    )
+    CORS_ALLOW_CREDENTIALS: bool = (
+        os.getenv("CORS_ALLOW_CREDENTIALS", "true").lower() == "true"
+    )
+    SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")
+    SENTRY_ENV: str = os.getenv("SENTRY_ENV", os.getenv("ENVIRONMENT", "development"))
+    SENTRY_TRACES_SAMPLE_RATE: str = os.getenv("SENTRY_TRACES_SAMPLE_RATE", "")
+    GIT_SHA: str = os.getenv("GIT_SHA", "dev")
+    METRICS_TOKEN: str = os.getenv("METRICS_TOKEN", "")
+    METRICS_ALLOW_INSECURE_LOCAL: bool = (
+        os.getenv("METRICS_ALLOW_INSECURE_LOCAL", "true").lower() == "true"
+    )
 
     # --- JWT Configuration ---
     JWT_SECRET: str = os.getenv("JWT_SECRET", "fallback_secret_change_this")
+    ACCESS_TOKEN_EXPIRES_MIN: int = int(os.getenv("ACCESS_TOKEN_EXPIRES_MIN", "15"))
+    REFRESH_TOKENS_ENABLED: bool = (
+        os.getenv("REFRESH_TOKENS_ENABLED", "false").lower() == "true"
+    )
+    REFRESH_TOKEN_EXPIRES_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRES_DAYS", "14"))
+    REFRESH_COOKIE_NAME: str = os.getenv("REFRESH_COOKIE_NAME", "refresh_token")
+    REFRESH_COOKIE_SECURE: bool = (
+        os.getenv("REFRESH_COOKIE_SECURE", "false").lower() == "true"
+    )
+    REFRESH_COOKIE_SAMESITE: str = os.getenv("REFRESH_COOKIE_SAMESITE", "lax")
+    CALLBACK_SECRET: str = os.getenv(
+        "CALLBACK_SECRET", os.getenv("INTERNAL_CALLBACK_SECRET", "")
+    )
+    INTERNAL_CALLBACK_SECRET: str = os.getenv(
+        "INTERNAL_CALLBACK_SECRET", os.getenv("CALLBACK_SECRET", "")
+    )
+    CALLBACK_TIMESTAMP_SKEW_SEC: int = int(
+        os.getenv("CALLBACK_TIMESTAMP_SKEW_SEC", "300")
+    )
+    CALLBACK_ALLOWED_CIDRS_RAW: str = os.getenv("CALLBACK_ALLOWED_CIDRS", "")
     JWT_EXPIRES_MIN: int = int(os.getenv("JWT_EXPIRES_MIN", "60"))
 
     # --- Google OAuth ---
@@ -60,6 +104,7 @@ class Settings(BaseSettings):
 
     # --- Rate Limiting ---
     RATE_LIMIT_ENABLED: bool = True
+    TRUSTED_PROXY_HOPS: int = int(os.getenv("TRUSTED_PROXY_HOPS", "0"))
     RATE_LIMIT_PER_MINUTE: int = 60
     RATE_LIMIT_AUTH_PER_MINUTE: int = 10
 
@@ -110,6 +155,7 @@ class Settings(BaseSettings):
         if env in ["production", "prod"]:
             required_vars = [
                 "JWT_SECRET",
+                "CALLBACK_SECRET",
                 "SUPABASE_URL",
                 "SUPABASE_KEY",
                 "DB_USER",
@@ -131,6 +177,27 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
+    @property
+    def CORS_ALLOWED_ORIGINS(self) -> list[str]:
+        origins = _parse_csv_list(self.CORS_ALLOWED_ORIGINS_RAW)
+        if origins:
+            return origins
+        return [self.FRONTEND_ORIGIN]
+
+    @property
+    def CORS_ALLOWED_METHODS(self) -> list[str]:
+        methods = _parse_csv_list(self.CORS_ALLOWED_METHODS_RAW)
+        return methods or ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+
+    @property
+    def CORS_ALLOWED_HEADERS(self) -> list[str]:
+        headers = _parse_csv_list(self.CORS_ALLOWED_HEADERS_RAW)
+        return headers or ["Authorization", "Content-Type", "X-Request-Id"]
+
+    @property
+    def CALLBACK_ALLOWED_CIDRS(self) -> list[str]:
+        return _parse_csv_list(self.CALLBACK_ALLOWED_CIDRS_RAW)
 
 
 settings = Settings()

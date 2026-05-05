@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { sendRequest } from '@/utils/api';
+import { sendRequest, type TranslateMessageResponse } from '@/utils/api';
 import type { Message } from '@/context/PdfContext';
 import type { Language } from '@/utils/translations';
 
@@ -28,12 +28,7 @@ export function useMessageTranslationQueue({
   >([]);
 
   const cacheTranslationForMessage = useCallback(
-    (
-      id: string,
-      targetLanguage: Language,
-      translatedText: string,
-      targetIsPdfChat: boolean
-    ) => {
+    (id: string, targetLanguage: Language, translatedText: string, targetIsPdfChat: boolean) => {
       const updater = (prev: Message[]) =>
         prev.map((msg) =>
           msg.id === id
@@ -43,10 +38,9 @@ export function useMessageTranslationQueue({
                   ...(msg.translations ?? {}),
                   [targetLanguage]: translatedText,
                 },
-                content:
-                  language === targetLanguage ? translatedText : msg.content,
+                content: language === targetLanguage ? translatedText : msg.content,
               }
-            : msg
+            : msg,
         );
 
       if (targetIsPdfChat) {
@@ -55,7 +49,7 @@ export function useMessageTranslationQueue({
         setGeneralChatMessages(updater);
       }
     },
-    [language, setGeneralChatMessages, setPdfChatMessages]
+    [language, setGeneralChatMessages, setPdfChatMessages],
   );
 
   const translateAndCacheMessage = useCallback(
@@ -65,7 +59,7 @@ export function useMessageTranslationQueue({
 
       const normalizedCurrentLanguage = String(language || 'tr').toLowerCase();
       const rawSourceLanguage = String(
-        message.sourceLanguage ?? normalizedCurrentLanguage
+        message.sourceLanguage ?? normalizedCurrentLanguage,
       ).toLowerCase();
       const sourceLanguage = (
         supportedLanguages.includes(rawSourceLanguage as Language)
@@ -75,7 +69,7 @@ export function useMessageTranslationQueue({
       const currentTranslations = message.translations ?? {};
       const baseText = currentTranslations[sourceLanguage] ?? message.content;
       const needsTranslation = supportedLanguages.some(
-        (lang) => lang !== sourceLanguage && !currentTranslations[lang]
+        (lang) => lang !== sourceLanguage && !currentTranslations[lang],
       );
       if (!needsTranslation) return;
 
@@ -88,14 +82,14 @@ export function useMessageTranslationQueue({
             .map(async (targetLanguage) => {
               if (message.translations?.[targetLanguage]) return;
               try {
-                const res = await sendRequest(
+                const res = await sendRequest<TranslateMessageResponse>(
                   '/files/chat/translate-message',
                   'POST',
                   {
                     text: baseText,
                     source_language: sourceLanguage,
                     target_language: targetLanguage,
-                  }
+                  },
                 );
                 const translated = String(res?.translation ?? '').trim();
                 if (!translated) return;
@@ -103,18 +97,18 @@ export function useMessageTranslationQueue({
                   message.id as string,
                   targetLanguage,
                   translated,
-                  targetIsPdfChat
+                  targetIsPdfChat,
                 );
               } catch (error) {
                 console.error('Mesaj çevirisi alınamadı:', error);
               }
-            })
+            }),
         );
       } finally {
         translatingIdsRef.current.delete(message.id);
       }
     },
-    [cacheTranslationForMessage, language, supportedLanguages]
+    [cacheTranslationForMessage, language, supportedLanguages],
   );
 
   useEffect(() => {
@@ -123,23 +117,14 @@ export function useMessageTranslationQueue({
 
     activeChatMessages.forEach((message) => {
       if (!message.id || message.i18nKey) return;
-      const sourceCandidate = String(
-        message.sourceLanguage ?? activeLanguage
-      ).toLowerCase();
+      const sourceCandidate = String(message.sourceLanguage ?? activeLanguage).toLowerCase();
       const sourceLanguage = (
-        supportedLanguages.includes(sourceCandidate as Language)
-          ? sourceCandidate
-          : activeLanguage
+        supportedLanguages.includes(sourceCandidate as Language) ? sourceCandidate : activeLanguage
       ) as Language;
-      const hasActiveTranslation = Boolean(
-        message.translations?.[activeLanguage]
-      );
+      const hasActiveTranslation = Boolean(message.translations?.[activeLanguage]);
 
       if (activeLanguage !== sourceLanguage && !hasActiveTranslation) {
-        void translateAndCacheMessage(
-          { ...message, sourceLanguage },
-          isPdfChat
-        );
+        void translateAndCacheMessage({ ...message, sourceLanguage }, isPdfChat);
       }
     });
   }, [
@@ -151,20 +136,17 @@ export function useMessageTranslationQueue({
     translateAndCacheMessage,
   ]);
 
-  const enqueueAssistantTranslation = useCallback(
-    (message: Message, targetIsPdfChat: boolean) => {
-      if (!message.id) return;
-      const exists = pendingAssistantTranslationsRef.current.some(
-        (entry) => entry.message.id === message.id
-      );
-      if (exists) return;
-      pendingAssistantTranslationsRef.current.push({
-        message,
-        targetIsPdfChat,
-      });
-    },
-    []
-  );
+  const enqueueAssistantTranslation = useCallback((message: Message, targetIsPdfChat: boolean) => {
+    if (!message.id) return;
+    const exists = pendingAssistantTranslationsRef.current.some(
+      (entry) => entry.message.id === message.id,
+    );
+    if (exists) return;
+    pendingAssistantTranslationsRef.current.push({
+      message,
+      targetIsPdfChat,
+    });
+  }, []);
 
   useEffect(() => {
     if (loading) return;

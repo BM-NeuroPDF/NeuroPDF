@@ -2,13 +2,12 @@
 AI yanıt formatı doğrulama: JSON veya Markdown gibi beklenen formatların korunduğunu test et.
 """
 import json
-import re
 import pytest
 from unittest.mock import patch
 
 pytestmark = [pytest.mark.format]
 
-from app.services.llm_manager import summarize_text, chat_over_pdf, general_chat
+from app.services.llm_manager import summarize_text, chat_over_pdf
 
 
 def is_valid_markdown_fragment(text: str) -> bool:

@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic';
 import { guestService } from '@/services/guestService';
 import { useGuestLimit } from '@/hooks/useGuestLimit';
 import UsageLimitModal from '@/components/UsageLimitModal';
-import { usePdf } from '@/context/PdfContext';
+import { usePdfActions, usePdfData } from '@/context/PdfContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { sendRequest } from '@/utils/api';
 import { getMaxUploadBytes } from '@/app/config/fileLimits';
@@ -29,7 +29,8 @@ type ErrorType =
 
 export default function ExtractPdfPage() {
   const { data: session, status } = useSession();
-  const { pdfFile, savePdf } = usePdf();
+  const { pdfFile } = usePdfData();
+  const { savePdf } = usePdfActions();
 
   const { t } = useLanguage();
 
@@ -45,13 +46,8 @@ export default function ExtractPdfPage() {
   const isGuest = status !== 'authenticated';
   const maxBytes = getMaxUploadBytes(isGuest);
 
-  const {
-    usageInfo,
-    showLimitModal,
-    checkLimit,
-    closeLimitModal,
-    redirectToLogin,
-  } = useGuestLimit();
+  const { usageInfo, showLimitModal, checkLimit, closeLimitModal, redirectToLogin } =
+    useGuestLimit();
 
   // 🎯 KRİTİK ÇÖZÜM: İşlenmiş Blob'u kararlı bir File objesine dönüştürüyoruz (Race condition'ı engeller)
   const processedFile = useMemo(() => {
@@ -88,10 +84,7 @@ export default function ExtractPdfPage() {
       if (acceptedFiles?.length) {
         const f = acceptedFiles[0];
 
-        if (
-          f.type !== 'application/pdf' &&
-          !f.name.toLowerCase().endsWith('.pdf')
-        ) {
+        if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
           setFile(null);
           setErrorType('INVALID_TYPE');
           return;
@@ -107,7 +100,7 @@ export default function ExtractPdfPage() {
         setPageRange('');
       }
     },
-    [maxBytes]
+    [maxBytes],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -118,14 +111,11 @@ export default function ExtractPdfPage() {
   });
 
   const handleDropFromPanel = (
-    e?: React.DragEvent<HTMLDivElement> | React.MouseEvent<HTMLButtonElement>
+    e?: React.DragEvent<HTMLElement> | React.MouseEvent<HTMLElement>,
   ) => {
     clearError();
     if (pdfFile) {
-      if (
-        pdfFile.type !== 'application/pdf' &&
-        !pdfFile.name.toLowerCase().endsWith('.pdf')
-      ) {
+      if (pdfFile.type !== 'application/pdf' && !pdfFile.name.toLowerCase().endsWith('.pdf')) {
         setFile(null);
         setErrorType('INVALID_TYPE');
         return;
@@ -153,10 +143,7 @@ export default function ExtractPdfPage() {
     clearError();
     const f = e.target.files?.[0];
     if (f) {
-      if (
-        f.type !== 'application/pdf' &&
-        !f.name.toLowerCase().endsWith('.pdf')
-      ) {
+      if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
         setFile(null);
         setErrorType('INVALID_TYPE');
         e.target.value = '';
@@ -201,20 +188,12 @@ export default function ExtractPdfPage() {
       formData.append('file', file);
       formData.append('page_range', pageRange.trim());
 
-      const blob = await sendRequest(
-        '/files/extract-pages',
-        'POST',
-        formData,
-        true
-      );
+      const blob = await sendRequest<Blob>('/files/extract-pages', 'POST', formData, true);
 
       setProcessedBlob(blob);
 
       const safePageRange = pageRange.trim().replace(/[^a-zA-Z0-9-]/g, '_');
-      const filename = file.name.replace(
-        '.pdf',
-        `_extracted_${safePageRange}.pdf`
-      );
+      const filename = file.name.replace('.pdf', `_extracted_${safePageRange}.pdf`);
       savePdf(new File([blob], filename, { type: 'application/pdf' }));
 
       if (!session) {
@@ -251,9 +230,7 @@ export default function ExtractPdfPage() {
     clearError();
     try {
       const safePageRange = pageRange.trim().replace(/[^a-zA-Z0-9-]/g, '_');
-      const filename =
-        file?.name.replace('.pdf', `_pages_${safePageRange}.pdf`) ||
-        'extracted.pdf';
+      const filename = file?.name.replace('.pdf', `_pages_${safePageRange}.pdf`) || 'extracted.pdf';
 
       const fileToSave = new File([processedBlob], filename, {
         type: 'application/pdf',
@@ -262,11 +239,11 @@ export default function ExtractPdfPage() {
       formData.append('file', fileToSave);
       formData.append('filename', filename);
 
-      const result = await sendRequest(
+      const result = await sendRequest<{ size_kb?: number }>(
         '/files/save-processed',
         'POST',
         formData,
-        true
+        true,
       );
 
       alert(`${t('saveSuccess')}\n${t('fileSize')}: ${result.size_kb} KB`);
@@ -290,10 +267,7 @@ export default function ExtractPdfPage() {
   const hasProcessed = processedBlob !== null;
 
   const getErrorMessage = () => {
-    if (
-      customErrorMsg &&
-      (errorType === 'CUSTOM' || errorType === 'EXTRACT_ERROR')
-    )
+    if (customErrorMsg && (errorType === 'CUSTOM' || errorType === 'EXTRACT_ERROR'))
       return customErrorMsg;
 
     switch (errorType) {
@@ -328,8 +302,10 @@ export default function ExtractPdfPage() {
 
       {/* Dropzone */}
       <div
-        {...getRootProps()}
-        onDrop={handleDropFromPanel}
+        {...getRootProps({
+          onDrop: handleDropFromPanel,
+          role: 'button',
+        })}
         className={`container-card border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-300
           ${
             isDragActive
@@ -354,11 +330,7 @@ export default function ExtractPdfPage() {
               d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z"
             />
           </svg>
-          {isDragActive ? (
-            <p>{t('extractDropActive')}</p>
-          ) : (
-            <p>{t('extractDropPassive')}</p>
-          )}
+          {isDragActive ? <p>{t('extractDropActive')}</p> : <p>{t('extractDropPassive')}</p>}
         </div>
 
         {file && !isDragActive && (
@@ -385,19 +357,13 @@ export default function ExtractPdfPage() {
             />
           </svg>
           {t('selectFile')}
-          <input
-            type="file"
-            accept="application/pdf"
-            onChange={handleSelect}
-            className="hidden"
-          />
+          <input type="file" accept="application/pdf" onChange={handleSelect} className="hidden" />
         </label>
       </div>
 
       {file && (
         <div className="mt-4 text-sm opacity-80">
-          {t('selectedFile')} <b>{file.name}</b> ({Math.round(file.size / 1024)}{' '}
-          KB)
+          {t('selectedFile')} <b>{file.name}</b> ({Math.round(file.size / 1024)} KB)
         </div>
       )}
 
@@ -437,9 +403,7 @@ export default function ExtractPdfPage() {
               className="p-4 border-b border-[var(--navbar-border)]"
               style={{ backgroundColor: 'var(--container-bg)' }}
             >
-              <h3 className="text-xl font-semibold opacity-90">
-                {t('pdfPreviewTitle')}
-              </h3>
+              <h3 className="text-xl font-semibold opacity-90">{t('pdfPreviewTitle')}</h3>
             </div>
             <PdfViewer file={file} height={550} />
           </div>
@@ -468,9 +432,7 @@ export default function ExtractPdfPage() {
               }
             />
 
-            <p className="text-sm opacity-60 font-normal">
-              {t('pageRangeHint')}
-            </p>
+            <p className="text-sm opacity-60 font-normal">{t('pageRangeHint')}</p>
 
             <button
               onClick={handleExtractPages}
@@ -519,9 +481,7 @@ export default function ExtractPdfPage() {
       {hasProcessed && processedFile && (
         <div className="mt-6 space-y-6">
           <div className="container-card p-6">
-            <h3 className="text-xl mb-4 font-semibold">
-              {t('extractedPdfPreviewTitle')}
-            </h3>
+            <h3 className="text-xl mb-4 font-semibold">{t('extractedPdfPreviewTitle')}</h3>
             <div className="rounded-lg overflow-hidden border border-[var(--navbar-border)]">
               {/* 🎯 Sadece memoize edilmiş dosyayı (processedFile) gönderiyoruz */}
               <PdfViewer file={processedFile} height={550} />

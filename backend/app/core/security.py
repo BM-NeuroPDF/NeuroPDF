@@ -47,7 +47,14 @@ def create_jwt(user: dict) -> str:
         "email": user.get("email"),
         "username": user.get("username"),
         "eula_accepted": user.get("eula_accepted", False),
-        "exp": now + timedelta(minutes=settings.JWT_EXPIRES_MIN),
+        "exp": now
+        + timedelta(
+            minutes=(
+                settings.ACCESS_TOKEN_EXPIRES_MIN
+                if settings.REFRESH_TOKENS_ENABLED
+                else settings.JWT_EXPIRES_MIN
+            )
+        ),
         "iat": now,
         "iss": "fastapi",
     }

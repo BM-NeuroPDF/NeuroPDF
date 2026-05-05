@@ -13,7 +13,12 @@ from ...deps import get_current_user
 from ...models import User, UserStatsResponse
 from ...observability.cache_logger import log_cache
 from ...rate_limit import check_rate_limit
-from ...redis_client import USER_STATS_CACHE_TTL_SEC, user_stats_cache_key
+from ...redis_client import (
+    GLOBAL_STATS_CACHE_KEY,
+    GLOBAL_STATS_CACHE_TTL_SEC,
+    USER_STATS_CACHE_TTL_SEC,
+    user_stats_cache_key,
+)
 from ...services.files.metadata_service import (
     global_stats_payload,
     map_role_name_db,
@@ -195,8 +200,8 @@ async def get_global_stats(
                 headers={"Retry-After": str(rule.window_seconds)},
             )
     try:
-        gkey = _legacy_module.GLOBAL_STATS_CACHE_KEY
-        gttl = _legacy_module.GLOBAL_STATS_CACHE_TTL_SEC
+        gkey = GLOBAL_STATS_CACHE_KEY
+        gttl = GLOBAL_STATS_CACHE_TTL_SEC
         cached = _legacy_module.stats_cache_get_json(gkey)
         if cached is not None and isinstance(cached, dict):
             log_cache(

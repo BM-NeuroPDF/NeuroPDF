@@ -23,15 +23,11 @@ describe('MarkdownViewer', () => {
   it('renders markdown and normalizes bullets', () => {
     const md = '•   Item one\n1.    Numbered';
     render(<MarkdownViewer markdown={md} height={200} />);
-    expect(
-      screen.getByRole('button', { name: /PDF indir/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /PDF indir/i })).toBeInTheDocument();
   });
 
   it('handles PDF download success and error', async () => {
-    const createPdf = pdfService.createPdfFromMarkdown as ReturnType<
-      typeof vi.fn
-    >;
+    const createPdf = pdfService.createPdfFromMarkdown as ReturnType<typeof vi.fn>;
     createPdf.mockResolvedValueOnce(undefined);
     render(<MarkdownViewer markdown="Hello" defaultPdfName="out.pdf" />);
     fireEvent.click(screen.getByRole('button', { name: /PDF indir/i }));
@@ -39,8 +35,6 @@ describe('MarkdownViewer', () => {
 
     createPdf.mockRejectedValueOnce(new Error('fail'));
     fireEvent.click(screen.getByRole('button', { name: /PDF indir/i }));
-    await waitFor(() =>
-      expect(screen.getByText(/PDF oluşturulamadı/i)).toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.getByText(/PDF oluşturulamadı/i)).toBeInTheDocument());
   });
 });

@@ -83,7 +83,7 @@ describe('useGuestLimit', () => {
       () =>
         new Promise((resolve) => {
           finishCheck = resolve;
-        })
+        }),
     );
 
     const { result } = renderHook(() => useGuestLimit());
@@ -166,9 +166,7 @@ describe('useGuestLimit', () => {
       data: null,
       status: 'unauthenticated',
     } as unknown as ReturnType<typeof useSession>);
-    vi.mocked(guestService.checkUsage).mockRejectedValue(
-      new Error('API Error')
-    );
+    vi.mocked(guestService.checkUsage).mockRejectedValue(new Error('API Error'));
 
     const { result } = renderHook(() => useGuestLimit());
 

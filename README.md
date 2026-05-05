@@ -65,6 +65,10 @@ Sohbet oturumları **PostgreSQL** üzerinde saklanır; şema evrimi **Alembic** 
 3. **E2E:** **Playwright** senaryoları; kritik akışlarda **network interception** (`page.route`) ile kararlı mock. Örnek: sohbet geçmişi (`chat-history.spec.ts`).
 4. **CI/CD:** [GitHub Actions](.github/workflows/ci.yml) — **Postgres servisli** backend testleri, frontend Vitest, ardından Playwright (Chromium); HTML rapor artifact. E2E job’da harici auth/backend kısıtları için `continue-on-error` kullanılıyorsa [docs/devops/CI.md](docs/devops/CI.md) notlarına bakın.
 
+### Local debug artifacts
+
+**`*.patch`**, **`*.orig`**, **`*.rej`** ve **`stash-backup*`** dosyalarını repoya eklemeyin (ör. `git stash` dökümleri, birleştirme çakışması artıkları, `console.log` içeren geçici yamalar). Bu kalıplar `.gitignore` ile dışarıda tutulur; **pre-commit** aşamasında stage’lenirlerse commit reddedilir. Kişisel yedekleri repodan bağımsız saklayın (ör. `~/.local/state/`).
+
 ---
 
 ## Teknoloji yığını
@@ -183,6 +187,23 @@ Docker ile toplu script: `./scripts/run-tests.sh`. Strateji ve sayılar: [docs/t
 **E2E dosya örnekleri:** `auth`, `guest-limits`, `pdf-upload`, `pdf-summarize`, `pdf-merge`, `pdf-chat`, `chat-actions`, `chat-history`, `profile`.
 
 ---
+
+## Observability
+
+- Sentry init:
+  - Backend: `backend/app/main.py` startup (`init_sentry(settings, "backend")`)
+  - AI Service: `aiService/app/main.py` startup (`init_sentry(settings, "ai-service")`)
+  - Frontend: Next.js `instrumentation.ts`, `sentry.client.config.ts`, `sentry.server.config.ts`, `sentry.edge.config.ts`
+- Ortak tag standardı: `service`, `env`, `release` (`GIT_SHA`), `endpoint_category`.
+- PII scrub:
+  - Header: `Authorization`, `Cookie`, `Set-Cookie` gibi alanlar maskelenir.
+  - Body: `email`, `password`, `token`, `secret` vb. alanlar maskelenir.
+- Tracing sample rate:
+  - `SENTRY_TRACES_SAMPLE_RATE` boşsa `production` için `0.1`, diğer ortamlar için `0.0`.
+- Debug smoke endpoint:
+  - `GET /_debug/sentry` (`DEBUG=true` iken aktif; aksi durumda 404).
+- Frontend source map upload:
+  - CI env: `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`.
 
 ## Dokümantasyon
 

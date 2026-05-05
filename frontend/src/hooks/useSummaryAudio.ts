@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type RefObject,
-} from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type RefObject } from 'react';
 import { sendRequest } from '@/utils/api';
 
 export interface UseSummaryAudioOptions {
@@ -96,11 +89,10 @@ export function useSummaryAudio({
     setAudioLoading(true);
     onClearErrorRef.current?.();
     try {
-      const resultBlob = await sendRequest('/files/listen-summary', 'POST', {
+      const resultBlob = await sendRequest<Blob>('/files/listen-summary', 'POST', {
         text: summary,
       });
-      if (!(resultBlob instanceof Blob))
-        throw new Error('Ses verisi alınamadı.');
+      if (!(resultBlob instanceof Blob)) throw new Error('Ses verisi alınamadı.');
 
       setAudioBlob(resultBlob);
       const objectUrl = window.URL.createObjectURL(resultBlob);

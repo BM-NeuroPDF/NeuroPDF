@@ -5,9 +5,7 @@ import { SummaryAudioPlayer } from '../SummaryAudioPlayer';
 
 const t = (k: string) => k;
 
-function setup(
-  overrides: Partial<ComponentProps<typeof SummaryAudioPlayer>> = {}
-) {
+function setup(overrides: Partial<ComponentProps<typeof SummaryAudioPlayer>> = {}) {
   const onTogglePlay = vi.fn();
   const onSeek = vi.fn();
   const onSkip = vi.fn();
@@ -49,8 +47,7 @@ describe('SummaryAudioPlayer', () => {
   });
 
   it('uses fallback download title when t returns empty', () => {
-    const tEmpty = ((k: string) =>
-      k === 'downloadAudio' ? '' : k) as ComponentProps<
+    const tEmpty = ((k: string) => (k === 'downloadAudio' ? '' : k)) as ComponentProps<
       typeof SummaryAudioPlayer
     >['t'];
     const onDownload = vi.fn();
@@ -67,9 +64,7 @@ describe('SummaryAudioPlayer', () => {
 
   it('shows pause icon when isPlaying', () => {
     setup({ isPlaying: true });
-    const svgPaths = document.querySelectorAll(
-      'path[d="M15.75 5.25v13.5m-7.5-13.5v13.5"]'
-    );
+    const svgPaths = document.querySelectorAll('path[d="M15.75 5.25v13.5m-7.5-13.5v13.5"]');
     expect(svgPaths.length).toBeGreaterThan(0);
   });
 
@@ -84,9 +79,7 @@ describe('SummaryAudioPlayer', () => {
 
   it('calls onSeek when range changes', () => {
     const { onSeek } = setup({ duration: 100, currentTime: 0 });
-    const range = document.querySelector(
-      'input[type="range"]'
-    ) as HTMLInputElement;
+    const range = document.querySelector('input[type="range"]') as HTMLInputElement;
     expect(range).toBeTruthy();
     fireEvent.change(range, { target: { value: '30' } });
     expect(onSeek).toHaveBeenCalled();
@@ -107,9 +100,7 @@ describe('SummaryAudioPlayer', () => {
 
   it('disables range and skip/play when audioLoading', () => {
     setup({ audioLoading: true, duration: 60, onDownload: vi.fn() });
-    const range = document.querySelector(
-      'input[type="range"]'
-    ) as HTMLInputElement;
+    const range = document.querySelector('input[type="range"]') as HTMLInputElement;
     expect(range.disabled).toBe(true);
     const buttons = screen.getAllByRole('button');
     expect(buttons[0]).toBeDisabled();

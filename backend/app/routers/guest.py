@@ -1,5 +1,17 @@
+from app.rate_limit import RateLimitRule
+
+PUBLIC_GUEST_LIMITS = {
+    "summarize_guest": [
+        RateLimitRule("ip_rpm", limit=10, window_seconds=60, category="default")
+    ],
+    "check_usage": [
+        RateLimitRule("ip_rpm", limit=20, window_seconds=60, category="default")
+    ],
+    "global_stats": [RateLimitRule("ip_rpm", limit=30, window_seconds=60, category="low")],
+}
+
 # app/routers/guest.py
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import Request,  APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional
 import uuid
@@ -92,8 +104,17 @@ def create_guest_session():
 
 @router.get("/check-usage", response_model=GuestUsageCheck)
 def check_guest_usage(
-    x_guest_id: Optional[str] = Header(None, alias="X-Guest-ID")
+    request: Request,
+    x_guest_id: Optional[str] = Header(None, alias="X-Guest-ID"),
 ):
+    from app.rate_limit import check_rate_limit
+    rules = PUBLIC_GUEST_LIMITS.get("check_usage", [])
+    for rule in rules:
+        if not check_rate_limit(
+            request, rule.key, rule.limit, rule.window_seconds, rule.category
+        ):
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=429, content={"detail": "Too many requests"}, headers={"Retry-After": str(rule.window_seconds)})
     """
     Misafir kullanıcının kullanım durumunu kontrol et.
     Frontend her işlem öncesi bu endpoint'i çağırır.

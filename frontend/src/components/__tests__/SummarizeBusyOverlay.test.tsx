@@ -12,7 +12,7 @@ describe('SummarizeBusyOverlay', () => {
         open={false}
         audioLoading={false}
         t={t as ComponentProps<typeof SummarizeBusyOverlay>['t']}
-      />
+      />,
     );
     expect(container.firstChild).toBeNull();
   });
@@ -23,7 +23,7 @@ describe('SummarizeBusyOverlay', () => {
         open
         audioLoading={false}
         t={t as ComponentProps<typeof SummarizeBusyOverlay>['t']}
-      />
+      />,
     );
     expect(screen.getByText('summarizingStatus')).toBeInTheDocument();
     expect(screen.getByText('waitMessage')).toBeInTheDocument();
@@ -35,27 +35,21 @@ describe('SummarizeBusyOverlay', () => {
         open
         audioLoading
         t={t as ComponentProps<typeof SummarizeBusyOverlay>['t']}
-      />
+      />,
     );
     expect(screen.getByText('preparingAudio')).toBeInTheDocument();
     expect(screen.getByText('waitAudioGen')).toBeInTheDocument();
   });
 
   it('uses Turkish title fallback when t returns empty (summarize)', () => {
-    const tEmpty = (() => '') as ComponentProps<
-      typeof SummarizeBusyOverlay
-    >['t'];
+    const tEmpty = (() => '') as ComponentProps<typeof SummarizeBusyOverlay>['t'];
     render(<SummarizeBusyOverlay open audioLoading={false} t={tEmpty} />);
     expect(screen.getByText('Yapay Zeka Özetliyor...')).toBeInTheDocument();
-    expect(
-      screen.getByText('PDF içeriği analiz ediliyor, lütfen bekleyin...')
-    ).toBeInTheDocument();
+    expect(screen.getByText('PDF içeriği analiz ediliyor, lütfen bekleyin...')).toBeInTheDocument();
   });
 
   it('uses Turkish title fallback when t returns empty (audio)', () => {
-    const tEmpty = (() => '') as ComponentProps<
-      typeof SummarizeBusyOverlay
-    >['t'];
+    const tEmpty = (() => '') as ComponentProps<typeof SummarizeBusyOverlay>['t'];
     render(<SummarizeBusyOverlay open audioLoading t={tEmpty} />);
     expect(screen.getByText('Ses hazırlanıyor...')).toBeInTheDocument();
     expect(screen.getByText('Bu işlem biraz sürebilir...')).toBeInTheDocument();

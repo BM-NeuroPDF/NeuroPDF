@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic';
 import { guestService } from '@/services/guestService';
 import { useGuestLimit } from '@/hooks/useGuestLimit';
 import UsageLimitModal from '@/components/UsageLimitModal';
-import { usePdf } from '@/context/PdfContext';
+import { usePdfData } from '@/context/PdfContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { sendRequest } from '@/utils/api';
 import { getMaxUploadBytes } from '@/app/config/fileLimits'; // ✅ Limit ayarı
@@ -18,7 +18,7 @@ const PdfViewer = dynamic(() => import('@/components/PdfViewer'), {
 
 export default function ExtractTextPage() {
   const { data: session, status } = useSession();
-  const { pdfFile } = usePdf();
+  const { pdfFile } = usePdfData();
   const { t } = useLanguage();
 
   const [file, setFile] = useState<File | null>(null);
@@ -31,13 +31,8 @@ export default function ExtractTextPage() {
   const isGuest = status !== 'authenticated';
   const maxBytes = getMaxUploadBytes(isGuest);
 
-  const {
-    usageInfo,
-    showLimitModal,
-    checkLimit,
-    closeLimitModal,
-    redirectToLogin,
-  } = useGuestLimit();
+  const { usageInfo, showLimitModal, checkLimit, closeLimitModal, redirectToLogin } =
+    useGuestLimit();
 
   const resetFileState = (newFile: File) => {
     setFile(newFile);
@@ -54,14 +49,14 @@ export default function ExtractTextPage() {
         if (f.size > maxBytes) {
           setFile(null);
           setError(
-            `${t('fileSizeExceeded') || 'Dosya boyutu sınırı aşıldı'} (Max: ${(maxBytes / (1024 * 1024)).toFixed(0)} MB)`
+            `${t('fileSizeExceeded') || 'Dosya boyutu sınırı aşıldı'} (Max: ${(maxBytes / (1024 * 1024)).toFixed(0)} MB)`,
           );
           return;
         }
         resetFileState(f);
       }
     },
-    [maxBytes, t]
+    [maxBytes, t],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -73,7 +68,7 @@ export default function ExtractTextPage() {
       const rejection = fileRejections[0];
       if (rejection.errors[0].code === 'file-too-large') {
         setError(
-          `${t('fileSizeExceeded') || 'Dosya boyutu sınırı aşıldı'} (Max: ${(maxBytes / (1024 * 1024)).toFixed(0)} MB)`
+          `${t('fileSizeExceeded') || 'Dosya boyutu sınırı aşıldı'} (Max: ${(maxBytes / (1024 * 1024)).toFixed(0)} MB)`,
         );
       } else {
         setError(rejection.errors[0].message);
@@ -84,13 +79,13 @@ export default function ExtractTextPage() {
 
   // --- YAN PANEL KONTROLÜ ---
   const handleDropFromPanel = (
-    e?: React.DragEvent<HTMLDivElement> | React.MouseEvent<HTMLButtonElement>
+    e?: React.DragEvent<HTMLElement> | React.MouseEvent<HTMLElement>,
   ) => {
     if (pdfFile) {
       if (pdfFile.size > maxBytes) {
         setFile(null);
         setError(
-          `${t('fileSizeExceeded') || 'Dosya boyutu sınırı aşıldı'} (Max: ${(maxBytes / (1024 * 1024)).toFixed(0)} MB)`
+          `${t('fileSizeExceeded') || 'Dosya boyutu sınırı aşıldı'} (Max: ${(maxBytes / (1024 * 1024)).toFixed(0)} MB)`,
         );
         return;
       }
@@ -111,7 +106,7 @@ export default function ExtractTextPage() {
       if (f.size > maxBytes) {
         setFile(null);
         setError(
-          `${t('fileSizeExceeded') || 'Dosya boyutu sınırı aşıldı'} (Max: ${(maxBytes / (1024 * 1024)).toFixed(0)} MB)`
+          `${t('fileSizeExceeded') || 'Dosya boyutu sınırı aşıldı'} (Max: ${(maxBytes / (1024 * 1024)).toFixed(0)} MB)`,
         );
         e.target.value = '';
         return;
@@ -145,12 +140,7 @@ export default function ExtractTextPage() {
       formData.append('file', file);
 
       // ✅ Convert endpoint'ine istek
-      const blob = await sendRequest(
-        '/files/convert-text',
-        'POST',
-        formData,
-        true
-      );
+      const blob = await sendRequest<Blob>('/files/convert-text', 'POST', formData, true);
 
       setProcessedBlob(blob);
 
@@ -188,8 +178,7 @@ export default function ExtractTextPage() {
     setSaving(true);
     setError(null);
     try {
-      const filename =
-        file?.name.replace('.pdf', '_converted.txt') || 'converted.txt';
+      const filename = file?.name.replace('.pdf', '_converted.txt') || 'converted.txt';
 
       const fileToSave = new File([processedBlob], filename, {
         type: 'text/plain',
@@ -198,11 +187,11 @@ export default function ExtractTextPage() {
       formData.append('file', fileToSave);
       formData.append('filename', filename);
 
-      const result = await sendRequest(
+      const result = await sendRequest<{ size_kb?: number }>(
         '/files/save-processed',
         'POST',
         formData,
-        true
+        true,
       );
 
       alert(`${t('saveSuccess')}\n${t('fileSize')}: ${result.size_kb} KB`);
@@ -226,8 +215,10 @@ export default function ExtractTextPage() {
 
       {/* Dropzone */}
       <div
-        {...getRootProps()}
-        onDrop={handleDropFromPanel}
+        {...getRootProps({
+          onDrop: handleDropFromPanel,
+          role: 'button',
+        })}
         className={`container-card border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-300
           ${
             isDragActive
@@ -279,20 +270,14 @@ export default function ExtractTextPage() {
             />
           </svg>
           {t('selectFile')}
-          <input
-            type="file"
-            accept="application/pdf"
-            onChange={handleSelect}
-            className="hidden"
-          />
+          <input type="file" accept="application/pdf" onChange={handleSelect} className="hidden" />
         </label>
       </div>
 
       {file && (
         <>
           <div className="mt-4 text-sm opacity-80">
-            {t('selectedFile')} <b>{file.name}</b> (
-            {Math.round(file.size / 1024)} KB)
+            {t('selectedFile')} <b>{file.name}</b> ({Math.round(file.size / 1024)} KB)
           </div>
 
           {/* Original PDF Viewer */}
@@ -302,9 +287,7 @@ export default function ExtractTextPage() {
                 className="p-4 border-b border-[var(--navbar-border)]"
                 style={{ backgroundColor: 'var(--container-bg)' }}
               >
-                <h3 className="text-xl font-semibold opacity-90">
-                  {t('activePdfTitle')}
-                </h3>
+                <h3 className="text-xl font-semibold opacity-90">{t('activePdfTitle')}</h3>
               </div>
               <PdfViewer file={file} height={550} />
             </div>
@@ -374,16 +357,12 @@ export default function ExtractTextPage() {
             style={{ backgroundColor: 'var(--container-bg)' }}
           >
             <div className="p-4 border-b border-[var(--navbar-border)]">
-              <h3 className="text-xl font-semibold opacity-90">
-                {t('textConvertedTitle')}
-              </h3>
+              <h3 className="text-xl font-semibold opacity-90">{t('textConvertedTitle')}</h3>
             </div>
 
             <div className="p-6">
               <div className="p-4 rounded-lg max-h-96 overflow-y-auto font-mono text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
-                <p className="text-gray-700 dark:text-gray-300">
-                  {t('textReadyMessage')}
-                </p>
+                <p className="text-gray-700 dark:text-gray-300">{t('textReadyMessage')}</p>
                 <p className="text-gray-500 mt-2 opacity-60">
                   {t('fileSize')}: {(processedBlob.size / 1024).toFixed(2)} KB
                 </p>

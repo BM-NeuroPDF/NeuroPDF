@@ -5,6 +5,15 @@ from typing import Optional
 
 
 class Settings(BaseSettings):
+    SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")
+    SENTRY_ENV: str = os.getenv("SENTRY_ENV", os.getenv("ENVIRONMENT", "development"))
+    SENTRY_TRACES_SAMPLE_RATE: str = os.getenv("SENTRY_TRACES_SAMPLE_RATE", "")
+    GIT_SHA: str = os.getenv("GIT_SHA", "dev")
+    METRICS_TOKEN: str = os.getenv("METRICS_TOKEN", "")
+    METRICS_ALLOW_INSECURE_LOCAL: bool = (
+        os.getenv("METRICS_ALLOW_INSECURE_LOCAL", "true").lower() == "true"
+    )
+
     # Gemini (bulut LLM; LOCAL_LLM_URL ile Ollama/OpenAI uyumlu uç kullanılıyorsa boş olabilir)
     GEMINI_API_KEY: str = ""
 
@@ -22,6 +31,10 @@ class Settings(BaseSettings):
     # Dahili Servis Güvenliği (Backend -> AI Service iletişimi için)
     # Development'ta boş olabilir, production'da set edilmeli
     AI_SERVICE_API_KEY: str = ""
+    # AI Service -> Backend callback signature secret
+    CALLBACK_SECRET: str = os.getenv(
+        "CALLBACK_SECRET", os.getenv("INTERNAL_CALLBACK_SECRET", "")
+    )
 
     # --- Pydantic Ayarları ---
     model_config = SettingsConfigDict(
@@ -43,6 +56,8 @@ class Settings(BaseSettings):
                 raise RuntimeError(
                     "Production requires GEMINI_API_KEY and/or LOCAL_LLM_URL (Ollama OpenAI-compatible)."
                 )
+            if not (self.CALLBACK_SECRET or "").strip():
+                raise RuntimeError("Production requires CALLBACK_SECRET for signed callbacks.")
 
         return self
 

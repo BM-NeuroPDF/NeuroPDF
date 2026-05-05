@@ -7,15 +7,10 @@ export interface AccountSettingsSectionProps {
   t: (key: keyof (typeof translations)['tr']) => string;
 }
 
-export function AccountSettingsSection({
-  onRequestDelete,
-  t,
-}: AccountSettingsSectionProps) {
+export function AccountSettingsSection({ onRequestDelete, t }: AccountSettingsSectionProps) {
   return (
     <div className="container-card p-8 border border-[var(--navbar-border)] rounded-3xl shadow-lg bg-[var(--container-bg)]">
-      <h3 className="text-xl font-semibold mb-4">
-        {t('accountSettings') || 'Hesap Ayarları'}
-      </h3>
+      <h3 className="text-xl font-semibold mb-4">{t('accountSettings') || 'Hesap Ayarları'}</h3>
       <p className="opacity-60 font-normal mb-6">
         {t('accountSettingsHint') ||
           'Şifre değişikliği ve hesap silme işlemleri için sağlayıcınızın (Google) ayarlarını kullanmanız gerekmektedir.'}
@@ -26,9 +21,7 @@ export function AccountSettingsSection({
           disabled
           className="btn-primary opacity-50 cursor-not-allowed flex justify-between items-center p-4"
         >
-          <span className="font-semibold">
-            {t('changeEmail') || 'E-posta Değiştir'}
-          </span>
+          <span className="font-semibold">{t('changeEmail') || 'E-posta Değiştir'}</span>
           <span className="text-xs bg-black/10 dark:bg-white/10 px-2 py-1 rounded font-bold">
             {t('comingSoon') || 'Yakında'}
           </span>
@@ -38,9 +31,7 @@ export function AccountSettingsSection({
           disabled
           className="btn-primary opacity-50 cursor-not-allowed flex justify-between items-center p-4"
         >
-          <span className="font-semibold">
-            {t('downloadData') || 'Verilerimi İndir'}
-          </span>
+          <span className="font-semibold">{t('downloadData') || 'Verilerimi İndir'}</span>
           <span className="text-xs bg-black/10 dark:bg-white/10 px-2 py-1 rounded font-bold">
             {t('comingSoon') || 'Yakında'}
           </span>
@@ -75,11 +66,7 @@ export function AccountSettingsSection({
             stroke="currentColor"
             className="w-5 h-5 opacity-60"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M8.25 4.5l7.5 7.5-7.5 7.5"
-            />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
           </svg>
         </button>
       </div>

@@ -9,9 +9,7 @@ function TestComponent() {
 
   return (
     <div>
-      <button onClick={() => showSuccess('Success message')}>
-        Show Success
-      </button>
+      <button onClick={() => showSuccess('Success message')}>Show Success</button>
       <button onClick={() => showError('Error message')}>Show Error</button>
       <button onClick={() => showInfo('Info message')}>Show Info</button>
     </div>
@@ -292,9 +290,7 @@ describe('PopupContext', () => {
 
       // Success popup'ın içindeki close button'ı bul
       // Success message'ın parent'ını bul, sonra onun içindeki button'ı bul
-      const successContainer = successMessage.closest(
-        'div[class*="border-green"]'
-      );
+      const successContainer = successMessage.closest('div[class*="border-green"]');
       const successCloseButton = successContainer?.querySelector('button');
 
       expect(successCloseButton).toBeTruthy();
@@ -319,9 +315,7 @@ describe('PopupContext', () => {
   describe('Context Hook', () => {
     it('should throw error when used outside provider', () => {
       // Suppress console.error for this test
-      const consoleSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       expect(() => {
         render(<TestComponent />);
@@ -348,9 +342,7 @@ describe('PopupContext', () => {
         screen.getByText('Show Success').click();
       });
 
-      const container = screen
-        .getByText('Success message')
-        .closest('.fixed.top-6.right-6');
+      const container = screen.getByText('Success message').closest('.fixed.top-6.right-6');
       expect(container).toBeInTheDocument();
     });
 
@@ -363,9 +355,7 @@ describe('PopupContext', () => {
         screen.getByText('Show Info').click();
       });
 
-      const container = document.querySelector(
-        '.fixed.top-6.right-6.flex.flex-col'
-      );
+      const container = document.querySelector('.fixed.top-6.right-6.flex.flex-col');
       expect(container).toBeInTheDocument();
 
       // Container içinde 3 popup olmalı
@@ -414,9 +404,7 @@ describe('PopupContext', () => {
 
       function TestComponentLong() {
         const { showSuccess } = usePopup();
-        return (
-          <button onClick={() => showSuccess(longMessage)}>Show Long</button>
-        );
+        return <button onClick={() => showSuccess(longMessage)}>Show Long</button>;
       }
 
       renderWithProvider(<TestComponentLong />);

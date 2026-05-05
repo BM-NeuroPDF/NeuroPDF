@@ -1,12 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { login, logout, openMobileMenuIfNeeded } from '../support/helpers';
-
-const TEST_EMAIL = process.env.E2E_TEST_EMAIL || 'test1@gmail.com';
-const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD || 'Test1234.';
+import { loginAsTestUser } from '../support/auth';
+import { logout, openMobileMenuIfNeeded } from '../support/helpers';
 
 test.describe('Authentication Flow', () => {
   test('user can login', async ({ page }) => {
-    await login(page, TEST_EMAIL, TEST_PASSWORD);
+    await loginAsTestUser(page);
 
     // Verify we're on the home page by checking for authenticated user content
     const statsText = page.locator(
@@ -17,7 +15,7 @@ test.describe('Authentication Flow', () => {
 
   test('user can logout', async ({ page }) => {
     // First login
-    await login(page, TEST_EMAIL, TEST_PASSWORD);
+    await loginAsTestUser(page);
 
     // Verify we're logged in
     const statsText = page.locator(

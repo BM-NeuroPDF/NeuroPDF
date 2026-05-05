@@ -39,7 +39,7 @@ describe('useProfileAvatar', () => {
       useProfileAvatar({
         status: 'authenticated',
         user: undefined,
-      })
+      }),
     );
     await act(async () => {
       await result.current.fetchUserAvatar();
@@ -55,16 +55,13 @@ describe('useProfileAvatar', () => {
       useProfileAvatar({
         status: 'authenticated',
         user: { id: 'user-1', image: 'https://session/img.png' },
-      })
+      }),
     );
 
     await waitFor(() => {
       expect(result.current.avatarSrc).toBe('blob:created');
     });
-    expect(mockedSendRequest).toHaveBeenCalledWith(
-      '/api/v1/user/user-1/avatar',
-      'GET'
-    );
+    expect(mockedSendRequest).toHaveBeenCalledWith('/api/v1/user/user-1/avatar', 'GET');
   });
 
   it('falls back to session image when GET fails', async () => {
@@ -76,7 +73,7 @@ describe('useProfileAvatar', () => {
       useProfileAvatar({
         status: 'authenticated',
         user: { id: 'u2', image: 'https://fallback' },
-      })
+      }),
     );
 
     await waitFor(() => {
@@ -94,7 +91,7 @@ describe('useProfileAvatar', () => {
       useProfileAvatar({
         status: 'authenticated',
         user: { id: 'u3' },
-      })
+      }),
     );
 
     await waitFor(() => {
@@ -110,7 +107,7 @@ describe('useProfileAvatar', () => {
       useProfileAvatar({
         status: 'unauthenticated',
         user: { id: 'u', image: null },
-      })
+      }),
     );
 
     await act(async () => {
@@ -133,17 +130,14 @@ describe('useProfileAvatar', () => {
       useProfileAvatar({
         status: 'authenticated',
         user: { image: 'https://x' },
-      })
+      }),
     );
 
     await act(async () => {
       await result.current.fetchUserAvatar();
     });
 
-    expect(mockedSendRequest).toHaveBeenCalledWith(
-      '/api/v1/user/me/avatar',
-      'GET'
-    );
+    expect(mockedSendRequest).toHaveBeenCalledWith('/api/v1/user/me/avatar', 'GET');
   });
 
   it('exposes setAvatarSrc', async () => {
@@ -151,7 +145,7 @@ describe('useProfileAvatar', () => {
       useProfileAvatar({
         status: 'unauthenticated',
         user: undefined,
-      })
+      }),
     );
 
     act(() => {

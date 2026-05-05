@@ -33,3 +33,4 @@ npm run test:e2e    # Playwright
 
 - [Dokümantasyon merkezi](../README.md)
 - [Mimari](../architecture/ARCHITECTURE.md)
+- [Image Guidelines](./image-guidelines.md)

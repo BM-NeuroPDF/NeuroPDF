@@ -4,16 +4,13 @@ import { useState, useRef, useEffect } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 
 export default function LanguageSwitcher() {
-  const { language, setLanguage } = useLanguage();
+  const { language, setLanguage, t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     }
@@ -32,6 +29,7 @@ export default function LanguageSwitcher() {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="btn-primary flex items-center gap-2 min-w-[80px] justify-between"
+        aria-label={t('languageSwitcherAria')}
       >
         <span className="text-sm font-bold flex items-center gap-2">
           <img

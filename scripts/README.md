@@ -19,7 +19,7 @@ Test, rapor, veritabanı ve yük testi betikleri. **Test komutlarının tam list
 
 | Script | Kısa açıklama |
 |--------|----------------|
-| `bootstrap_local_db.sh` | Docker Compose içinde Alembic `upgrade head` ve `seed.py` ile yerel DB’yi şema + örnek veriyle hazırlar |
+| `bootstrap_local_db.sh` | Docker Compose içinde Alembic `upgrade head` ve `dev_only/seed.py` ile yerel DB’yi şema + örnek veriyle hazırlar |
 | `clone_schema.sh` | Supabase üzerinden yalnızca şema (`pg_dump -s`) alıp yerel Docker Postgres’e aktarır (parola etkileşimli) |
 | `clone_schema_from_image.sh` | Yerel Docker DB’de referans şemaya göre eksik tabloları ekler (`schema_version`, `user_stats` vb.) |
 

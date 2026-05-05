@@ -19,7 +19,7 @@ describe('MSW Setup Test', () => {
     server.use(
       http.post('http://localhost:8000/files/upload', () => {
         return HttpResponse.json({ error: 'Custom error' }, { status: 500 });
-      })
+      }),
     );
 
     const response = await fetch('http://localhost:8000/files/upload', {

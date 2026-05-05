@@ -48,9 +48,7 @@ describe('guestService', () => {
       text: async () => 'err',
     });
     const { guestService } = await import('../guestService');
-    await expect(guestService.createSession()).rejects.toThrow(
-      'Failed to create guest session'
-    );
+    await expect(guestService.createSession()).rejects.toThrow('Failed to create guest session');
   });
 
   it('getGuestId creates session when missing', async () => {
@@ -102,9 +100,7 @@ describe('guestService', () => {
     });
     const { guestService } = await import('../guestService');
     guestService.initializeGuestId();
-    await expect(guestService.checkUsage()).rejects.toThrow(
-      'Failed to check usage'
-    );
+    await expect(guestService.checkUsage()).rejects.toThrow('Failed to check usage');
   });
 
   it('incrementUsage throws on error body', async () => {
@@ -127,9 +123,7 @@ describe('guestService', () => {
     });
     const { guestService } = await import('../guestService');
     guestService.initializeGuestId();
-    await expect(guestService.incrementUsage()).rejects.toThrow(
-      'Usage limit reached'
-    );
+    await expect(guestService.incrementUsage()).rejects.toThrow('Usage limit reached');
   });
 
   it('incrementUsage returns on success', async () => {
@@ -187,7 +181,7 @@ describe('guestService', () => {
     await guestService.createSession();
     expect(global.fetch).toHaveBeenCalledWith(
       'http://localhost:8000/guest/session',
-      expect.any(Object)
+      expect.any(Object),
     );
     process.env.NEXT_PUBLIC_API_URL = prev;
   });

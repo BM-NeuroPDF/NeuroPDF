@@ -1,22 +1,15 @@
 'use client';
 
+import { memo } from 'react';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { usePdf } from '@/context/PdfContext';
+import { usePdfActions, usePdfData } from '@/context/PdfContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { useDropzone } from 'react-dropzone';
 
-export const CLIENT_PDF_PANEL_HIDDEN_PATHS = [
-  '/',
-  '/login',
-  '/register',
-  '/profile',
-] as const;
+export const CLIENT_PDF_PANEL_HIDDEN_PATHS = ['/', '/login', '/register', '/profile'] as const;
 
-function formatRelativeTime(
-  iso: string | null | undefined,
-  lang: 'tr' | 'en'
-): string {
+function formatRelativeTime(iso: string | null | undefined, lang: 'tr' | 'en'): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
@@ -37,21 +30,11 @@ function formatRelativeTime(
   return rtf.format(diffMonth, 'month');
 }
 
-export default function ClientPdfPanel() {
+function ClientPdfPanel() {
   const pathname = usePathname();
   const { status } = useSession();
-  const {
-    pdfFile,
-    pdfList,
-    addPdfs,
-    removePdf,
-    setActivePdf,
-    clearPdf,
-    chatSessions,
-    chatSessionsLoading,
-    activeSessionDbId,
-    restoreSession,
-  } = usePdf();
+  const { pdfFile, pdfList, chatSessions, chatSessionsLoading, activeSessionDbId } = usePdfData();
+  const { addPdfs, removePdf, setActivePdf, clearPdf, restoreSession } = usePdfActions();
   const { t, language } = useLanguage();
 
   /** ResponsivePdfPanel ile senkron tutulmalı */
@@ -92,16 +75,11 @@ export default function ClientPdfPanel() {
 
       {pdfList.length > 0 ? (
         <>
-          <div
-            className="p-6 border-b"
-            style={{ borderColor: 'var(--navbar-border)' }}
-          >
+          <div className="p-6 border-b" style={{ borderColor: 'var(--navbar-border)' }}>
             <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
               {t('pdfDocumentsTitle')}
             </h2>
-            <p className="text-xs opacity-60 mt-1 font-medium">
-              {t('dragToUse')}
-            </p>
+            <p className="text-xs opacity-60 mt-1 font-medium">{t('dragToUse')}</p>
           </div>
 
           <div className="p-4 flex flex-col gap-2 overflow-y-auto max-h-[40vh]">
@@ -138,10 +116,7 @@ export default function ClientPdfPanel() {
                           size: file.size,
                           source: 'panel',
                         } as const;
-                        e.dataTransfer.setData(
-                          'application/x-neuro-pdf',
-                          JSON.stringify(meta)
-                        );
+                        e.dataTransfer.setData('application/x-neuro-pdf', JSON.stringify(meta));
                       } catch {}
                     } catch {}
                   }}
@@ -149,9 +124,7 @@ export default function ClientPdfPanel() {
                     e.currentTarget.style.opacity = '1';
                   }}
                   className={`group relative p-3 rounded-xl border shadow-sm cursor-grab active:cursor-grabbing transition-all hover:shadow-md text-left outline-none focus-visible:ring-2 focus-visible:ring-red-500/60 ${
-                    isActive
-                      ? 'ring-2 ring-[var(--button-bg)] border-[var(--button-bg)]'
-                      : ''
+                    isActive ? 'ring-2 ring-[var(--button-bg)] border-[var(--button-bg)]' : ''
                   }`}
                   style={{
                     backgroundColor: 'var(--container-bg)',
@@ -176,10 +149,7 @@ export default function ClientPdfPanel() {
                       </svg>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p
-                        className="font-semibold text-sm truncate"
-                        title={f.name}
-                      >
+                      <p className="font-semibold text-sm truncate" title={f.name}>
                         {f.name}
                       </p>
                       <p className="text-xs opacity-60 mt-0.5 font-mono">
@@ -250,9 +220,7 @@ export default function ClientPdfPanel() {
           style={{ borderColor: 'var(--navbar-border)' }}
         >
           <div className="px-4 pt-4 pb-2">
-            <h3 className="text-sm font-bold tracking-tight opacity-90">
-              {t('chatHistoryTitle')}
-            </h3>
+            <h3 className="text-sm font-bold tracking-tight opacity-90">{t('chatHistoryTitle')}</h3>
           </div>
           <div className="px-4 pb-4 flex-1 overflow-y-auto flex flex-col gap-2">
             {chatSessionsLoading ? (
@@ -339,3 +307,5 @@ export default function ClientPdfPanel() {
     </aside>
   );
 }
+
+export default memo(ClientPdfPanel);

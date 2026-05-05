@@ -342,7 +342,7 @@ class TestSecurityLoggerBranches:
 # --- auth router extra (mock supabase + db) ---
 class TestAuthRouterBranches:
     @patch("app.security_logger.log_rate_limit_exceeded")
-    @patch("app.routers.auth.check_rate_limit", return_value=False)
+    @patch("app.routers.auth._legacy.check_rate_limit", return_value=False)
     def test_login_rate_limited(self, _mock_rl, _mock_log):
         from app.db import get_supabase, get_db
 
@@ -356,7 +356,7 @@ class TestAuthRouterBranches:
         try:
             r = client.post(
                 "/auth/login",
-                json={"email": "a@b.com", "password": "x"},
+                json={"email": "test@test.com", "password": "pass"},
             )
             assert r.status_code == 429
         finally:
@@ -386,7 +386,7 @@ class TestAuthRouterBranches:
         finally:
             app.dependency_overrides.clear()
 
-    @patch("app.routers.auth.check_rate_limit", return_value=False)
+    @patch("app.routers.auth._legacy.check_rate_limit", return_value=False)
     def test_google_rate_limited(self, _rl):
         from app.db import get_supabase, get_db
 

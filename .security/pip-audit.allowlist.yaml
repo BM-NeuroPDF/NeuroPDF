@@ -1,0 +1,8 @@
+# pip-audit allowlist
+# Each entry MUST include:
+# - id: vulnerability ID (e.g. PYSEC-YYYY-NNN)
+# - package: affected package
+# - reason: business/security rationale and remediation plan
+# - scope: backend|aiService|all
+# - expires_on: ISO date for re-review
+allowlist: []

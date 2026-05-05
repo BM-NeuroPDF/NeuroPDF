@@ -1,5 +1,47 @@
-import { Page, expect } from '@playwright/test';
+import { Page, expect, type Locator } from '@playwright/test';
 import { proUser, type E2ETestUser } from '../fixtures/test-data';
+
+/**
+ * Rate-limit backoff vb. için; Playwright’ın sabit süre API’si yerine kullanılır.
+ */
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * OTP alanı görünür olmayabilir; native value setter + bubble event ile doldurur.
+ */
+async function fillHiddenOtp(locator: Locator, code: string): Promise<void> {
+  await locator.scrollIntoViewIfNeeded();
+  await locator.evaluate((el, value) => {
+    const input = el as HTMLInputElement;
+    input.focus();
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value'
+    )?.set;
+    setter?.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, code);
+}
+
+/** Overlay/animasyon sonrası güvenilir tıklama (zorunlu tıklama bayrağı olmadan). */
+export async function clickWhenStable(
+  locator: Locator,
+  options: { timeout?: number } = {}
+): Promise<void> {
+  const timeout = options.timeout ?? 15_000;
+  await locator.scrollIntoViewIfNeeded();
+  await expect(locator).toBeVisible({ timeout });
+  await expect(locator).toBeEnabled({ timeout });
+  try {
+    await expect(locator).toHaveCSS('opacity', '1', { timeout: 5000 });
+  } catch {
+    /* Opacity transition yoksa veya parent üzerindeyse atla */
+  }
+  await locator.click();
+}
 
 type LoginOptions = {
   seedUser?: boolean;
@@ -100,7 +142,7 @@ async function ensureUserSeeded(page: Page, user: E2ETestUser): Promise<void> {
   ) {
     const delayMs = Math.pow(2, attempt) * 1000;
     console.warn(`429 alındı, bekleniyor... (${delayMs}ms) user=${user.email}`);
-    await page.waitForTimeout(delayMs);
+    await sleep(delayMs);
     loginRes = await page.request.post(`${defaultBackendUrl}/auth/login`, {
       data: { email: user.email, password: user.password },
       failOnStatusCode: false,
@@ -159,7 +201,7 @@ async function ensureUserSeeded(page: Page, user: E2ETestUser): Promise<void> {
     console.warn(
       `429 alındı, bekleniyor... (${delayMs}ms) verify user=${user.email}`
     );
-    await page.waitForTimeout(delayMs);
+    await sleep(delayMs);
     verifyLogin = await page.request.post(`${defaultBackendUrl}/auth/login`, {
       data: { email: user.email, password: user.password },
       failOnStatusCode: false,
@@ -185,24 +227,26 @@ async function assertCurrentUserRole(
   page: Page,
   expectedRole: 'Pro'
 ): Promise<void> {
-  const deadlineMs = Date.now() + 30_000;
-  let lastRole: string | null = null;
-
-  // DB/servis geç tepki verdiği durumlarda role check'i kısa bir süre içinde retry'liyoruz.
-  while (Date.now() < deadlineMs) {
-    const roleResp = await page.evaluate(async () => {
+  const readRole = () =>
+    page.evaluate(async () => {
       try {
-        // NextAuth session endpoint'i erişim token'ını verir.
         const sessionRes = await fetch('/api/auth/session', {
           credentials: 'include',
         });
-        const session = sessionRes.ok ? await sessionRes.json() : null;
+        type SessionJson = {
+          accessToken?: string;
+          apiToken?: string;
+          user?: { accessToken?: string; apiToken?: string };
+        };
+        const session: SessionJson | null = sessionRes.ok
+          ? ((await sessionRes.json()) as SessionJson)
+          : null;
 
         const token =
-          (session as any)?.accessToken ??
-          (session as any)?.apiToken ??
-          (session as any)?.user?.accessToken ??
-          (session as any)?.user?.apiToken ??
+          session?.accessToken ??
+          session?.apiToken ??
+          session?.user?.accessToken ??
+          session?.user?.apiToken ??
           null;
 
         const headers: Record<string, string> = {};
@@ -221,17 +265,16 @@ async function assertCurrentUserRole(
       }
     });
 
-    if (roleResp.ok && roleResp.role === expectedRole) return;
-    lastRole = roleResp.role ?? null;
-
-    // 503/401 gibi durumlarda hemen tekrar deniyoruz.
-    await page.waitForTimeout(1000);
-  }
-
-  throw new Error(
-    `E2E role precondition failed. Expected ${expectedRole}, got ${lastRole ?? 'unknown'}. ` +
-      `User may not be seeded with correct role or auth token may not be ready yet.`
-  );
+  await expect
+    .poll(async () => {
+      const roleResp = await readRole();
+      return roleResp.ok ? roleResp.role : null;
+    }, {
+      timeout: 30_000,
+      intervals: [200, 400, 800, 1200, 2000],
+      message: `Expected user role ${expectedRole} from /files/user/stats`,
+    })
+    .toBe(expectedRole);
 }
 
 /**
@@ -254,15 +297,10 @@ export async function login(
     await ensureUserSeeded(page, user);
   }
 
-  // Docker bazen ilk login isteğinde yavaş kalabiliyor - kısa bir bekleme ekle
-  await page.waitForTimeout(1000);
-
   // Navigate to login page
   await page.goto('/login', { waitUntil: 'networkidle' });
 
-  // NextAuth Docker üzerinde tam hazır olsun diye bekle
   await page.waitForLoadState('networkidle');
-  await page.waitForTimeout(2000);
 
   // Wait for the page to be fully loaded and email input to be visible
   // Use a more robust selector that waits for the form to be ready
@@ -275,13 +313,10 @@ export async function login(
   await passwordInput.fill(password);
 
   // Mobilde click flaky olabildiği için formu Enter ile doğal şekilde submit et.
-  const submitButton = page.locator('button[type="submit"]').first();
   await passwordInput.focus();
   await page.keyboard.press('Enter');
-  await page.waitForTimeout(1500);
 
   const otpSlot = page.locator('[data-slot="input-otp-slot"]').first();
-  await page.waitForTimeout(250);
   const otpAppearedQuickly = await otpSlot
     .isVisible({ timeout: 1500 })
     .catch(() => false);
@@ -334,7 +369,7 @@ export async function login(
       )
       .first();
     await hiddenOtpInput.waitFor({ state: 'attached', timeout: 10000 });
-    await hiddenOtpInput.fill(code, { force: true });
+    await fillHiddenOtp(hiddenOtpInput, code);
 
     const verifyButton = page
       .getByRole('button', {
@@ -691,8 +726,10 @@ export async function logout(page: Page) {
   // Butona tıkla
   await logoutButton.first().click();
 
-  // NextAuth'un logout işlemini tamamlaması için kısa bir bekleme
-  await page.waitForTimeout(1000);
+  await Promise.race([
+    page.waitForURL(/\/login/, { timeout: 12_000 }),
+    page.locator('input[type="email"]').waitFor({ state: 'visible', timeout: 12_000 }),
+  ]).catch(() => {});
 
   // Fedora'daki yönlendirme yavaşlığını baypas et: Manuel olarak login sayfasına yönlendir
   try {

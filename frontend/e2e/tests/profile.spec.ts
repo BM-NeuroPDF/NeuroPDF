@@ -1,13 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { login, navigateTo } from '../support/helpers';
-
-const TEST_EMAIL = process.env.E2E_TEST_EMAIL || 'test1@gmail.com';
-const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD || 'Test1234.';
+import { E2E_PRIMARY_EMAIL } from '../fixtures/credentials';
+import { loginAsTestUser } from '../support/auth';
+import { navigateTo } from '../support/helpers';
 
 test.describe('Profile Page', () => {
   test.beforeEach(async ({ page }) => {
     // Login before each test
-    await login(page, TEST_EMAIL, TEST_PASSWORD);
+    await loginAsTestUser(page);
   });
 
   test('user can view profile page', async ({ page }) => {
@@ -37,7 +36,7 @@ test.describe('Profile Page', () => {
     // Could be in an input field, or displayed as text
     const emailLocator = page
       .locator('input[type="email"]')
-      .or(page.locator(`text=${TEST_EMAIL}`));
+      .or(page.locator(`text=${E2E_PRIMARY_EMAIL}`));
 
     // At least one email-related element should be visible
     await expect(emailLocator.first()).toBeVisible({ timeout: 10000 });

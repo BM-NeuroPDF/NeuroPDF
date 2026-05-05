@@ -17,9 +17,7 @@ function syntheticRangeChange(value: string): ChangeEvent<HTMLInputElement> {
 describe('useSummaryAudio', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    window.URL.createObjectURL = vi.fn(
-      () => 'blob:mock-default'
-    ) as typeof URL.createObjectURL;
+    window.URL.createObjectURL = vi.fn(() => 'blob:mock-default') as typeof URL.createObjectURL;
     window.URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL;
   });
 
@@ -59,20 +57,16 @@ describe('useSummaryAudio', () => {
     mockedSendRequest.mockResolvedValue(blob);
     vi.mocked(window.URL.createObjectURL).mockReturnValue('blob:test');
 
-    const { result } = renderHook(() =>
-      useSummaryAudio({ summary: 'text', onClearError })
-    );
+    const { result } = renderHook(() => useSummaryAudio({ summary: 'text', onClearError }));
 
     await act(async () => {
       await result.current.requestAudio();
     });
 
     expect(onClearError).toHaveBeenCalled();
-    expect(mockedSendRequest).toHaveBeenCalledWith(
-      '/files/listen-summary',
-      'POST',
-      { text: 'text' }
-    );
+    expect(mockedSendRequest).toHaveBeenCalledWith('/files/listen-summary', 'POST', {
+      text: 'text',
+    });
     expect(result.current.audioBlob).toBe(blob);
     expect(result.current.audioUrl).toBe('blob:test');
     expect(result.current.audioLoading).toBe(false);
@@ -95,9 +89,7 @@ describe('useSummaryAudio', () => {
   it('requestAudio invokes onTtsError when response is not a Blob', async () => {
     const onTtsError = vi.fn();
     mockedSendRequest.mockResolvedValue({});
-    const { result } = renderHook(() =>
-      useSummaryAudio({ summary: 't', onTtsError })
-    );
+    const { result } = renderHook(() => useSummaryAudio({ summary: 't', onTtsError }));
     await act(async () => {
       await result.current.requestAudio();
     });
@@ -107,9 +99,7 @@ describe('useSummaryAudio', () => {
   it('requestAudio invokes onTtsError when sendRequest throws', async () => {
     const onTtsError = vi.fn();
     mockedSendRequest.mockRejectedValue(new Error('net'));
-    const { result } = renderHook(() =>
-      useSummaryAudio({ summary: 't', onTtsError })
-    );
+    const { result } = renderHook(() => useSummaryAudio({ summary: 't', onTtsError }));
     await act(async () => {
       await result.current.requestAudio();
     });
@@ -248,9 +238,7 @@ describe('useSummaryAudio', () => {
     mockedSendRequest.mockResolvedValue(blob);
     vi.mocked(window.URL.createObjectURL).mockReturnValue('blob:dl');
     const revoke = vi.mocked(window.URL.revokeObjectURL);
-    const clickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => {});
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 
     const { result } = renderHook(() => useSummaryAudio({ summary: 's' }));
     await act(async () => {
@@ -346,9 +334,7 @@ describe('useSummaryAudio', () => {
     vi.mocked(window.URL.createObjectURL).mockReturnValue('blob:revoke-me');
     const revoke = vi.mocked(window.URL.revokeObjectURL);
 
-    const { result, unmount } = renderHook(() =>
-      useSummaryAudio({ summary: 's' })
-    );
+    const { result, unmount } = renderHook(() => useSummaryAudio({ summary: 's' }));
     await act(async () => {
       await result.current.requestAudio();
     });
@@ -369,9 +355,8 @@ describe('useSummaryAudio', () => {
     mockedSendRequest.mockRejectedValue(new Error('fail'));
 
     const { result, rerender } = renderHook(
-      ({ onTts }: { onTts: () => void }) =>
-        useSummaryAudio({ summary: 's', onTtsError: onTts }),
-      { initialProps: { onTts: err1 } }
+      ({ onTts }: { onTts: () => void }) => useSummaryAudio({ summary: 's', onTtsError: onTts }),
+      { initialProps: { onTts: err1 } },
     );
 
     await act(async () => {

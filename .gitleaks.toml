@@ -1,0 +1,24 @@
+[extend]
+useDefault = true
+
+title = "NeuroPDF gitleaks config"
+
+# Non-production credential literals are only permitted under these paths.
+# Elsewhere, the same strings must fail detection (e.g. accidental commit to app code).
+[[allowlists]]
+description = "backend/dev_only: local seed & test-user scripts; use DEV_SEED_PASSWORD in real environments."
+paths = [
+  '''backend/dev_only/.*''',
+]
+
+[[allowlists]]
+description = "frontend/e2e/fixtures: documented Playwright defaults; CI overrides via E2E_* env."
+paths = [
+  '''frontend/e2e/fixtures/.*''',
+]
+
+[[allowlists]]
+description = "Historical false-positive in commit history; current source contains no real secret."
+commits = [
+  '''acc9961f47f8b2ccc0c71c8c87b8aa02405bf417''',
+]

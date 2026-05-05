@@ -16,9 +16,7 @@ vi.mock('framer-motion', () => {
       button: passthrough('button'),
       span: passthrough('span'),
     },
-    AnimatePresence: ({ children }: { children?: React.ReactNode }) => (
-      <>{children}</>
-    ),
+    AnimatePresence: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
   };
 });
 
@@ -36,13 +34,11 @@ vi.mock('@/context/LanguageContext', () => ({
 }));
 const mockPdfFileRef: { current: File | null } = { current: null };
 vi.mock('@/context/PdfContext', () => ({
-  usePdf: () => ({ pdfFile: mockPdfFileRef.current }),
+  usePdfData: () => ({ pdfFile: mockPdfFileRef.current }),
 }));
 
 vi.mock('next/image', () => ({
-  default: ({ src, alt }: { src: string; alt: string }) => (
-    <img src={src} alt={alt} />
-  ),
+  default: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} />,
 }));
 
 describe('ProChatPanel (presentational)', () => {
@@ -86,7 +82,7 @@ describe('ProChatPanel (presentational)', () => {
           { role: 'user', content: 'Hello' },
           { role: 'assistant', content: 'Hi there!' },
         ]}
-      />
+      />,
     );
     expect(screen.getByText('Hello')).toBeInTheDocument();
     expect(screen.getByText('Hi there!')).toBeInTheDocument();
@@ -109,17 +105,8 @@ describe('ProChatPanel (presentational)', () => {
 
   it('calls onSend when form is submitted', () => {
     const onSend = vi.fn();
-    render(
-      <ProChatPanel
-        {...defaultProps}
-        input="Hello"
-        setInput={vi.fn()}
-        onSend={onSend}
-      />
-    );
-    const form = screen
-      .getByPlaceholderText(/chatPlaceholder/i)
-      .closest('form');
+    render(<ProChatPanel {...defaultProps} input="Hello" setInput={vi.fn()} onSend={onSend} />);
+    const form = screen.getByPlaceholderText(/chatPlaceholder/i).closest('form');
     if (form) {
       fireEvent.submit(form);
     }
@@ -132,13 +119,7 @@ describe('ProChatPanel (presentational)', () => {
   });
 
   it('shows loading (typing) label', () => {
-    render(
-      <ProChatPanel
-        {...defaultProps}
-        loading={true}
-        typingLabel="AI is typing..."
-      />
-    );
+    render(<ProChatPanel {...defaultProps} loading={true} typingLabel="AI is typing..." />);
     expect(screen.getByText('AI is typing...')).toBeInTheDocument();
   });
 
@@ -148,12 +129,8 @@ describe('ProChatPanel (presentational)', () => {
   });
 
   it('shows custom placeholder', () => {
-    render(
-      <ProChatPanel {...defaultProps} placeholder="Ask about your PDF..." />
-    );
-    expect(
-      screen.getByPlaceholderText('Ask about your PDF...')
-    ).toBeInTheDocument();
+    render(<ProChatPanel {...defaultProps} placeholder="Ask about your PDF..." />);
+    expect(screen.getByPlaceholderText('Ask about your PDF...')).toBeInTheDocument();
   });
 
   it('disables input when loading or initializing', () => {
@@ -163,9 +140,7 @@ describe('ProChatPanel (presentational)', () => {
     rerender(<ProChatPanel {...defaultProps} loading={true} />);
     expect(screen.getByPlaceholderText(/chatPlaceholder/i)).toBeDisabled();
 
-    rerender(
-      <ProChatPanel {...defaultProps} loading={false} initializing={true} />
-    );
+    rerender(<ProChatPanel {...defaultProps} loading={false} initializing={true} />);
     expect(screen.getByPlaceholderText(/chatPlaceholder/i)).toBeDisabled();
   });
 
@@ -181,14 +156,12 @@ describe('ProChatPanel (presentational)', () => {
         onSend={onSend}
         promptSuggestions={suggestions}
         promptSuggestionsDisabled={false}
-      />
+      />,
     );
     expect(
-      screen.getByRole('button', { name: /Bu belgenin sayfalarını ayır/i })
+      screen.getByRole('button', { name: /Bu belgenin sayfalarını ayır/i }),
     ).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole('button', { name: /Bu belgenin sayfalarını ayır/i })
-    );
+    fireEvent.click(screen.getByRole('button', { name: /Bu belgenin sayfalarını ayır/i }));
     expect(onSend).toHaveBeenCalledWith('Bu belgenin sayfalarını ayır');
   });
 
@@ -208,13 +181,7 @@ describe('ProChatPanel (presentational)', () => {
   });
 
   it('shows recording placeholder and pulse when isRecording', () => {
-    render(
-      <ProChatPanel
-        {...defaultProps}
-        isRecording={true}
-        onVoiceToggle={vi.fn()}
-      />
-    );
+    render(<ProChatPanel {...defaultProps} isRecording={true} onVoiceToggle={vi.fn()} />);
     expect(screen.getByPlaceholderText(/chatListening/i)).toBeInTheDocument();
   });
 
@@ -227,28 +194,20 @@ describe('ProChatPanel (presentational)', () => {
       { role: 'assistant' as const, content: 'b' },
       { role: 'user' as const, content: 'c' },
     ];
-    const { rerender } = render(
-      <ProChatPanel {...defaultProps} messages={one} />
-    );
+    const { rerender } = render(<ProChatPanel {...defaultProps} messages={one} />);
     rerender(<ProChatPanel {...defaultProps} messages={many} />);
     await waitFor(() => {
       expect(scrollIntoView).toHaveBeenCalled();
     });
-    const withAuto = scrollIntoView.mock.calls.some(
-      (c) => c[0]?.behavior === 'auto'
-    );
+    const withAuto = scrollIntoView.mock.calls.some((c) => c[0]?.behavior === 'auto');
     expect(withAuto).toBe(true);
   });
 
   it('uploads valid pdf via hidden file input', () => {
     const onFileUpload = vi.fn();
-    const { container } = render(
-      <ProChatPanel {...defaultProps} onFileUpload={onFileUpload} />
-    );
+    const { container } = render(<ProChatPanel {...defaultProps} onFileUpload={onFileUpload} />);
     const pdf = new File(['%PDF'], 'ok.pdf', { type: 'application/pdf' });
-    const input = container.querySelector(
-      'input[type="file"]'
-    ) as HTMLInputElement;
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [pdf] } });
     expect(onFileUpload).toHaveBeenCalledWith(pdf);
   });
@@ -259,18 +218,14 @@ describe('ProChatPanel (presentational)', () => {
         {...defaultProps}
         messages={[{ role: 'user', content: 'Hi' }]}
         userName="Jane Doe"
-      />
+      />,
     );
     expect(screen.getByText('JD')).toBeInTheDocument();
   });
 
   it('uses initials fallback when userName is empty', () => {
     render(
-      <ProChatPanel
-        {...defaultProps}
-        messages={[{ role: 'user', content: 'Hi' }]}
-        userName=""
-      />
+      <ProChatPanel {...defaultProps} messages={[{ role: 'user', content: 'Hi' }]} userName="" />,
     );
     expect(screen.getByText('U')).toBeInTheDocument();
   });
@@ -282,7 +237,7 @@ describe('ProChatPanel (presentational)', () => {
         messages={[{ role: 'user', content: 'Hi' }]}
         avatarSrc="https://example.com/a.png"
         userName="Jane Doe"
-      />
+      />,
     );
     const img = document.querySelector('img[src="https://example.com/a.png"]');
     expect(img).toBeTruthy();
@@ -291,9 +246,7 @@ describe('ProChatPanel (presentational)', () => {
   it('drag over shows drop overlay and drop uploads pdf', () => {
     const onFileUpload = vi.fn();
     const pdf = new File(['%PDF'], 'dropped.pdf', { type: 'application/pdf' });
-    const { container } = render(
-      <ProChatPanel {...defaultProps} onFileUpload={onFileUpload} />
-    );
+    const { container } = render(<ProChatPanel {...defaultProps} onFileUpload={onFileUpload} />);
     const fixedPanels = container.querySelectorAll('.fixed');
     const panel = fixedPanels[fixedPanels.length - 1] as HTMLElement;
     fireEvent.dragOver(panel, {
@@ -317,9 +270,7 @@ describe('ProChatPanel (presentational)', () => {
   it('validateAndUpload uses fallback strings when t returns empty', () => {
     tMock.mockImplementation(() => '');
     const onFileUpload = vi.fn();
-    const { container } = render(
-      <ProChatPanel {...defaultProps} onFileUpload={onFileUpload} />
-    );
+    const { container } = render(<ProChatPanel {...defaultProps} onFileUpload={onFileUpload} />);
     const panel = container
       .querySelectorAll('.fixed')
       .item(container.querySelectorAll('.fixed').length - 1) as HTMLElement;
@@ -331,9 +282,7 @@ describe('ProChatPanel (presentational)', () => {
         getData: () => '',
       } as unknown as DataTransfer,
     });
-    expect(showErrorMock).toHaveBeenCalledWith(
-      'Sadece PDF dosyaları yüklenebilir.'
-    );
+    expect(showErrorMock).toHaveBeenCalledWith('Sadece PDF dosyaları yüklenebilir.');
 
     const huge = new File([new ArrayBuffer(60 * 1024 * 1024)], 'h.pdf', {
       type: 'application/pdf',
@@ -347,16 +296,14 @@ describe('ProChatPanel (presentational)', () => {
     });
     expect(
       showErrorMock.mock.calls.some(
-        (c) => typeof c[0] === 'string' && /Maks|max/i.test(c[0] as string)
-      )
+        (c) => typeof c[0] === 'string' && /Maks|max/i.test(c[0] as string),
+      ),
     ).toBe(true);
   });
 
   it('validateAndUpload rejects non-pdf and oversized files', () => {
     const onFileUpload = vi.fn();
-    const { container } = render(
-      <ProChatPanel {...defaultProps} onFileUpload={onFileUpload} />
-    );
+    const { container } = render(<ProChatPanel {...defaultProps} onFileUpload={onFileUpload} />);
     const fixedPanels = container.querySelectorAll('.fixed');
     const panel = fixedPanels[fixedPanels.length - 1] as HTMLElement;
     const bad = new File(['x'], 'x.txt', { type: 'text/plain' });
@@ -402,12 +349,8 @@ describe('ProChatPanel (presentational)', () => {
 
   it('calls onClose when mobile backdrop is clicked', () => {
     const onClose = vi.fn();
-    const { container } = render(
-      <ProChatPanel {...defaultProps} onClose={onClose} />
-    );
-    const backdrop = container.querySelector(
-      '.fixed.inset-0.sm\\:hidden'
-    ) as HTMLElement;
+    const { container } = render(<ProChatPanel {...defaultProps} onClose={onClose} />);
+    const backdrop = container.querySelector('.fixed.inset-0.sm\\:hidden') as HTMLElement;
     expect(backdrop).toBeTruthy();
     fireEvent.click(backdrop);
     expect(onClose).toHaveBeenCalled();
@@ -416,10 +359,7 @@ describe('ProChatPanel (presentational)', () => {
   it('cancels animation frame on unmount', () => {
     const cancel = vi.spyOn(window, 'cancelAnimationFrame');
     const { unmount } = render(
-      <ProChatPanel
-        {...defaultProps}
-        messages={[{ role: 'user', content: 'm' }]}
-      />
+      <ProChatPanel {...defaultProps} messages={[{ role: 'user', content: 'm' }]} />,
     );
     unmount();
     expect(cancel).toHaveBeenCalled();
@@ -432,16 +372,13 @@ describe('ProChatPanel (presentational)', () => {
     });
     mockPdfFileRef.current = panelPdf;
     const onFileUpload = vi.fn();
-    const { container } = render(
-      <ProChatPanel {...defaultProps} onFileUpload={onFileUpload} />
-    );
+    const { container } = render(<ProChatPanel {...defaultProps} onFileUpload={onFileUpload} />);
     const fixedPanels = container.querySelectorAll('.fixed');
     const panel = fixedPanels[fixedPanels.length - 1] as HTMLElement;
     fireEvent.drop(panel, {
       dataTransfer: {
         files: [],
-        getData: (mime: string) =>
-          mime === 'application/x-neuro-pdf' ? '{}' : '',
+        getData: (mime: string) => (mime === 'application/x-neuro-pdf' ? '{}' : ''),
       } as unknown as DataTransfer,
     });
     expect(onFileUpload).toHaveBeenCalledWith(panelPdf);

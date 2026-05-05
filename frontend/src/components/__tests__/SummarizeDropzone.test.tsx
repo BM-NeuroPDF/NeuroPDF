@@ -1,12 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ComponentProps, DragEvent } from 'react';
-import {
-  render,
-  screen,
-  fireEvent,
-  act,
-  waitFor,
-} from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { SummarizeDropzone } from '../SummarizeDropzone';
 
 const t = (k: string) => k;
@@ -15,7 +9,7 @@ function dataTransferStub(
   overrides: {
     getData?: (fmt: string) => string;
     types?: string[];
-  } = {}
+  } = {},
 ) {
   const types = overrides.types ?? ['Files'];
   return {
@@ -39,9 +33,7 @@ function dragEnterDataTransferForFiles(files: File[]) {
   };
 }
 
-function setup(
-  overrides: Partial<ComponentProps<typeof SummarizeDropzone>> = {}
-) {
+function setup(overrides: Partial<ComponentProps<typeof SummarizeDropzone>> = {}) {
   const onDrop = vi.fn();
   const onFileInputChange = vi.fn();
   const onPanelDrop = vi.fn((e: DragEvent<HTMLElement>) => {
@@ -59,9 +51,7 @@ function setup(
   };
   const { container } = render(<SummarizeDropzone {...props} />);
   const dropZone = container.querySelector('.container-card.border-dashed');
-  const manualFileInput = container.querySelectorAll(
-    'input[type="file"]'
-  )[1] as HTMLInputElement;
+  const manualFileInput = container.querySelectorAll('input[type="file"]')[1] as HTMLInputElement;
   return {
     container,
     dropZone,
@@ -126,8 +116,7 @@ describe('SummarizeDropzone', () => {
     expect(dropZone).toBeTruthy();
     fireEvent.drop(dropZone!, {
       dataTransfer: dataTransferStub({
-        getData: (fmt: string) =>
-          fmt === 'application/x-neuro-pdf' ? '1' : '',
+        getData: (fmt: string) => (fmt === 'application/x-neuro-pdf' ? '1' : ''),
       }),
     });
     expect(onPanelDrop).toHaveBeenCalledTimes(1);

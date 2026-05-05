@@ -1,6 +1,7 @@
 import type { AuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import CredentialsProvider from 'next-auth/providers/credentials';
+import { logError } from '@/utils/logger';
 
 export const authOptions: AuthOptions = {
   providers: [
@@ -14,9 +15,7 @@ export const authOptions: AuthOptions = {
         tempToken: { label: 'Temp token', type: 'text' },
       },
       async authorize(credentials) {
-        const base =
-          process.env.BACKEND_API_URL?.replace(/\/$/, '') ||
-          'http://localhost:8000';
+        const base = process.env.BACKEND_API_URL?.replace(/\/$/, '') || 'http://localhost:8000';
 
         const otpCode = credentials?.otpCode?.trim();
         const tempToken = credentials?.tempToken?.trim();
@@ -49,7 +48,7 @@ export const authOptions: AuthOptions = {
               eula_accepted: data.eula_accepted,
             };
           } catch (error) {
-            console.error('Authorize verify-2fa error:', error);
+            logError(error, { scope: 'auth.credentials.verify2fa' });
             return null;
           }
         }
@@ -87,14 +86,11 @@ export const authOptions: AuthOptions = {
       // B) İlk Giriş Anı (Google)
       if (account?.id_token) {
         try {
-          const res = await fetch(
-            `${process.env.BACKEND_API_URL}/auth/google`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id_token: account.id_token }),
-            }
-          );
+          const res = await fetch(`${process.env.BACKEND_API_URL}/auth/google`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id_token: account.id_token }),
+          });
 
           if (res.ok) {
             const data = await res.json();
@@ -103,7 +99,7 @@ export const authOptions: AuthOptions = {
             token.eula_accepted = data.eula_accepted;
           }
         } catch (error) {
-          console.error('Google Auth Error:', error);
+          logError(error, { scope: 'auth.jwt.googleTokenExchange' });
         }
       }
 

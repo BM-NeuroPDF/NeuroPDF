@@ -3,13 +3,13 @@ import type { ComponentProps } from 'react';
 import type { Session } from 'next-auth';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LlmPreferenceCard } from '../LlmPreferenceCard';
-import { sendRequest } from '@/utils/api';
+import { updateLlmPreference } from '@/services/llmPreferenceService';
 
-vi.mock('@/utils/api', () => ({
-  sendRequest: vi.fn(),
+vi.mock('@/services/llmPreferenceService', () => ({
+  updateLlmPreference: vi.fn(),
 }));
 
-const mockedSendRequest = vi.mocked(sendRequest);
+const mockedUpdateLlm = vi.mocked(updateLlmPreference);
 
 const t = (k: string) => k;
 
@@ -18,9 +18,7 @@ const session = {
   expires: '1',
 } as Session;
 
-function setup(
-  overrides: Partial<ComponentProps<typeof LlmPreferenceCard>> = {}
-) {
+function setup(overrides: Partial<ComponentProps<typeof LlmPreferenceCard>> = {}) {
   const mutateLlm = vi.fn().mockResolvedValue(undefined);
   const props = {
     llmData: undefined as { provider?: string } | undefined,
@@ -45,7 +43,7 @@ describe('LlmPreferenceCard', () => {
         mutateLlm={vi.fn()}
         session={null}
         t={t as ComponentProps<typeof LlmPreferenceCard>['t']}
-      />
+      />,
     );
     expect(container.firstChild).toBeNull();
   });
@@ -73,7 +71,7 @@ describe('LlmPreferenceCard', () => {
         mutateLlm={vi.fn()}
         session={session}
         t={t as ComponentProps<typeof LlmPreferenceCard>['t']}
-      />
+      />,
     );
     expect(screen.getByText('cloudFeatures')).toBeInTheDocument();
   });
@@ -84,24 +82,20 @@ describe('LlmPreferenceCard', () => {
   });
 
   it('saves choice and revalidates', async () => {
-    mockedSendRequest.mockResolvedValue(undefined);
+    mockedUpdateLlm.mockResolvedValue(undefined);
     const { mutateLlm } = setup();
 
     fireEvent.click(screen.getByRole('button', { name: /Cloud LLM/i }));
     fireEvent.click(screen.getByRole('button', { name: /savePreference/i }));
 
     await waitFor(() => {
-      expect(mockedSendRequest).toHaveBeenCalledWith(
-        '/files/user/update-llm',
-        'POST',
-        { provider: 'cloud' }
-      );
+      expect(mockedUpdateLlm).toHaveBeenCalledWith('cloud');
     });
     expect(mutateLlm).toHaveBeenCalled();
   });
 
   it('alerts on save error', async () => {
-    mockedSendRequest.mockRejectedValue(new Error('fail'));
+    mockedUpdateLlm.mockRejectedValue(new Error('fail'));
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -116,26 +110,17 @@ describe('LlmPreferenceCard', () => {
   });
 
   it('shows saving label while loading', async () => {
-    mockedSendRequest.mockImplementation(
-      () => new Promise((resolve) => setTimeout(resolve, 200))
-    );
+    mockedUpdateLlm.mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 200)));
     setup();
     fireEvent.click(screen.getByRole('button', { name: /savePreference/i }));
     expect(screen.getByText('saving')).toBeInTheDocument();
   });
 
   it('shows Turkish saving label while loading when t is empty', async () => {
-    mockedSendRequest.mockImplementation(
-      () => new Promise((resolve) => setTimeout(resolve, 200))
-    );
+    mockedUpdateLlm.mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 200)));
     const tEmpty = (() => '') as ComponentProps<typeof LlmPreferenceCard>['t'];
     render(
-      <LlmPreferenceCard
-        llmData={undefined}
-        mutateLlm={vi.fn()}
-        session={session}
-        t={tEmpty}
-      />
+      <LlmPreferenceCard llmData={undefined} mutateLlm={vi.fn()} session={session} t={tEmpty} />,
     );
     fireEvent.click(screen.getByRole('button', { name: /Tercihi Kaydet/i }));
     expect(screen.getByText('Kaydediliyor...')).toBeInTheDocument();
@@ -144,39 +129,21 @@ describe('LlmPreferenceCard', () => {
   it('uses Turkish fallbacks when t returns empty', () => {
     const tEmpty = (() => '') as ComponentProps<typeof LlmPreferenceCard>['t'];
     render(
-      <LlmPreferenceCard
-        llmData={undefined}
-        mutateLlm={vi.fn()}
-        session={session}
-        t={tEmpty}
-      />
+      <LlmPreferenceCard llmData={undefined} mutateLlm={vi.fn()} session={session} t={tEmpty} />,
     );
     expect(screen.getByText('AI Model Tercihi')).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /Tercihi Kaydet/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Tercihi Kaydet/i })).toBeInTheDocument();
   });
 
   it('uses Turkish fallbacks for cloud feature bullets when t is empty', () => {
     const tEmpty = (() => '') as ComponentProps<typeof LlmPreferenceCard>['t'];
     render(
-      <LlmPreferenceCard
-        llmData={undefined}
-        mutateLlm={vi.fn()}
-        session={session}
-        t={tEmpty}
-      />
+      <LlmPreferenceCard llmData={undefined} mutateLlm={vi.fn()} session={session} t={tEmpty} />,
     );
     fireEvent.click(screen.getByRole('button', { name: /Cloud LLM/i }));
-    expect(
-      screen.getByText('En Yüksek Doğruluk (Gemini 1.5).')
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText('Geniş bağlam ve karmaşık analiz.')
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText('Veriler işlenmek üzere gönderilir.')
-    ).toBeInTheDocument();
+    expect(screen.getByText('En Yüksek Doğruluk (Gemini 1.5).')).toBeInTheDocument();
+    expect(screen.getByText('Geniş bağlam ve karmaşık analiz.')).toBeInTheDocument();
+    expect(screen.getByText('Veriler işlenmek üzere gönderilir.')).toBeInTheDocument();
   });
 
   it('handles explicit local selection click', () => {

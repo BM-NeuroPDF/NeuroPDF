@@ -1,0 +1,121 @@
+'use client';
+
+import type { ChangeEvent, DragEvent, MouseEvent } from 'react';
+import type { DropzoneRootProps } from 'react-dropzone';
+import type { Session } from 'next-auth';
+import type { UsageInfo } from '@/hooks/useGuestLimit';
+import type { EditPdfTranslate } from './editPdfTypes';
+
+type EditPdfSidebarProps = {
+  title: string;
+  session: Session | null;
+  usageInfo: UsageInfo | null;
+  showLimitModal: boolean;
+  currentError: string | null;
+  getRootProps: <T extends DropzoneRootProps>(props?: T) => T;
+  getInputProps: () => Record<string, unknown>;
+  isDragActive: boolean;
+  onDropFromPanel: (e?: DragEvent<HTMLElement> | MouseEvent<HTMLElement>) => void;
+  onFileInputChange: (e: ChangeEvent<HTMLInputElement>) => void;
+  t: EditPdfTranslate;
+};
+
+export default function EditPdfSidebar({
+  title,
+  session,
+  usageInfo,
+  showLimitModal,
+  currentError,
+  getRootProps,
+  getInputProps,
+  isDragActive,
+  onDropFromPanel,
+  onFileInputChange,
+  t,
+}: EditPdfSidebarProps) {
+  return (
+    <>
+      <h1 className="text-3xl mb-6 tracking-tight">{title}</h1>
+
+      {usageInfo && !showLimitModal && !session && (
+        <div className="info-box mb-4">{usageInfo.message}</div>
+      )}
+
+      {currentError && (
+        <div className="error-box mb-6 shadow-sm">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            className="w-5 h-5 shrink-0"
+          >
+            <path
+              fillRule="evenodd"
+              d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <span>{currentError}</span>
+        </div>
+      )}
+
+      <div
+        {...getRootProps({
+          onDrop: onDropFromPanel,
+          role: 'button',
+        })}
+        className={`container-card border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-300
+          ${
+            isDragActive
+              ? 'border-[var(--button-bg)] opacity-80 bg-[var(--background)]'
+              : 'border-[var(--navbar-border)] hover:border-[var(--button-bg)]'
+          }`}
+      >
+        <input {...getInputProps()} accept="application/pdf" />
+        <div className="flex flex-col items-center gap-3">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={1.5}
+            stroke="currentColor"
+            className="w-12 h-12 opacity-50"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75"
+            />
+          </svg>
+          {isDragActive ? <p>{t('editDropActive')}</p> : <p>{t('editDropPassive')}</p>}
+        </div>
+      </div>
+
+      <div className="mt-6 flex flex-wrap items-center gap-4">
+        <label className="btn-primary cursor-pointer shadow-md hover:scale-105 flex items-center gap-2">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={1.5}
+            stroke="currentColor"
+            className="w-5 h-5"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"
+            />
+          </svg>
+          {t('selectFile')}
+          <input
+            type="file"
+            accept="application/pdf"
+            onChange={onFileInputChange}
+            className="hidden"
+          />
+        </label>
+      </div>
+    </>
+  );
+}

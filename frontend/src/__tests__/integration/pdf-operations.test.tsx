@@ -68,9 +68,7 @@ vi.mock('react-dropzone', () => ({
             } else {
               fileRejections.push({
                 file,
-                errors: [
-                  { code: 'file-invalid-type', message: 'Invalid file type' },
-                ],
+                errors: [{ code: 'file-invalid-type', message: 'Invalid file type' }],
               });
             }
 
@@ -105,7 +103,7 @@ function renderWithProviders(ui: React.ReactElement) {
       <PdfProvider>
         <PopupProvider>{ui}</PopupProvider>
       </PdfProvider>
-    </LanguageProvider>
+    </LanguageProvider>,
   );
 }
 
@@ -122,9 +120,7 @@ describe('PDF Operations Integration', () => {
       renderWithProviders(<UploadPage />);
 
       // File input'u bul
-      const fileInput = document.querySelector(
-        'input[type="file"]'
-      ) as HTMLInputElement;
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
       expect(fileInput).toBeInTheDocument();
 
       // Mock PDF dosyası oluştur
@@ -143,9 +139,7 @@ describe('PDF Operations Integration', () => {
       const user = userEvent.setup();
       renderWithProviders(<UploadPage />);
 
-      const fileInput = document.querySelector(
-        'input[type="file"]'
-      ) as HTMLInputElement;
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
 
       // Invalid file oluştur (PDF değil)
       const invalidFile = new File(['content'], 'test.txt', {
@@ -169,9 +163,7 @@ describe('PDF Operations Integration', () => {
       renderWithProviders(<UploadPage />);
 
       // Dosya seç
-      const fileInput = document.querySelector(
-        'input[type="file"]'
-      ) as HTMLInputElement;
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
       const mockFile = createMockPdfFile('test.pdf');
       await user.upload(fileInput, mockFile);
 
@@ -193,7 +185,7 @@ describe('PDF Operations Integration', () => {
         () => {
           expect(screen.getByText(/Yüklendi|Uploaded/i)).toBeInTheDocument();
         },
-        { timeout: 3000 }
+        { timeout: 3000 },
       );
     });
 
@@ -202,9 +194,7 @@ describe('PDF Operations Integration', () => {
       renderWithProviders(<UploadPage />);
 
       // Dosya seç
-      const fileInput = document.querySelector(
-        'input[type="file"]'
-      ) as HTMLInputElement;
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
       const mockFile = createMockPdfFile('test.pdf');
       await user.upload(fileInput, mockFile);
 
@@ -227,7 +217,7 @@ describe('PDF Operations Integration', () => {
           const stored = sessionStorage.getItem('activePdfBase64');
           expect(stored).toBeTruthy();
         },
-        { timeout: 2000 }
+        { timeout: 2000 },
       );
     });
 
@@ -236,9 +226,7 @@ describe('PDF Operations Integration', () => {
       renderWithProviders(<UploadPage />);
 
       // Dosya seç
-      const fileInput = document.querySelector(
-        'input[type="file"]'
-      ) as HTMLInputElement;
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
       const mockFile = createMockPdfFile('test.pdf');
       await user.upload(fileInput, mockFile);
 
@@ -253,9 +241,7 @@ describe('PDF Operations Integration', () => {
       renderWithProviders(<UploadPage />);
 
       // Dosya seç
-      const fileInput = document.querySelector(
-        'input[type="file"]'
-      ) as HTMLInputElement;
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
       const mockFile = createMockPdfFile('test.pdf');
       await user.upload(fileInput, mockFile);
 
@@ -285,9 +271,7 @@ describe('PDF Operations Integration', () => {
       const user = userEvent.setup();
       renderWithProviders(<UploadPage />);
 
-      const fileInput = document.querySelector(
-        'input[type="file"]'
-      ) as HTMLInputElement;
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
 
       // Çok büyük dosya oluştur (10MB - guest limit 5MB)
       const largeFile = createMockPdfFile('large.pdf');

@@ -21,6 +21,36 @@ export const translations = {
     success: 'İşlem Başarılı',
     warning: 'Uyarı',
     invalidFileType: 'Geçersiz dosya türü. Sadece PDF dosyaları kabul edilir.',
+    tempDbError:
+      'Veritabanı bağlantısı geçici olarak sağlanamadı. Lütfen birkaç saniye sonra tekrar deneyin.',
+    genericErrorWithCode: 'Hata: {code}',
+    errorNetworkToast: 'Ağ bağlantısı sorunu oluştu.',
+    errorServerToast: 'Sunucu tarafında bir sorun oluştu.',
+    errorAuthToast: 'Oturum doğrulaması başarısız.',
+    errorUnknownInline: 'Beklenmeyen bir hata oluştu.',
+    notFoundTitle: 'Aradığınız sayfa bulunamadı',
+    notFoundDescription:
+      'Adres yanlış olabilir veya içerik kaldırılmış olabilir. Ana sayfaya dönebilirsiniz.',
+    notFoundGoHome: 'Ana sayfaya dön',
+    notFoundRecentDocs: 'Son görüntülenen belgeler',
+    appErrorTitle: 'Bir şeyler ters gitti',
+    appErrorDescription:
+      'Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin veya ana sayfaya dönün.',
+    appErrorRetry: 'Tekrar dene',
+    appErrorGoHome: 'Ana sayfa',
+    appErrorEventId: 'Hata ID',
+    navMenuOpen: 'Menüyü aç',
+    navMenuClose: 'Menüyü kapat',
+    profileEditAvatarAria: 'Profil resmini düzenle',
+    docsPreviewAria: 'Belge önizlemesini aç',
+    chatSendAria: 'Mesaj gönder',
+    languageSwitcherAria: 'Dil seçimini aç',
+    themeToggleToDark: 'Koyu temaya geç',
+    themeToggleToLight: 'Açık temaya geç',
+    audioRewindAria: '10 saniye geri sar',
+    audioPlayPauseAria: 'Sesi oynat veya duraklat',
+    audioForwardAria: '10 saniye ileri sar',
+    audioDownloadAria: 'Sesi indir',
 
     // --- EULA ---
     eulaTitle: 'EULA',
@@ -57,8 +87,7 @@ export const translations = {
     registerError: 'Kayıt başarısız oldu. Lütfen bilgileri kontrol edin.',
     loginLink: 'Giriş Yap',
     loginError: 'Giriş yapılamadı. Bilgilerinizi kontrol edin.',
-    authRequiredToken:
-      'Kimlik doğrulama tokenı bulunamadı. Lütfen tekrar giriş yapın.',
+    authRequiredToken: 'Kimlik doğrulama tokenı bulunamadı. Lütfen tekrar giriş yapın.',
     googleLogin: 'Google ile Giriş Yap',
     or: 'veya',
     noAccount: 'Hesabın yok mu? Hemen üye ol.',
@@ -79,8 +108,7 @@ export const translations = {
 
     // Pricing Page
     pricingTitle: 'Size Uygun Planı Seçin',
-    pricingSubtitle:
-      'İster misafir olun, ister profesyonel; NeuroPDF ile sınırları kaldırın.',
+    pricingSubtitle: 'İster misafir olun, ister profesyonel; NeuroPDF ile sınırları kaldırın.',
     planGuest: 'Misafir',
     planStandard: 'Standart',
     planPro: 'Neuro Pro',
@@ -105,8 +133,7 @@ export const translations = {
 
     // --- UPLOAD PAGE (Yükleme Sayfası) ---
     uploadPageTitle: 'Neuro PDF — Yükleme',
-    guestUploadWarning:
-      'Giriş yaparak dosyalarınızı kalıcı olarak saklayabilirsiniz.',
+    guestUploadWarning: 'Giriş yaparak dosyalarınızı kalıcı olarak saklayabilirsiniz.',
     userLoggedIn: 'Giriş yaptınız:',
     uploadDropActive: 'Dosyayı bırakın, yüklemeye hazırlansın...',
     uploadDropPassive: "PDF'yi sürükleyip bırakın veya tıklayın",
@@ -127,13 +154,11 @@ export const translations = {
     // --- CONVERT TEXT PAGE (Metin Dönüştürme Sayfası) ---
     pageTitle: "Neuro PDF — PDF'ten Metin Dönüştürücü",
     textConvertedTitle: '📄 Metin Dönüştürüldü:',
-    textReadyMessage:
-      'Metin dosyası hazır! İndirerek tüm içeriği görebilirsiniz.',
+    textReadyMessage: 'Metin dosyası hazır! İndirerek tüm içeriği görebilirsiniz.',
     converting: 'Metin Dönüştürülüyor...',
     convertText: 'Metni Dönüştür',
     dropActive: 'Dosyayı bırakın, yüklemeye hazırlansın...',
-    dropPassive:
-      "PDF'yi buraya sürükleyip bırakın veya aşağıdaki butonlarla seçin",
+    dropPassive: "PDF'yi buraya sürükleyip bırakın veya aşağıdaki butonlarla seçin",
 
     // --- MERGE PAGE (Birleştirme Sayfası) ---
     mergePageTitle: 'Neuro PDF — PDF Birleştirici',
@@ -165,14 +190,12 @@ export const translations = {
     extractDropPassive: "PDF'yi buraya sürükleyip bırakın veya tıklayıp seçin",
     pagesToExtractLabel: 'Çıkarılacak Sayfalar:',
     pageRangePlaceholder: 'Örn: 1, 3-5, 10-12',
-    pageRangeHint:
-      'Tek sayfa (3), aralık (10-15) veya virgülle ayrılmış liste yazabilirsiniz.',
+    pageRangeHint: 'Tek sayfa (3), aralık (10-15) veya virgülle ayrılmış liste yazabilirsiniz.',
     extractButton: 'Sayfaları Çıkar',
     extracting: 'Çıkarılıyor...',
     pdfPreviewTitle: '📄 PDF Önizleme:',
     extractedPdfPreviewTitle: '📄 Çıkarılan PDF Önizleme:',
-    enterPageRangeError:
-      'Lütfen bir sayfa numarası veya aralığı girin (örn: 5, 10-20).',
+    enterPageRangeError: 'Lütfen bir sayfa numarası veya aralığı girin (örn: 5, 10-20).',
     extractionFailed: 'Sayfa çıkarma işlemi başarısız oldu.',
     uploadFirst: 'Lütfen önce bir PDF dosyası yükleyin.',
 
@@ -195,8 +218,7 @@ export const translations = {
     summarizing: 'Özetleniyor...',
     summarizeButton: 'Özetle',
     summaryResultTitle: 'Özet Sonucu',
-    waitMessage:
-      'Bu işlem belgenin boyutuna göre biraz zaman alabilir. Lütfen bekleyin.',
+    waitMessage: 'Bu işlem belgenin boyutuna göre biraz zaman alabilir. Lütfen bekleyin.',
     downloadPdf: 'PDF Olarak İndir',
     newProcess: 'Yeni İşlem',
     summaryResult: 'Özet Sonucu',
@@ -229,17 +251,14 @@ export const translations = {
     preparingFile: 'Dosya hazırlanıyor...',
 
     // --- PDF CHAT ---
-    chatWelcome:
-      '👋 Merhaba! Dosyayı analiz ettim. Bana her şeyi sorabilirsin.',
-    chatWelcomeGlobal:
-      'Merhaba ben Neuro AI. Sana yardımcı olmak için burdayım.',
+    chatWelcome: '👋 Merhaba! Dosyayı analiz ettim. Bana her şeyi sorabilirsin.',
+    chatWelcomeGlobal: 'Merhaba ben Neuro AI. Sana yardımcı olmak için burdayım.',
     chatInitError: '🚫 Sohbet başlatılamadı.',
     chatConnError: '⚠️ Bağlantı hatası oluştu.',
     analyzing: 'Belge analiz ediliyor...',
     aiTyping: 'Neuro yanıt yazıyor...',
     chatPlaceholder: 'PDF hakkında bir soru sorun...',
-    chatDisclaimer:
-      'NeuroPDF yapay zekası bazen hata yapabilir. Lütfen bilgileri kontrol edin.',
+    chatDisclaimer: 'NeuroPDF yapay zekası bazen hata yapabilir. Lütfen bilgileri kontrol edin.',
     errorOnlyPdf: 'Sadece PDF dosyaları yüklenebilir.',
     errorFileTooLarge: 'Dosya çok büyük (Maks {size}MB).',
 
@@ -271,10 +290,8 @@ export const translations = {
     deleteAccountPasswordLabel: 'Şifrenizi doğrulayın',
     deleteAccountPasswordPlaceholder: 'Hesap şifreniz',
     deleteAccountPasswordRequired: 'Hesabı silmek için şifrenizi girin.',
-    deleteAccountAcknowledge:
-      'Hesabımı ve verilerimi kalıcı olarak silmek istediğimi onaylıyorum.',
-    deleteAccountAcknowledgeRequired:
-      'Devam etmek için onay kutusunu işaretleyin.',
+    deleteAccountAcknowledge: 'Hesabımı ve verilerimi kalıcı olarak silmek istediğimi onaylıyorum.',
+    deleteAccountAcknowledgeRequired: 'Devam etmek için onay kutusunu işaretleyin.',
     deleteAccountSendCode: 'Doğrulama kodu gönder',
     deleteAccountOtpSentHint:
       'E-posta adresinize bir doğrulama kodu gönderdik. Kodu aşağıya girin.',
@@ -300,6 +317,7 @@ export const translations = {
     cloudFeat3: 'Veriler işlenmek üzere servis sağlayıcıya gönderilir.',
     savePreference: 'Tercihleri Kaydet',
     changeProfileImage: 'Profil Resmini Değiştir',
+    profileImageAlt: 'Profil resmi',
     chooseImageOption: 'Yeni profil resminiz için bir yöntem seçin.',
     uploadPng: 'PNG Dosyası Yükle',
     uploadPngHint: 'Bilgisayarınızdan bir PNG görseli seçin.',
@@ -338,13 +356,11 @@ export const translations = {
     chatAttachPdf: 'PDF Dosyası Yükle',
     chatVoiceAria: 'Sesli Yaz',
     chatPdfAria: 'PDF Ekle',
-    chatErrorSessionExpired:
-      "⚠️ PDF chat oturumu sona erdi. Lütfen PDF'i tekrar yükleyin.",
+    chatErrorSessionExpired: "⚠️ PDF chat oturumu sona erdi. Lütfen PDF'i tekrar yükleyin.",
     chatErrorQuotaExceeded:
       '⚠️ Gemini API kotası aşıldı. Local LLM kullanmak için profil sayfasından ayarları değiştirin.',
     chatErrorConnection: '⚠️ Bağlantı hatası. Lütfen tekrar deneyin.',
-    chatErrorSessionRefresh:
-      '⚠️ Oturum yenilenemedi. Lütfen sayfayı yenileyin.',
+    chatErrorSessionRefresh: '⚠️ Oturum yenilenemedi. Lütfen sayfayı yenileyin.',
     chatProRequiredTitle: 'Pro Üyelik Gerekli',
     chatProRequiredDesc:
       'AI sohbet özelliği Pro üyeliği gerektirir. Devam etmek için fiyatlandırma sayfasına gidebilirsiniz.',
@@ -361,8 +377,7 @@ export const translations = {
 
     // --- TOASTS ---
     toastInvalidRange: 'Geçersiz sayfa aralığı.',
-    toastPdfRequired:
-      'Tarayıcıda kesim için açık bir PDF gerekir. Lütfen bir dosya yükleyin.',
+    toastPdfRequired: 'Tarayıcıda kesim için açık bir PDF gerekir. Lütfen bir dosya yükleyin.',
     toastPagesInvalid: 'Sayfa numaraları geçersiz.',
     toastPdfLimit: 'PDF yalnızca {count} sayfa içeriyor.',
     toastExtractSuccess: 'Sayfalar başarıyla ayrıldı ve ekrana yüklendi.',
@@ -370,8 +385,7 @@ export const translations = {
     toastMergeMinFiles:
       'Birleştirmek için en az iki PDF gerekir. Lütfen yan panele birden fazla dosya ekleyin.',
     toastMergeSuccess: 'Tüm PDF dosyaları başarıyla birleştirildi',
-    toastMergeError:
-      'PDF birleştirilemedi. Lütfen dosyaları kontrol edip tekrar deneyin.',
+    toastMergeError: 'PDF birleştirilemedi. Lütfen dosyaları kontrol edip tekrar deneyin.',
     toastClearSuccess: 'Ekrandaki tüm dosyalar temizlendi.',
     toastSwapSuccess: 'Sayfalar yer değiştirildi; PDF güncellendi.',
     toastSwapError: 'Sayfa yer değiştirme başarısız.',
@@ -400,6 +414,36 @@ export const translations = {
     success: 'Success',
     warning: 'Warning',
     invalidFileType: 'Invalid file type. Only PDF files are accepted.',
+    tempDbError:
+      'Database connection is temporarily unavailable. Please try again in a few seconds.',
+    genericErrorWithCode: 'Error: {code}',
+    errorNetworkToast: 'A network connectivity issue occurred.',
+    errorServerToast: 'A server-side issue occurred.',
+    errorAuthToast: 'Session authentication failed.',
+    errorUnknownInline: 'An unexpected error occurred.',
+    notFoundTitle: 'The page you are looking for was not found',
+    notFoundDescription:
+      'The address may be incorrect or the content may have been removed. You can return to the home page.',
+    notFoundGoHome: 'Go to home page',
+    notFoundRecentDocs: 'Recently viewed documents',
+    appErrorTitle: 'Something went wrong',
+    appErrorDescription:
+      'An unexpected error occurred. Please try again or return to the home page.',
+    appErrorRetry: 'Try again',
+    appErrorGoHome: 'Home',
+    appErrorEventId: 'Error ID',
+    navMenuOpen: 'Open menu',
+    navMenuClose: 'Close menu',
+    profileEditAvatarAria: 'Edit profile picture',
+    docsPreviewAria: 'Open document preview',
+    chatSendAria: 'Send message',
+    languageSwitcherAria: 'Open language selector',
+    themeToggleToDark: 'Switch to dark theme',
+    themeToggleToLight: 'Switch to light theme',
+    audioRewindAria: 'Rewind 10 seconds',
+    audioPlayPauseAria: 'Play or pause audio',
+    audioForwardAria: 'Forward 10 seconds',
+    audioDownloadAria: 'Download audio',
 
     // --- EULA ---
     eulaTitle: 'EULA',
@@ -448,8 +492,7 @@ export const translations = {
     sessionChecking: 'Checking session info...',
     loginSuccess: 'Logged in successfully!',
     loginOtpTitle: 'Email verification code',
-    loginOtpDescription:
-      'Enter the 6-digit code sent to your email (valid for a few minutes).',
+    loginOtpDescription: 'Enter the 6-digit code sent to your email (valid for a few minutes).',
     loginOtpVerify: 'Verify and sign in',
     loginOtpLoading: 'Verifying...',
     loginOtpBack: 'Back to password',
@@ -457,8 +500,7 @@ export const translations = {
 
     // Pricing Page
     pricingTitle: 'Choose Your Plan',
-    pricingSubtitle:
-      'Whether you are a guest or a pro; unlock the limits with NeuroPDF.',
+    pricingSubtitle: 'Whether you are a guest or a pro; unlock the limits with NeuroPDF.',
     planGuest: 'Guest',
     planStandard: 'Standard',
     planPro: 'Neuro Pro',
@@ -504,8 +546,7 @@ export const translations = {
     // --- CONVERT TEXT PAGE ---
     pageTitle: 'Neuro PDF — PDF to Text Converter',
     textConvertedTitle: '📄 Text Converted:',
-    textReadyMessage:
-      'Text file is ready! You can download to see full content.',
+    textReadyMessage: 'Text file is ready! You can download to see full content.',
     converting: 'Converting Text...',
     convertText: 'Convert Text',
     dropActive: 'Drop the file to prepare upload...',
@@ -541,14 +582,12 @@ export const translations = {
     extractDropPassive: 'Drag & drop PDF here or click to select',
     pagesToExtractLabel: 'Pages to Extract:',
     pageRangePlaceholder: 'Ex: 1, 3-5, 10-12',
-    pageRangeHint:
-      'You can enter single pages (3), ranges (10-15), or comma-separated lists.',
+    pageRangeHint: 'You can enter single pages (3), ranges (10-15), or comma-separated lists.',
     extractButton: 'Extract Pages',
     extracting: 'Extracting...',
     pdfPreviewTitle: '📄 PDF Preview:',
     extractedPdfPreviewTitle: '📄 Extracted PDF Preview:',
-    enterPageRangeError:
-      'Please enter a page number or range (e.g., 5, 10-20).',
+    enterPageRangeError: 'Please enter a page number or range (e.g., 5, 10-20).',
     extractionFailed: 'Page extraction failed.',
     uploadFirst: 'Please upload a PDF file first.',
 
@@ -571,8 +610,7 @@ export const translations = {
     summarizing: 'Summarizing...',
     summarizeButton: 'Summarize',
     summaryResultTitle: 'Summary Result',
-    waitMessage:
-      'This process may take some time depending on the file size. Please wait.',
+    waitMessage: 'This process may take some time depending on the file size. Please wait.',
     downloadPdf: 'Download PDF',
     summaryResult: 'Summary Result',
     preparingAudio: 'Preparing Audio...',
@@ -604,16 +642,14 @@ export const translations = {
     preparingFile: 'Preparing file...',
 
     // --- PDF VIEWER & PANEL ---
-    chatWelcome:
-      '👋 Hello! I have analyzed the document. You can ask me anything.',
+    chatWelcome: '👋 Hello! I have analyzed the document. You can ask me anything.',
     chatWelcomeGlobal: 'Hello, I am Neuro AI. I am here to help you.',
     chatInitError: '🚫 Chat could not be started.',
     chatConnError: '⚠️ A connection error occurred.',
     analyzing: 'Analyzing document...',
     aiTyping: 'Neuro is typing...',
     chatPlaceholder: 'Ask a question about the PDF...',
-    chatDisclaimer:
-      'NeuroPDF AI can make mistakes. Please verify important information.',
+    chatDisclaimer: 'NeuroPDF AI can make mistakes. Please verify important information.',
     errorOnlyPdf: 'Only PDF files are allowed.',
     errorFileTooLarge: 'File too large (Max {size}MB).',
 
@@ -647,11 +683,9 @@ export const translations = {
     deleteAccountPasswordRequired: 'Enter your password to delete the account.',
     deleteAccountAcknowledge:
       'I confirm that I want to permanently delete my account and all data.',
-    deleteAccountAcknowledgeRequired:
-      'Please check the confirmation box to continue.',
+    deleteAccountAcknowledgeRequired: 'Please check the confirmation box to continue.',
     deleteAccountSendCode: 'Send verification code',
-    deleteAccountOtpSentHint:
-      'We sent a verification code to your email. Enter it below.',
+    deleteAccountOtpSentHint: 'We sent a verification code to your email. Enter it below.',
     deleteAccountOtpLabel: 'Email verification code',
     deleteAccountOtpPlaceholder: '6-digit code',
     deleteAccountResendInSeconds: 'Resend code ({n}s)',
@@ -674,6 +708,7 @@ export const translations = {
     cloudFeat3: 'Data is sent to provider for processing.',
     savePreference: 'Save Preference',
     changeProfileImage: 'Change Profile Image',
+    profileImageAlt: 'Profile picture',
     chooseImageOption: 'Choose a method for your new profile picture.',
     uploadPng: 'Upload PNG File',
     uploadPngHint: 'Select a PNG image from your computer.',
@@ -713,13 +748,11 @@ export const translations = {
     chatAttachPdf: 'Upload PDF File',
     chatVoiceAria: 'Voice Input',
     chatPdfAria: 'Add PDF',
-    chatErrorSessionExpired:
-      '⚠️ PDF chat session expired. Please upload the PDF again.',
+    chatErrorSessionExpired: '⚠️ PDF chat session expired. Please upload the PDF again.',
     chatErrorQuotaExceeded:
       '⚠️ Gemini API quota exceeded. Change settings in profile page to use Local LLM.',
     chatErrorConnection: '⚠️ Connection error. Please try again.',
-    chatErrorSessionRefresh:
-      '⚠️ Session could not be refreshed. Please refresh the page.',
+    chatErrorSessionRefresh: '⚠️ Session could not be refreshed. Please refresh the page.',
     chatProRequiredTitle: 'Pro Membership Required',
     chatProRequiredDesc:
       'AI chat feature requires Pro membership. You can go to the pricing page to continue.',
@@ -736,8 +769,7 @@ export const translations = {
 
     // --- TOASTS ---
     toastInvalidRange: 'Invalid page range.',
-    toastPdfRequired:
-      'A PDF must be open in the browser for cutting. Please upload a file.',
+    toastPdfRequired: 'A PDF must be open in the browser for cutting. Please upload a file.',
     toastPagesInvalid: 'Page numbers are invalid.',
     toastPdfLimit: 'PDF only contains {count} pages.',
     toastExtractSuccess: 'Pages extracted successfully and loaded to screen.',
@@ -745,8 +777,7 @@ export const translations = {
     toastMergeMinFiles:
       'At least two PDFs are required to merge. Please add multiple files to the side panel.',
     toastMergeSuccess: 'All PDF files merged successfully',
-    toastMergeError:
-      'Could not merge PDF. Please check the files and try again.',
+    toastMergeError: 'Could not merge PDF. Please check the files and try again.',
     toastClearSuccess: 'All files on the screen have been cleared.',
     toastSwapSuccess: 'Pages swapped; PDF updated.',
     toastSwapError: 'Page swap failed.',
@@ -756,3 +787,6 @@ export const translations = {
       'Could not establish secure connection to speech recognition server. Ensure you are using Chrome or check your internet connection.',
   },
 };
+
+type TranslationKey = keyof (typeof translations)['tr'];
+export type TranslateFn = (key: TranslationKey) => string;
