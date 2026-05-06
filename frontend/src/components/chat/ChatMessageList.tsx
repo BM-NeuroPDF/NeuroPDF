@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
+import rehypeSanitize from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import NeuroLogoIcon from '@/assets/icons/NeuroPDF-Chat.svg';
 import type { RefObject } from 'react';
@@ -89,7 +90,9 @@ export function ChatMessageList({
                     msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'
                   }`}
                 >
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+                    {msg.content}
+                  </ReactMarkdown>
                   {loading && idx === messages.length - 1 && msg.role === 'assistant' && (
                     <span className="inline-block w-2 h-4 ml-1 bg-current opacity-70 animate-pulse align-middle" />
                   )}

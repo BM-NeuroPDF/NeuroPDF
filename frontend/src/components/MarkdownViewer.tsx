@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { pdfService } from '@/services/pdfService';
 import { logError } from '@/utils/logger';
 import ReactMarkdown from 'react-markdown';
+import rehypeSanitize from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 
 type Props = {
@@ -87,7 +88,9 @@ export default function MarkdownViewer({
           color: 'var(--foreground)',
         }}
       >
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{processedMarkdown}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+          {processedMarkdown}
+        </ReactMarkdown>
       </div>
 
       <div className="flex justify-end">
