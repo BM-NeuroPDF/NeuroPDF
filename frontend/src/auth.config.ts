@@ -29,7 +29,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.apiToken = data.access_token; // FastAPI JWT
           token.userId = data.user_id;
         } else {
-          console.error('Backend /auth/google error:', await res.text());
+          console.error("[auth] Backend auth failed", res.status);
         }
       }
       return token;
