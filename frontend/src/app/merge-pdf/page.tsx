@@ -3,11 +3,13 @@
 import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import dynamic from 'next/dynamic';
-import { guestService } from '@/services/guestService';
 import { useGuestLimit } from '@/hooks/useGuestLimit';
 import { usePdfToolUpload, type PdfToolUploadError } from '@/hooks/usePdfToolUpload';
 import { useProcessedFileActions } from '@/hooks/useProcessedFileActions';
+import { useGuestGatedAction } from '@/hooks/useGuestGatedAction';
 import UsageLimitModal from '@/components/UsageLimitModal';
+import PdfToolDropzoneCard from '@/components/pdf-tools/PdfToolDropzoneCard';
+import PdfToolResultActions from '@/components/pdf-tools/PdfToolResultActions';
 import { usePdfActions, usePdfData } from '@/context/PdfContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { sendRequest } from '@/utils/api';
@@ -49,6 +51,11 @@ export default function MergePdfPage() {
 
   const { usageInfo, showLimitModal, checkLimit, closeLimitModal, redirectToLogin } =
     useGuestLimit();
+  const { runWithGuestCheck } = useGuestGatedAction({
+    session,
+    checkLimit,
+    onError: (error) => console.error('Misafir sayaç hatası:', error),
+  });
 
   const clearError = () => {
     setErrorType('NONE');
@@ -168,41 +175,23 @@ export default function MergePdfPage() {
       setErrorType('MERGE_MIN_FILES');
       return;
     }
-
-    const canProceed = await checkLimit();
-    if (!canProceed) return;
-
-    clearError();
-    setMerging(true);
-
-    try {
-      const formData = new FormData();
-      files.forEach((file) => formData.append('files', file));
-
-      const blob = await sendRequest<Blob>('/files/merge-pdfs', 'POST', formData, true);
-
-      if (blob.size === 0) throw new Error('Received empty blob from server');
-
-      setProcessedBlob(blob);
-
-      const mergedFile = new File([blob], 'merged.pdf', {
-        type: 'application/pdf',
-      });
-      savePdf(mergedFile);
-
-      if (!session) {
-        try {
-          await guestService.incrementUsage();
-        } catch (error) {
-          console.error('Misafir sayaç hatası:', error);
-        }
+    await runWithGuestCheck(async () => {
+      clearError();
+      setMerging(true);
+      try {
+        const formData = new FormData();
+        files.forEach((file) => formData.append('files', file));
+        const blob = await sendRequest<Blob>('/files/merge-pdfs', 'POST', formData, true);
+        if (blob.size === 0) throw new Error('Received empty blob from server');
+        setProcessedBlob(blob);
+        savePdf(new File([blob], 'merged.pdf', { type: 'application/pdf' }));
+      } catch (e: unknown) {
+        console.error('❌ Birleştirme Hatası:', e);
+        setErrorType('MERGE_ERROR');
+      } finally {
+        setMerging(false);
       }
-    } catch (e: unknown) {
-      console.error('❌ Birleştirme Hatası:', e);
-      setErrorType('MERGE_ERROR');
-    } finally {
-      setMerging(false);
-    }
+    });
   };
 
   const handleDownload = async () => {
@@ -269,159 +258,34 @@ export default function MergePdfPage() {
 
       {!hasProcessed && (
         <>
-          {/* Dropzone Alanı */}
-          <div
-            {...getRootProps({
-              onDrop: (e) => {
+          <PdfToolDropzoneCard
+            getRootProps={getRootProps}
+            getInputProps={getInputProps}
+            isDragActive={isDragActive}
+            files={files}
+            onRemove={removeFile}
+            onClearAll={clearFiles}
+            onSelect={handleSelect}
+            multiple
+            t={t}
+            dropActiveLabel={t('dropFilesActive')}
+            dropPassiveLabel={t('dropFilesPassive')}
+            rootProps={{
+              onDrop: (e: React.DragEvent<HTMLDivElement>) => {
                 const isPanel = e.dataTransfer.getData('application/x-neuro-pdf');
                 if (isPanel) {
                   handleDropFromPanel(e);
                 }
-                // else: react-dropzone handles files
               },
-            })}
-            className={`container-card border-2 border-dashed p-10 text-center cursor-pointer transition-all duration-300
-              ${
-                isDragActive
-                  ? 'border-[var(--button-bg)] opacity-80 bg-[var(--background)]'
-                  : 'border-[var(--navbar-border)] hover:border-[var(--button-bg)]'
-              }`}
-          >
-            <input {...getInputProps()} />
-            <div className="flex flex-col items-center gap-3">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="w-12 h-12 opacity-50"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M16.5 8.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v8.25A2.25 2.25 0 006 16.5h2.25m8.25-8.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-7.5A2.25 2.25 0 018.25 18v-1.5m8.25-8.25h-6a2.25 2.25 0 00-2.25 2.25v6"
-                />
-              </svg>
-              {isDragActive ? <p>{t('dropFilesActive')}</p> : <p>{t('dropFilesPassive')}</p>}
-            </div>
-          </div>
-
-          {/* Dosya Seç Butonu */}
-          <div className="mt-6 flex flex-wrap items-center gap-4">
-            <label className="btn-primary cursor-pointer shadow-md hover:scale-105 flex items-center gap-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="w-5 h-5"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              {t('selectFile')}
-              <input
-                type="file"
-                accept="application/pdf"
-                onChange={handleSelect}
-                multiple
-                className="hidden"
-              />
-            </label>
-          </div>
-
-          {/* DOSYA LİSTESİ */}
+            }}
+          />
           {files.length > 0 && (
-            <div className="mt-6">
-              <div className="flex justify-between items-center mb-2">
-                <h2 className="text-lg opacity-90" style={{ color: 'var(--foreground)' }}>
-                  {t('selectedFiles')} ({files.length})
-                </h2>
-
-                <button
-                  onClick={clearFiles}
-                  className="flex items-center gap-1 text-sm font-semibold bg-transparent shadow-none border-none p-2 rounded transition-colors"
-                  style={{ color: 'var(--danger-action-text)' }}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={1.5}
-                    stroke="currentColor"
-                    className="w-4 h-4"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79"
-                    />
-                  </svg>
-                  {t('clearAll')}
-                </button>
-              </div>
-
-              <ul className="container-card space-y-2 p-4">
-                {files.map((file, index) => (
-                  <li
-                    key={`${file.name}-${index}`}
-                    className="flex justify-between items-center text-sm font-medium p-3 rounded-lg transition-all duration-200"
-                    style={{
-                      border: '1px solid var(--container-border)',
-                      backgroundColor: 'var(--container-bg)',
-                      color: 'var(--foreground)',
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span
-                        className="font-mono text-xs w-4 opacity-70"
-                        style={{ color: 'var(--foreground)' }}
-                      >
-                        {index + 1}.
-                      </span>
-                      <div className="flex flex-col">
-                        <span className="font-bold" style={{ color: 'var(--foreground)' }}>
-                          {file.name}
-                        </span>
-                        <span className="text-xs opacity-70" style={{ color: 'var(--foreground)' }}>
-                          ({Math.round(file.size / 1024)} KB)
-                        </span>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => removeFile(index)}
-                      className="p-2 rounded-full bg-transparent shadow-none transition-all"
-                      style={{ color: 'var(--danger-action-text)' }}
-                      title={t('remove')}
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth={1.5}
-                        stroke="currentColor"
-                        className="w-5 h-5"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-
-              <p
-                className="text-sm opacity-50 font-normal mt-2"
-                style={{ color: 'var(--foreground)' }}
-              >
-                {t('mergeOrderHint')}
-              </p>
-            </div>
+            <p
+              className="text-sm opacity-50 font-normal mt-2"
+              style={{ color: 'var(--foreground)' }}
+            >
+              {t('mergeOrderHint')}
+            </p>
           )}
 
           {/* Merge Butonu */}
@@ -534,105 +398,15 @@ export default function MergePdfPage() {
               {t('mergeSuccessTitle')}
             </h3>
 
-            <div className="flex gap-4 flex-wrap">
-              <button
-                onClick={handleDownload}
-                className="btn-primary shadow-md hover:scale-105 flex items-center gap-2"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M12 12.75l-3-3m0 0l3-3m-3 3h7.5"
-                  />
-                </svg>
-                {t('download')}
-              </button>
-
-              {session && (
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="btn-primary shadow-md hover:scale-105 disabled:opacity-50 flex items-center gap-2"
-                >
-                  {saving ? (
-                    <svg
-                      className="animate-spin -ml-1 mr-2 h-5 w-5 text-white"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      ></circle>
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      ></path>
-                    </svg>
-                  ) : (
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={1.5}
-                      stroke="currentColor"
-                      className="w-5 h-5"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"
-                      />
-                    </svg>
-                  )}
-                  {saving ? t('saving') : t('save')}
-                </button>
-              )}
-
-              <button
-                onClick={clearFiles}
-                className="btn-primary shadow-md hover:scale-105 flex items-center gap-2"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                {t('newProcess')}
-              </button>
-            </div>
-
-            {!session && (
-              <p className="mt-4 text-sm opacity-80">
-                💡{' '}
-                <a
-                  href="/login"
-                  className="underline font-bold"
-                  style={{ color: 'var(--button-bg)' }}
-                >
-                  {t('loginWarning')}
-                </a>
-              </p>
-            )}
+            <PdfToolResultActions
+              onDownload={handleDownload}
+              onSave={handleSave}
+              onReset={clearFiles}
+              saving={saving}
+              session={session}
+              t={t}
+              saveLabelKey="save"
+            />
           </div>
         </div>
       )}

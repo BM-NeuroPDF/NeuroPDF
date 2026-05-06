@@ -3,11 +3,13 @@
 import { useState, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import dynamic from 'next/dynamic';
-import { guestService } from '@/services/guestService';
 import { useGuestLimit } from '@/hooks/useGuestLimit';
 import { usePdfToolUpload, type PdfToolUploadError } from '@/hooks/usePdfToolUpload';
 import { useProcessedFileActions } from '@/hooks/useProcessedFileActions';
+import { useGuestGatedAction } from '@/hooks/useGuestGatedAction';
 import UsageLimitModal from '@/components/UsageLimitModal';
+import PdfToolDropzoneCard from '@/components/pdf-tools/PdfToolDropzoneCard';
+import PdfToolResultActions from '@/components/pdf-tools/PdfToolResultActions';
 import { usePdfActions, usePdfData } from '@/context/PdfContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { sendRequest } from '@/utils/api';
@@ -48,6 +50,11 @@ export default function ExtractPdfPage() {
 
   const { usageInfo, showLimitModal, checkLimit, closeLimitModal, redirectToLogin } =
     useGuestLimit();
+  const { runWithGuestCheck } = useGuestGatedAction({
+    session,
+    checkLimit,
+    onError: (error) => console.error('Counter could not be updated:', error),
+  });
 
   // 🎯 KRİTİK ÇÖZÜM: İşlenmiş Blob'u kararlı bir File objesine dönüştürüyoruz (Race condition'ı engeller)
   const processedFile = useMemo(() => {
@@ -158,39 +165,26 @@ export default function ExtractPdfPage() {
       return;
     }
 
-    const canProceed = await checkLimit();
-    if (!canProceed) return;
-
-    clearError();
-    setExtracting(true);
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('page_range', pageRange.trim());
-
-      const blob = await sendRequest<Blob>('/files/extract-pages', 'POST', formData, true);
-
-      setProcessedBlob(blob);
-
-      const safePageRange = pageRange.trim().replace(/[^a-zA-Z0-9-]/g, '_');
-      const filename = file.name.replace('.pdf', `_extracted_${safePageRange}.pdf`);
-      savePdf(new File([blob], filename, { type: 'application/pdf' }));
-
-      if (!session) {
-        try {
-          await guestService.incrementUsage();
-        } catch (limitError) {
-          console.error('Counter could not be updated:', limitError);
-        }
+    await runWithGuestCheck(async () => {
+      clearError();
+      setExtracting(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('page_range', pageRange.trim());
+        const blob = await sendRequest<Blob>('/files/extract-pages', 'POST', formData, true);
+        setProcessedBlob(blob);
+        const safePageRange = pageRange.trim().replace(/[^a-zA-Z0-9-]/g, '_');
+        const filename = file.name.replace('.pdf', `_extracted_${safePageRange}.pdf`);
+        savePdf(new File([blob], filename, { type: 'application/pdf' }));
+      } catch (e: unknown) {
+        console.error('Page Extraction Error:', e);
+        setErrorType('EXTRACT_ERROR');
+        if (e instanceof Error) setCustomErrorMsg(e.message);
+      } finally {
+        setExtracting(false);
       }
-    } catch (e: unknown) {
-      console.error('Page Extraction Error:', e);
-      setErrorType('EXTRACT_ERROR');
-      if (e instanceof Error) setCustomErrorMsg(e.message);
-    } finally {
-      setExtracting(false);
-    }
+    });
   };
 
   const handleDownload = async () => {
@@ -259,72 +253,20 @@ export default function ExtractPdfPage() {
         <div className="info-box mb-4">{usageInfo.message}</div>
       )}
 
-      {/* Dropzone */}
-      <div
-        {...getRootProps({
-          onDrop: handleDropFromPanel,
-          role: 'button',
-        })}
-        className={`container-card border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-300
-          ${
-            isDragActive
-              ? 'border-[var(--button-bg)] opacity-80 bg-[var(--background)]'
-              : 'border-[var(--navbar-border)] hover:border-[var(--button-bg)]'
-          }`}
-      >
-        <input {...getInputProps()} accept="application/pdf" />
-
-        <div className="flex flex-col items-center gap-3">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-            className="w-12 h-12 opacity-50"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z"
-            />
-          </svg>
-          {isDragActive ? <p>{t('extractDropActive')}</p> : <p>{t('extractDropPassive')}</p>}
-        </div>
-
-        {file && !isDragActive && (
-          <p className="mt-4 text-sm opacity-60 font-normal">
-            {t('currentFile')} <b>{file.name}</b> <br /> {t('changeFileHint')}
-          </p>
-        )}
-      </div>
-
-      <div className="mt-6 flex flex-wrap items-center gap-4">
-        <label className="btn-primary cursor-pointer shadow-md hover:scale-105 flex items-center gap-2">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-            className="w-5 h-5"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"
-            />
-          </svg>
-          {t('selectFile')}
-          <input type="file" accept="application/pdf" onChange={handleSelect} className="hidden" />
-        </label>
-      </div>
-
-      {file && (
-        <div className="mt-4 text-sm opacity-80">
-          {t('selectedFile')} <b>{file.name}</b> ({Math.round(file.size / 1024)} KB)
-        </div>
-      )}
+      <PdfToolDropzoneCard
+        getRootProps={getRootProps}
+        getInputProps={getInputProps}
+        isDragActive={isDragActive}
+        files={file ? [file] : []}
+        t={t}
+        onSelect={handleSelect}
+        dropActiveLabel={t('extractDropActive')}
+        dropPassiveLabel={t('extractDropPassive')}
+        currentFileHint={
+          file ? `${t('currentFile')} ${file.name} - ${t('changeFileHint')}` : undefined
+        }
+        rootProps={{ onDrop: handleDropFromPanel }}
+      />
 
       {/* Önizleme UI */}
       {file && (
@@ -469,109 +411,14 @@ export default function ExtractPdfPage() {
               {t('processSuccess')}
             </h3>
 
-            <div className="flex gap-4 flex-wrap">
-              <button
-                onClick={handleDownload}
-                className="btn-primary shadow-md hover:scale-105 flex items-center gap-2"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M12 12.75l-3-3m0 0l3-3m-3 3h7.5"
-                  />
-                </svg>
-                {t('download')}
-              </button>
-
-              {session && (
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="btn-primary shadow-md hover:scale-105 disabled:opacity-50 flex items-center gap-2"
-                >
-                  {saving ? (
-                    <svg
-                      className="animate-spin -ml-1 mr-2 h-5 w-5 text-white"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      ></circle>
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      ></path>
-                    </svg>
-                  ) : (
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={1.5}
-                      stroke="currentColor"
-                      className="w-5 h-5"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"
-                      />
-                    </svg>
-                  )}
-                  {saving ? t('saving') : t('saveToFiles')}
-                </button>
-              )}
-
-              <button
-                onClick={handleNew}
-                className="btn-primary shadow-md hover:scale-105 flex items-center gap-2"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
-                  />
-                </svg>
-                {t('newProcess')}
-              </button>
-            </div>
-
-            {!session && (
-              <p className="mt-4 text-sm opacity-80">
-                💡{' '}
-                <a
-                  href="/login"
-                  className="underline font-bold"
-                  style={{ color: 'var(--button-bg)' }}
-                >
-                  {t('loginWarning')}
-                </a>
-              </p>
-            )}
+            <PdfToolResultActions
+              onDownload={handleDownload}
+              onSave={handleSave}
+              onReset={handleNew}
+              saving={saving}
+              session={session}
+              t={t}
+            />
           </div>
         </div>
       )}

@@ -3,11 +3,13 @@
 import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import dynamic from 'next/dynamic';
-import { guestService } from '@/services/guestService';
 import { useGuestLimit } from '@/hooks/useGuestLimit';
 import { usePdfToolUpload, type PdfToolUploadError } from '@/hooks/usePdfToolUpload';
 import { useProcessedFileActions } from '@/hooks/useProcessedFileActions';
+import { useGuestGatedAction } from '@/hooks/useGuestGatedAction';
 import UsageLimitModal from '@/components/UsageLimitModal';
+import PdfToolDropzoneCard from '@/components/pdf-tools/PdfToolDropzoneCard';
+import PdfToolResultActions from '@/components/pdf-tools/PdfToolResultActions';
 import { usePdfData } from '@/context/PdfContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { sendRequest } from '@/utils/api';
@@ -33,6 +35,11 @@ export default function ExtractTextPage() {
 
   const { usageInfo, showLimitModal, checkLimit, closeLimitModal, redirectToLogin } =
     useGuestLimit();
+  const { runWithGuestCheck } = useGuestGatedAction({
+    session,
+    checkLimit,
+    onError: (error) => console.error('Sayaç güncellenemedi:', error),
+  });
 
   const resetFileState = (newFile: File) => {
     setFile(newFile);
@@ -117,34 +124,21 @@ export default function ExtractTextPage() {
       return;
     }
 
-    const canProceed = await checkLimit();
-    if (!canProceed) return;
-
-    setError(null);
-    setConverting(true);
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      // ✅ Convert endpoint'ine istek
-      const blob = await sendRequest<Blob>('/files/convert-text', 'POST', formData, true);
-
-      setProcessedBlob(blob);
-
-      if (!session) {
-        try {
-          await guestService.incrementUsage();
-        } catch (limitError) {
-          console.error('Sayaç güncellenemedi:', limitError);
-        }
+    await runWithGuestCheck(async () => {
+      setError(null);
+      setConverting(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const blob = await sendRequest<Blob>('/files/convert-text', 'POST', formData, true);
+        setProcessedBlob(blob);
+      } catch (e: unknown) {
+        console.error('Metin Dönüştürme Hatası:', e);
+        setError(e instanceof Error ? e.message : t('error'));
+      } finally {
+        setConverting(false);
       }
-    } catch (e: unknown) {
-      console.error('Metin Dönüştürme Hatası:', e);
-      setError(e instanceof Error ? e.message : t('error'));
-    } finally {
-      setConverting(false);
-    }
+    });
   };
 
   const handleDownload = async () => {
@@ -176,86 +170,27 @@ export default function ExtractTextPage() {
         <div className="info-box mb-4">{usageInfo.message}</div>
       )}
 
-      {/* Dropzone */}
-      <div
-        {...getRootProps({
-          onDrop: handleDropFromPanel,
-          role: 'button',
-        })}
-        className={`container-card border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-300
-          ${
-            isDragActive
-              ? 'border-[var(--button-bg)] opacity-80 bg-[var(--background)]'
-              : 'border-[var(--navbar-border)] hover:border-[var(--button-bg)]'
-          }`}
-      >
-        <input {...getInputProps()} />
-        <div className="flex flex-col items-center gap-3">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-            className="w-12 h-12 opacity-50"
+      <PdfToolDropzoneCard
+        getRootProps={getRootProps}
+        getInputProps={getInputProps}
+        isDragActive={isDragActive}
+        files={file ? [file] : []}
+        t={t}
+        onSelect={handleSelect}
+        currentFileHint={file ? `${t('currentFile')} ${file.name}` : undefined}
+        rootProps={{ onDrop: handleDropFromPanel }}
+      />
+
+      {file && !hasProcessed && (
+        <div className="mt-6 rounded-xl overflow-hidden border border-[var(--container-border)] shadow-lg">
+          <div
+            className="p-4 border-b border-[var(--navbar-border)]"
+            style={{ backgroundColor: 'var(--container-bg)' }}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-            />
-          </svg>
-          {isDragActive ? <p>{t('dropActive')}</p> : <p>{t('dropPassive')}</p>}
-        </div>
-
-        {file && !isDragActive && (
-          <p className="mt-4 text-sm opacity-60 font-normal">
-            {t('currentFile')} <b>{file.name}</b>
-          </p>
-        )}
-      </div>
-
-      {/* Butonlar */}
-      <div className="mt-6 flex flex-wrap items-center gap-4">
-        <label className="btn-primary cursor-pointer shadow-md hover:scale-105 flex items-center gap-2">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-            className="w-5 h-5"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"
-            />
-          </svg>
-          {t('selectFile')}
-          <input type="file" accept="application/pdf" onChange={handleSelect} className="hidden" />
-        </label>
-      </div>
-
-      {file && (
-        <>
-          <div className="mt-4 text-sm opacity-80">
-            {t('selectedFile')} <b>{file.name}</b> ({Math.round(file.size / 1024)} KB)
+            <h3 className="text-xl font-semibold opacity-90">{t('activePdfTitle')}</h3>
           </div>
-
-          {/* Original PDF Viewer */}
-          {!hasProcessed && (
-            <div className="mt-6 rounded-xl overflow-hidden border border-[var(--container-border)] shadow-lg">
-              <div
-                className="p-4 border-b border-[var(--navbar-border)]"
-                style={{ backgroundColor: 'var(--container-bg)' }}
-              >
-                <h3 className="text-xl font-semibold opacity-90">{t('activePdfTitle')}</h3>
-              </div>
-              <PdfViewer file={file} height={550} />
-            </div>
-          )}
-        </>
+          <PdfViewer file={file} height={550} />
+        </div>
       )}
 
       {/* Process Button */}
@@ -355,109 +290,14 @@ export default function ExtractTextPage() {
               {t('processSuccess')}
             </h3>
 
-            <div className="flex gap-4 flex-wrap">
-              <button
-                onClick={handleDownload}
-                className="btn-primary shadow-md hover:scale-105 flex items-center gap-2"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M12 12.75l-3-3m0 0l3-3m-3 3h7.5"
-                  />
-                </svg>
-                {t('download')}
-              </button>
-
-              {session && (
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="btn-primary shadow-md hover:scale-105 disabled:opacity-50 flex items-center gap-2"
-                >
-                  {saving ? (
-                    <svg
-                      className="animate-spin -ml-1 mr-2 h-5 w-5 text-white"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      ></circle>
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      ></path>
-                    </svg>
-                  ) : (
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={1.5}
-                      stroke="currentColor"
-                      className="w-5 h-5"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"
-                      />
-                    </svg>
-                  )}
-                  {saving ? t('saving') : t('saveToFiles')}
-                </button>
-              )}
-
-              <button
-                onClick={handleNewProcess}
-                className="btn-primary shadow-md hover:scale-105 flex items-center gap-2"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
-                  />
-                </svg>
-                {t('newProcess')}
-              </button>
-            </div>
-
-            {!session && (
-              <p className="mt-4 text-sm opacity-80">
-                💡{' '}
-                <a
-                  href="/login"
-                  className="underline font-bold"
-                  style={{ color: 'var(--button-bg)' }}
-                >
-                  {t('loginWarning')}
-                </a>
-              </p>
-            )}
+            <PdfToolResultActions
+              onDownload={handleDownload}
+              onSave={handleSave}
+              onReset={handleNewProcess}
+              saving={saving}
+              session={session}
+              t={t}
+            />
           </div>
         </div>
       )}
