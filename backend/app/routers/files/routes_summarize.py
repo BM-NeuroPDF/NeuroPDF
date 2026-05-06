@@ -66,7 +66,7 @@ async def summarize_file(
     language: str = Query("tr"),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
-    print("\n--- SUMMARIZE İSTEĞİ ---")
+    logger.debug("--- SUMMARIZE İSTEĞİ ---")
 
     if file.content_type != "application/pdf":
         raise HTTPException(
@@ -76,7 +76,7 @@ async def summarize_file(
     user_id = current_user.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="Oturum gerekli.")
-    print(f"✅ Token Çözüldü. User ID: {user_id}")
+    logger.debug("Token çözüldü. User ID: %s", user_id)
 
     await _legacy_module.validate_file_size(file, is_guest=False)
 
@@ -84,7 +84,7 @@ async def summarize_file(
         file_content = await file.read()
 
         pdf_hash = _legacy_module.generate_pdf_hash(file_content)
-        print(f"🔑 PDF Hash: {pdf_hash}")
+        logger.debug("PDF Hash: %s", pdf_hash)
 
         if db is None:
             llm_choice_id = 0
@@ -123,8 +123,8 @@ async def summarize_file(
         files = {"file": ("upload.pdf", file_content, "application/pdf")}
         ai_service_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/summarize-sync"
 
-        print(
-            f"📡 AI Service İstek: {ai_service_url} (llm_provider: {provider_string})"
+        logger.debug(
+            "AI Service istek: %s (llm_provider: %s)", ai_service_url, provider_string
         )
 
         timeout_duration = 600.0 if provider_string == "local" else 120.0
@@ -144,7 +144,7 @@ async def summarize_file(
         )
 
         if response.status_code != 200:
-            print(f"❌ AI Service Error: {response.text}")
+            logger.error("AI Service error: %s", response.text)
             raise HTTPException(
                 status_code=response.status_code, detail="AI Servisi hatası"
             )
@@ -314,7 +314,7 @@ async def trigger_summarize_task(
     language: str = Query("tr"),
 ):
     """Asenkron özetleme görevi başlatır."""
-    print("\n--- SUMMARIZE-START İSTEĞİ ---")
+    logger.debug("--- SUMMARIZE-START İSTEĞİ ---")
     try:
         if not settings.USE_SUPABASE:
             raise HTTPException(
@@ -322,7 +322,7 @@ async def trigger_summarize_task(
             )
 
         user_id = current_user.get("sub")
-        print(f"✅ Token Çözüldü. User ID: {user_id}")
+        logger.debug("Token çözüldü. User ID: %s", user_id)
 
         response = (
             supabase.table("documents").select("*").eq("id", file_id).single().execute()
@@ -406,7 +406,7 @@ async def handle_ai_callback(
     if pdf_id != data.pdf_id:
         raise HTTPException(status_code=400, detail="ID mismatch")
 
-    print(f"✅ Callback alındı: PDF ID {pdf_id}, Durum: {data.status}")
+    logger.debug("Callback alındı: PDF ID %s, Durum: %s", pdf_id, data.status)
 
     try:
         update_data = {
@@ -465,14 +465,14 @@ async def listen_summary(
     request: TTSRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    print("\n--- LISTEN (TTS) İSTEĞİ ---")
+    logger.debug("--- LISTEN (TTS) İSTEĞİ ---")
     if not request.text:
         raise HTTPException(status_code=400, detail="Metin boş olamaz.")
 
     user_id = current_user.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="Oturum gerekli.")
-    print(f"✅ Token Çözüldü. User ID: {user_id}")
+    logger.debug("Token çözüldü. User ID: %s", user_id)
 
     cleaned_text = clean_markdown_for_tts(request.text)
     ai_tts_url = f"{settings.AI_SERVICE_URL}/api/v1/ai/tts"
@@ -490,7 +490,7 @@ async def listen_summary(
                 async for chunk in response.aiter_bytes():
                     yield chunk
         except Exception as e:
-            print(f"TTS Error: {e}")
+            logger.error("TTS error: %s", e, exc_info=True)
         finally:
             if client:
                 if user_id:

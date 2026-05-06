@@ -485,14 +485,14 @@ async def convert_text_from_pdf(
     current_user: dict = Depends(get_current_user),
 ):
     """PDF'den metin çıkarır."""
-    print("\n--- CONVERT-TEXT İSTEĞİ ---")
+    logger.debug("--- CONVERT-TEXT İSTEĞİ ---")
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="PDF gerekli")
 
     user_id = current_user.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="Oturum gerekli.")
-    print(f"✅ Token Çözüldü. User ID: {user_id}")
+    logger.debug("Token çözüldü. User ID: %s", user_id)
 
     try:
         text = await run_in_threadpool(
@@ -570,13 +570,13 @@ async def merge_pdfs(
     ):
         raise HTTPException(status_code=429, detail="Too many requests")
 
-    print("\n--- MERGE-PDFS İSTEĞİ ---")
+    logger.debug("--- MERGE-PDFS İSTEĞİ ---")
     if len(files) < 2:
         raise HTTPException(status_code=400, detail="En az 2 PDF gerekli.")
 
     user_id = current_user.get("sub") if current_user else None
     if user_id:
-        print(f"✅ Token Çözüldü. User ID: {user_id}")
+        logger.debug("Token çözüldü. User ID: %s", user_id)
 
     try:
         file_streams = [f.file for f in files]
@@ -642,12 +642,12 @@ async def reorder_pdf(
     current_user: dict = Depends(get_current_user),
 ):
     """Sayfa Sıralama."""
-    print("\n--- REORDER-PDF İSTEĞİ ---")
+    logger.debug("--- REORDER-PDF İSTEĞİ ---")
 
     user_id = current_user.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="Oturum gerekli.")
-    print(f"✅ Token Çözüldü. User ID: {user_id}")
+    logger.debug("Token çözüldü. User ID: %s", user_id)
 
     try:
         file.file.seek(0, 2)

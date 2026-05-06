@@ -1,4 +1,5 @@
-# app/routers/files.py
+"""Shared helpers and re-exports for ``routes_pdf_tools``, ``routes_summarize``, and ``routes_chat``."""
+
 from fastapi import APIRouter, HTTPException, UploadFile
 from typing import List, Optional
 from pypdf import PdfReader, PdfWriter
@@ -484,8 +485,11 @@ async def save_summarize_cache_by_hash(
             )
 
         db.commit()
-        print(
-            f"✅ Cache kaydedildi: Hash {pdf_hash}, LLM Choice ID {llm_choice_id}, User {user_id}"
+        logger.debug(
+            "Cache kaydedildi: Hash %s, LLM Choice ID %s, User %s",
+            pdf_hash,
+            llm_choice_id,
+            user_id,
         )
     except Exception as e:
         db.rollback()
@@ -578,8 +582,11 @@ def save_summarize_cache_background(
             )
 
         db.commit()
-        print(
-            f"✅ Cache kaydedildi (background): Hash {pdf_hash}, LLM Choice ID {llm_choice_id}, User {user_id}"
+        logger.debug(
+            "Cache kaydedildi (background): Hash %s, LLM Choice ID %s, User %s",
+            pdf_hash,
+            llm_choice_id,
+            user_id,
         )
     except Exception as e:
         db.rollback()

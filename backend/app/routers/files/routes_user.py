@@ -176,7 +176,7 @@ async def get_user_stats(
         return body
 
     except Exception as e:
-        print(f"❌ İstatistik hatası: {str(e)}")
+        logger.error("İstatistik hatası: %s", str(e), exc_info=True)
         # Genel hatada frontend bozulmasın
         return UserStatsResponse(summary_count=0, tools_count=0, role="Standart")
 
@@ -233,6 +233,6 @@ async def get_global_stats(
         return payload
 
     except Exception as e:
-        print(f"❌ Global stats error: {str(e)}")
+        logger.error("Global stats error: %s", str(e), exc_info=True)
         # Hata olsa bile frontend bozulmasın diye 0 dön
         return {"total_users": 0, "total_processed": 0, "total_ai_summaries": 0}

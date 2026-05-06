@@ -65,11 +65,13 @@ async def start_chat_from_text(
                     supabase=None,
                 )
             except Exception as e:
-                print(f"⚠️ LLM provider alınamadı, default kullanılıyor: {e}")
+                logger.warning(
+                    "LLM provider alınamadı, default kullanılıyor: %s", e, exc_info=True
+                )
                 llm_provider = "local"
         else:
             llm_provider = "local"
-        print(f"📊 Kullanıcı LLM Tercihi (DB'den): {llm_provider}")
+        logger.debug("Kullanıcı LLM tercihi (DB): %s", llm_provider)
 
         mode = body.get("mode", "pro" if llm_provider == "cloud" else "flash")
         if llm_provider == "local":
@@ -115,13 +117,13 @@ async def start_chat_from_text(
         )
 
         if response.status_code != 200:
-            print(f"❌ AI Service Hatası: {response.text}")
+            logger.error("AI Service hatası: %s", response.text)
             raise HTTPException(
                 status_code=502, detail="Yapay zeka servisi başlatılamadı."
             )
 
         data = response.json()
-        print(f"✅ Chat Oturumu Başladı (Text'ten): {data['session_id']}")
+        logger.debug("Chat oturumu başladı (text'ten): %s", data["session_id"])
 
         out: dict = {"session_id": data["session_id"], "filename": filename}
         if pdf_id_meta:
@@ -167,7 +169,7 @@ async def start_chat_session(
     PDF'i veritabanına kaydeder, metnini çıkarır ve AI Service sohbet oturumunu
     pdf_id / user_id ile başlatır (sayfa ayıklama aracı için).
     """
-    print(f"\n--- CHAT START (Dosya: {file.filename}) ---")
+    logger.debug("--- CHAT START (Dosya: %s) ---", file.filename)
 
     if file.content_type != "application/pdf":
         raise HTTPException(
@@ -186,7 +188,7 @@ async def start_chat_session(
             supabase=None,
         )
         mode = "pro" if llm_provider == "cloud" else "flash"
-        print(f"📊 Kullanıcı LLM Tercihi: {llm_provider}")
+        logger.debug("Kullanıcı LLM tercihi: %s", llm_provider)
 
         async def _extract_text_safe() -> str:
             try:
@@ -216,21 +218,25 @@ async def start_chat_session(
             "language": language,
         }
         headers = _legacy_module.get_ai_service_headers()
-        print(
-            f"📡 AI Service (start-from-text): {target_url} (llm_provider: {llm_provider})"
+        logger.debug(
+            "AI Service (start-from-text): %s (llm_provider: %s)",
+            target_url,
+            llm_provider,
         )
         response = await client.post(
             target_url, json=payload, headers=headers, timeout=60.0
         )
 
         if response.status_code != 200:
-            print(f"❌ AI Service Hatası: {response.text}")
+            logger.error("AI Service hatası: %s", response.text)
             raise HTTPException(
                 status_code=502, detail="Yapay zeka servisi başlatılamadı."
             )
 
         data = response.json()
-        print(f"✅ Chat Oturumu Başladı: {data['session_id']} (pdf_id={pdf_row.id})")
+        logger.debug(
+            "Chat oturumu başladı: %s (pdf_id=%s)", data["session_id"], pdf_row.id
+        )
 
         db_row = create_pdf_chat_session_record(
             db,
@@ -303,7 +309,9 @@ async def send_chat_message(
                     response.text or f"AI Service hatası: {response.status_code}"
                 )
 
-            print(f"❌ AI Service Hatası ({response.status_code}): {error_detail}")
+            logger.error(
+                "AI Service hatası (%s): %s", response.status_code, error_detail
+            )
 
             if response.status_code == 429:
                 error_lower = error_detail.lower()
@@ -669,7 +677,7 @@ async def start_general_chat(
     try:
         if not db:
             llm_provider = body.get("llm_provider", llm_provider)
-        print(f"📊 Genel Chat - Kullanıcı LLM Tercihi (DB'den): {llm_provider}")
+        logger.debug("Genel chat kullanıcı LLM tercihi (DB): %s", llm_provider)
 
         mode = body.get("mode", "flash")
         if llm_provider == "local":
