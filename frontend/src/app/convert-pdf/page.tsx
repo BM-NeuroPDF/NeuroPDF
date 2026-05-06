@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useState } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import dynamic from 'next/dynamic';
 import { guestService } from '@/services/guestService';
 import { useGuestLimit } from '@/hooks/useGuestLimit';
+import { usePdfToolUpload, type PdfToolUploadError } from '@/hooks/usePdfToolUpload';
+import { useProcessedFileActions } from '@/hooks/useProcessedFileActions';
 import UsageLimitModal from '@/components/UsageLimitModal';
 import { usePdfData } from '@/context/PdfContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -24,7 +25,6 @@ export default function ExtractTextPage() {
   const [file, setFile] = useState<File | null>(null);
   const [processedBlob, setProcessedBlob] = useState<Blob | null>(null);
   const [converting, setConverting] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // ✅ Limit Hesaplama
@@ -40,40 +40,47 @@ export default function ExtractTextPage() {
     setError(null);
   };
 
-  // --- DROPZONE AYARLARI ---
-  const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
-      if (acceptedFiles?.length) {
-        const f = acceptedFiles[0];
-        // Manuel Kontrol (Ek güvenlik)
-        if (f.size > maxBytes) {
-          setFile(null);
-          setError(
-            `${t('fileSizeExceeded') || 'Dosya boyutu sınırı aşıldı'} (Max: ${(maxBytes / (1024 * 1024)).toFixed(0)} MB)`,
-          );
-          return;
-        }
-        resetFileState(f);
-      }
-    },
-    [maxBytes, t],
-  );
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    multiple: false,
-    accept: { 'application/pdf': ['.pdf'] },
-    maxSize: maxBytes, // ✅ Dropzone'a limit bildirildi
-    onDropRejected: (fileRejections) => {
-      const rejection = fileRejections[0];
-      if (rejection.errors[0].code === 'file-too-large') {
-        setError(
-          `${t('fileSizeExceeded') || 'Dosya boyutu sınırı aşıldı'} (Max: ${(maxBytes / (1024 * 1024)).toFixed(0)} MB)`,
-        );
-      } else {
-        setError(rejection.errors[0].message);
-      }
+  const handleUploadError = (uploadError: PdfToolUploadError) => {
+    if (uploadError.code === 'SIZE_EXCEEDED') {
+      setError(
+        `${t('fileSizeExceeded') || 'Dosya boyutu sınırı aşıldı'} (Max: ${(maxBytes / (1024 * 1024)).toFixed(0)} MB)`,
+      );
       setFile(null);
+      return;
+    }
+    if (uploadError.code === 'INVALID_TYPE') {
+      setError(t('invalidFileType'));
+      setFile(null);
+      return;
+    }
+    if (uploadError.code === 'PANEL_ERROR') {
+      setError(t('panelPdfError'));
+      return;
+    }
+    setError(uploadError.message ?? t('error'));
+  };
+
+  const {
+    onDrop,
+    handleDropFromPanel: handleUploadFromPanel,
+    getRootProps,
+    getInputProps,
+    isDragActive,
+  } = usePdfToolUpload({
+    maxBytes,
+    maxFiles: 1,
+    allowedTypes: ['application/pdf', '.pdf'],
+    onError: handleUploadError,
+    onFilesAccepted: (acceptedFiles) => {
+      const f = acceptedFiles[0];
+      if (f) resetFileState(f);
+    },
+  });
+
+  const { downloadBlob, saveProcessed, saving } = useProcessedFileActions({
+    session,
+    onError: (e) => {
+      setError(e instanceof Error ? e.message : t('saveError'));
     },
   });
 
@@ -82,18 +89,7 @@ export default function ExtractTextPage() {
     e?: React.DragEvent<HTMLElement> | React.MouseEvent<HTMLElement>,
   ) => {
     if (pdfFile) {
-      if (pdfFile.size > maxBytes) {
-        setFile(null);
-        setError(
-          `${t('fileSizeExceeded') || 'Dosya boyutu sınırı aşıldı'} (Max: ${(maxBytes / (1024 * 1024)).toFixed(0)} MB)`,
-        );
-        return;
-      }
-      resetFileState(pdfFile);
-      if (e && 'stopPropagation' in e) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
+      handleUploadFromPanel(pdfFile, e);
     } else {
       setError(t('panelPdfError'));
     }
@@ -103,15 +99,7 @@ export default function ExtractTextPage() {
   const handleSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (f) {
-      if (f.size > maxBytes) {
-        setFile(null);
-        setError(
-          `${t('fileSizeExceeded') || 'Dosya boyutu sınırı aşıldı'} (Max: ${(maxBytes / (1024 * 1024)).toFixed(0)} MB)`,
-        );
-        e.target.value = '';
-        return;
-      }
-      resetFileState(f);
+      onDrop([f], []);
     }
     e.target.value = '';
   };
@@ -161,45 +149,20 @@ export default function ExtractTextPage() {
 
   const handleDownload = async () => {
     if (!processedBlob) return;
-
-    const url = window.URL.createObjectURL(processedBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file?.name.replace('.pdf', '.txt') || 'converted.txt';
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+    downloadBlob(processedBlob, file?.name.replace('.pdf', '.txt') || 'converted.txt');
   };
 
   // --- 2. KAYDETME İŞLEMİ ---
   const handleSave = async () => {
     if (!processedBlob || !session) return;
-    setSaving(true);
     setError(null);
     try {
       const filename = file?.name.replace('.pdf', '_converted.txt') || 'converted.txt';
-
-      const fileToSave = new File([processedBlob], filename, {
-        type: 'text/plain',
-      });
-      const formData = new FormData();
-      formData.append('file', fileToSave);
-      formData.append('filename', filename);
-
-      const result = await sendRequest<{ size_kb?: number }>(
-        '/files/save-processed',
-        'POST',
-        formData,
-        true,
-      );
+      const result = await saveProcessed({ blob: processedBlob, filename, mimeType: 'text/plain' });
+      if (!result) return;
 
       alert(`${t('saveSuccess')}\n${t('fileSize')}: ${result.size_kb} KB`);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t('saveError'));
-    } finally {
-      setSaving(false);
-    }
+    } catch {}
   };
 
   const isReady = file !== null;

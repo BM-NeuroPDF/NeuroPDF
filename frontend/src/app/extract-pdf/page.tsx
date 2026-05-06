@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useState, useMemo } from 'react';
-import { useDropzone, type FileRejection } from 'react-dropzone';
+import { useState, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import dynamic from 'next/dynamic';
 import { guestService } from '@/services/guestService';
 import { useGuestLimit } from '@/hooks/useGuestLimit';
+import { usePdfToolUpload, type PdfToolUploadError } from '@/hooks/usePdfToolUpload';
+import { useProcessedFileActions } from '@/hooks/useProcessedFileActions';
 import UsageLimitModal from '@/components/UsageLimitModal';
 import { usePdfActions, usePdfData } from '@/context/PdfContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -38,7 +39,6 @@ export default function ExtractPdfPage() {
   const [processedBlob, setProcessedBlob] = useState<Blob | null>(null);
   const [pageRange, setPageRange] = useState('');
   const [extracting, setExtracting] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   const [errorType, setErrorType] = useState<ErrorType>('NONE');
   const [customErrorMsg, setCustomErrorMsg] = useState<string | null>(null);
@@ -61,53 +61,52 @@ export default function ExtractPdfPage() {
     setCustomErrorMsg(null);
   };
 
-  const onDrop = useCallback(
-    (acceptedFiles: File[], fileRejections: FileRejection[]) => {
-      clearError();
+  const handleUploadError = (uploadError: PdfToolUploadError) => {
+    clearError();
+    if (uploadError.code === 'INVALID_TYPE') {
+      setFile(null);
+      setErrorType('INVALID_TYPE');
+      return;
+    }
+    if (uploadError.code === 'SIZE_EXCEEDED') {
+      setFile(null);
+      setErrorType('SIZE_EXCEEDED');
+      return;
+    }
+    if (uploadError.code === 'PANEL_ERROR') {
+      setErrorType('PANEL_ERROR');
+      return;
+    }
+    setErrorType('CUSTOM');
+    setCustomErrorMsg(uploadError.message ?? null);
+  };
 
-      if (fileRejections.length > 0) {
-        const rejection = fileRejections[0];
-        const errorObj = rejection.errors[0];
-
-        if (errorObj.code === 'file-invalid-type') {
-          setErrorType('INVALID_TYPE');
-        } else if (errorObj.code === 'file-too-large') {
-          setErrorType('SIZE_EXCEEDED');
-        } else {
-          setErrorType('CUSTOM');
-          setCustomErrorMsg(errorObj.message);
-        }
-        setFile(null);
-        return;
-      }
-
-      if (acceptedFiles?.length) {
-        const f = acceptedFiles[0];
-
-        if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
-          setFile(null);
-          setErrorType('INVALID_TYPE');
-          return;
-        }
-
-        if (f.size > maxBytes) {
-          setFile(null);
-          setErrorType('SIZE_EXCEEDED');
-          return;
-        }
-        setFile(f);
-        setProcessedBlob(null);
-        setPageRange('');
-      }
+  const {
+    handleDropFromPanel: handleUploadFromPanel,
+    getRootProps,
+    getInputProps,
+    isDragActive,
+  } = usePdfToolUpload({
+    maxBytes,
+    maxFiles: 1,
+    allowedTypes: ['application/pdf', '.pdf'],
+    onError: handleUploadError,
+    onFilesAccepted: (acceptedFiles) => {
+      const f = acceptedFiles[0];
+      if (!f) return;
+      setFile(f);
+      setProcessedBlob(null);
+      setPageRange('');
     },
-    [maxBytes],
-  );
+  });
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    multiple: false,
-    accept: { 'application/pdf': ['.pdf'] },
-    maxSize: maxBytes,
+  const { downloadBlob, saveProcessed, saving } = useProcessedFileActions({
+    session,
+    savePdf,
+    onError: (e) => {
+      console.error('Save Error:', e);
+      setErrorType('SAVE_ERROR');
+    },
   });
 
   const handleDropFromPanel = (
@@ -115,25 +114,7 @@ export default function ExtractPdfPage() {
   ) => {
     clearError();
     if (pdfFile) {
-      if (pdfFile.type !== 'application/pdf' && !pdfFile.name.toLowerCase().endsWith('.pdf')) {
-        setFile(null);
-        setErrorType('INVALID_TYPE');
-        return;
-      }
-
-      if (pdfFile.size > maxBytes) {
-        setFile(null);
-        setErrorType('SIZE_EXCEEDED');
-        return;
-      }
-      setFile(pdfFile);
-      setProcessedBlob(null);
-      setPageRange('');
-
-      if (e && 'stopPropagation' in e) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
+      handleUploadFromPanel(pdfFile, e);
     } else {
       setErrorType('PANEL_ERROR');
     }
@@ -214,46 +195,24 @@ export default function ExtractPdfPage() {
 
   const handleDownload = async () => {
     if (!processedBlob) return;
-    const url = window.URL.createObjectURL(processedBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'extracted.pdf';
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+    downloadBlob(processedBlob, 'extracted.pdf');
   };
 
   const handleSave = async () => {
     if (!processedBlob || !session) return;
-    setSaving(true);
     clearError();
     try {
       const safePageRange = pageRange.trim().replace(/[^a-zA-Z0-9-]/g, '_');
       const filename = file?.name.replace('.pdf', `_pages_${safePageRange}.pdf`) || 'extracted.pdf';
-
-      const fileToSave = new File([processedBlob], filename, {
-        type: 'application/pdf',
+      const result = await saveProcessed({
+        blob: processedBlob,
+        filename,
+        mimeType: 'application/pdf',
       });
-      const formData = new FormData();
-      formData.append('file', fileToSave);
-      formData.append('filename', filename);
-
-      const result = await sendRequest<{ size_kb?: number }>(
-        '/files/save-processed',
-        'POST',
-        formData,
-        true,
-      );
+      if (!result) return;
 
       alert(`${t('saveSuccess')}\n${t('fileSize')}: ${result.size_kb} KB`);
-      savePdf(fileToSave);
-    } catch (e: unknown) {
-      console.error('Save Error:', e);
-      setErrorType('SAVE_ERROR');
-    } finally {
-      setSaving(false);
-    }
+    } catch {}
   };
 
   const handleNew = () => {

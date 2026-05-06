@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useState } from 'react';
-import { useDropzone, type FileRejection } from 'react-dropzone';
+import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import dynamic from 'next/dynamic';
 import { guestService } from '@/services/guestService';
 import { useGuestLimit } from '@/hooks/useGuestLimit';
+import { usePdfToolUpload, type PdfToolUploadError } from '@/hooks/usePdfToolUpload';
+import { useProcessedFileActions } from '@/hooks/useProcessedFileActions';
 import UsageLimitModal from '@/components/UsageLimitModal';
 import { usePdfActions, usePdfData } from '@/context/PdfContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -38,7 +39,6 @@ export default function MergePdfPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [processedBlob, setProcessedBlob] = useState<Blob | null>(null);
   const [merging, setMerging] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   const [errorType, setErrorType] = useState<ErrorType>('NONE');
   const [customErrorMsg, setCustomErrorMsg] = useState<string | null>(null);
@@ -65,65 +65,57 @@ export default function MergePdfPage() {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // --- DROPZONE AYARLARI ---
-  const onDrop = useCallback(
-    (acceptedFiles: File[], fileRejections: FileRejection[]) => {
-      clearError();
+  const handleUploadError = (uploadError: PdfToolUploadError) => {
+    clearError();
+    if (uploadError.code === 'INVALID_TYPE') {
+      setErrorType('INVALID_TYPE');
+      return;
+    }
+    if (uploadError.code === 'SIZE_EXCEEDED') {
+      setErrorType('SIZE_EXCEEDED');
+      return;
+    }
+    if (uploadError.code === 'PANEL_ERROR') {
+      setErrorType('PANEL_ERROR');
+      return;
+    }
+    setErrorType('CUSTOM');
+    setCustomErrorMsg(uploadError.message ?? null);
+  };
 
-      // Hata Kontrolü
-      if (fileRejections.length > 0) {
-        const rejection = fileRejections[0];
-        const errorObj = rejection.errors[0];
-
-        // ✅ DÜZELTME BURADA: İngilizce mesajı yakalayıp kendi kodumuza çeviriyoruz
-        if (errorObj.code === 'file-invalid-type') {
-          setErrorType('INVALID_TYPE');
-        } else if (errorObj.code === 'file-too-large') {
-          setErrorType('SIZE_EXCEEDED');
-        } else {
-          // Bilinmeyen diğer hatalar için kütüphane mesajı (CUSTOM)
-          setErrorType('CUSTOM');
-          setCustomErrorMsg(errorObj.message);
-        }
-        return;
-      }
-
-      if (!acceptedFiles?.length) return;
-
+  const {
+    onDrop,
+    handleDropFromPanel: handleUploadFromPanel,
+    getRootProps,
+    getInputProps,
+    isDragActive,
+  } = usePdfToolUpload({
+    maxBytes: maxBytesPerFile,
+    allowedTypes: ['application/pdf', '.pdf'],
+    onError: handleUploadError,
+    onFilesAccepted: (acceptedFiles) => {
       const newFiles: File[] = [];
       let currentTotalSize = files.reduce((acc, f) => acc + f.size, 0);
 
       for (const file of acceptedFiles) {
-        // Çift Güvenlik (Manuel Type Kontrolü)
-        if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-          setErrorType('INVALID_TYPE');
-          return;
-        }
-
-        if (file.size > maxBytesPerFile) {
-          setErrorType('SIZE_EXCEEDED');
-          return;
-        }
-
         if (currentTotalSize + file.size > maxTotalBytes) {
           setErrorType('TOTAL_SIZE_EXCEEDED');
           return;
         }
-
         newFiles.push(file);
         currentTotalSize += file.size;
       }
-
       setFiles((prev) => [...prev, ...newFiles]);
     },
-    [files, maxBytesPerFile, maxTotalBytes],
-  );
+  });
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    multiple: true,
-    accept: { 'application/pdf': ['.pdf'] },
-    maxSize: maxBytesPerFile,
+  const { downloadBlob, saveProcessed, saving } = useProcessedFileActions({
+    session,
+    savePdf,
+    onError: (e) => {
+      console.error('❌ Save error:', e);
+      setErrorType('SAVE_ERROR');
+    },
   });
 
   const handleSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -160,11 +152,7 @@ export default function MergePdfPage() {
       const isAlreadyInList = files.some((f) => f.name === pdfFile.name && f.size === pdfFile.size);
 
       if (!isAlreadyInList) {
-        setFiles((prev) => [...prev, pdfFile]);
-        if (e && 'stopPropagation' in e) {
-          e.stopPropagation();
-          e.preventDefault();
-        }
+        handleUploadFromPanel(pdfFile, e);
       } else {
         setErrorType('FILE_ALREADY_IN_LIST');
         setCustomErrorMsg(pdfFile.name);
@@ -219,47 +207,25 @@ export default function MergePdfPage() {
 
   const handleDownload = async () => {
     if (!processedBlob) return;
-
-    const url = window.URL.createObjectURL(processedBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'merged.pdf';
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+    downloadBlob(processedBlob, 'merged.pdf');
   };
 
   // --- KAYDETME İŞLEMİ ---
   const handleSave = async () => {
     if (!processedBlob || !session) return;
-    setSaving(true);
     clearError();
     try {
       const filename = 'merged.pdf';
-      const fileToSave = new File([processedBlob], filename, {
-        type: 'application/pdf',
+      const result = await saveProcessed({
+        blob: processedBlob,
+        filename,
+        mimeType: 'application/pdf',
       });
-
-      const formData = new FormData();
-      formData.append('file', fileToSave);
-      formData.append('filename', filename);
-
-      const result = await sendRequest<{ size_kb?: number }>(
-        '/files/save-processed',
-        'POST',
-        formData,
-        true,
-      );
+      if (!result) return;
 
       alert(`${t('saveSuccess')}\n${t('fileSize')}: ${result.size_kb} KB`);
       clearFiles();
-    } catch (e: unknown) {
-      console.error('❌ Save error:', e);
-      setErrorType('SAVE_ERROR');
-    } finally {
-      setSaving(false);
-    }
+    } catch {}
   };
 
   const isReady = files.length >= 2;
