@@ -1,8 +1,7 @@
 'use client';
 
 import type { ChangeEvent } from 'react';
-
-type Translate = (key: string) => string;
+import type { TranslateFn } from '@/utils/translations';
 
 type PdfToolDropzoneCardProps = {
   getRootProps: (props?: Record<string, unknown>) => Record<string, unknown>;
@@ -10,7 +9,7 @@ type PdfToolDropzoneCardProps = {
   isDragActive: boolean;
   files: File[];
   onRemove?: (index: number) => void;
-  t: Translate;
+  t: TranslateFn;
   onSelect?: (e: ChangeEvent<HTMLInputElement>) => void;
   onClearAll?: () => void;
   multiple?: boolean;

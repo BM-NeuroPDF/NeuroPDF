@@ -1,8 +1,7 @@
 'use client';
 
 import type { Session } from 'next-auth';
-
-type Translate = (key: string) => string;
+import type { TranslateFn, TranslationKey } from '@/utils/translations';
 
 type PdfToolResultActionsProps = {
   onDownload: () => void;
@@ -10,8 +9,8 @@ type PdfToolResultActionsProps = {
   onReset: () => void;
   saving: boolean;
   session: Session | null | undefined;
-  t: Translate;
-  saveLabelKey?: string;
+  t: TranslateFn;
+  saveLabelKey?: TranslationKey;
 };
 
 export default function PdfToolResultActions({

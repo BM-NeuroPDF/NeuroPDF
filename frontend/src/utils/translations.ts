@@ -788,5 +788,5 @@ export const translations = {
   },
 };
 
-type TranslationKey = keyof (typeof translations)['tr'];
+export type TranslationKey = keyof (typeof translations)['tr'];
 export type TranslateFn = (key: TranslationKey) => string;
