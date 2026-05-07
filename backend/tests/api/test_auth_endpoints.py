@@ -32,7 +32,7 @@ def override_get_supabase():
 @pytest.mark.usefixtures("override_get_supabase")
 class TestAuthEndpoints:
     @patch("app.routers.auth.settings.USE_SUPABASE", True)
-    @patch("app.routers.auth.check_rate_limit", return_value=True)
+    @patch("app.routers.auth._legacy.check_rate_limit", return_value=True)
     @patch("app.routers.auth.security.verify_password")
     @patch("app.routers.auth.security.generate_six_digit_otp", return_value="111111")
     @patch("app.routers.auth.security.hash_password", return_value="hashed_otp")
@@ -138,7 +138,9 @@ class TestAuthEndpoints:
         with (
             patch("app.routers.auth._legacy.settings.USE_SUPABASE", False),
             patch("app.routers.auth._legacy.check_rate_limit", return_value=True),
-            patch("app.routers.auth._legacy.security.verify_password", return_value=True),
+            patch(
+                "app.routers.auth._legacy.security.verify_password", return_value=True
+            ),
             patch(
                 "app.routers.auth._legacy.set_redis_otp",
                 new_callable=AsyncMock,
@@ -163,9 +165,12 @@ class TestAuthEndpoints:
                 app.dependency_overrides.clear()
 
     @patch("app.routers.auth.settings.USE_SUPABASE", True)
-    @patch("app.routers.auth.check_rate_limit", return_value=True)
+    @patch("app.routers.auth._legacy.check_rate_limit", return_value=True)
     @patch("app.routers.auth.is_2fa_verify_locked", return_value=False)
-    @patch("app.routers.auth._legacy.user_repo.mark_email_as_verified", new_callable=AsyncMock)
+    @patch(
+        "app.routers.auth._legacy.user_repo.mark_email_as_verified",
+        new_callable=AsyncMock,
+    )
     @patch("app.routers.auth._legacy.delete_redis_otp", new_callable=AsyncMock)
     @patch("app.routers.auth._legacy.get_redis_otp", new_callable=AsyncMock)
     @patch("app.routers.auth._legacy.security.create_jwt", return_value="access_jwt")
@@ -250,7 +255,10 @@ class TestAuthEndpoints:
     @patch("app.routers.auth.check_rate_limit", return_value=True)
     @patch("app.routers.auth._legacy.is_2fa_verify_locked", return_value=False)
     @patch("app.routers.auth._legacy.record_2fa_verify_failure")
-    @patch("app.routers.auth._legacy.security.decode_2fa_pending_token", side_effect=ValueError)
+    @patch(
+        "app.routers.auth._legacy.security.decode_2fa_pending_token",
+        side_effect=ValueError,
+    )
     def test_verify_2fa_invalid_token(
         self, mock_decode, mock_record_fail, mock_locked, override_get_supabase
     ):

@@ -97,7 +97,8 @@ class TestGuestUsage:
 
     def test_check_guest_usage_no_guest_id(self):
         """Test checking usage without guest ID"""
-        response = client.get("/guest/check-usage")
+        with patch("app.rate_limit.check_rate_limit", return_value=True):
+            response = client.get("/guest/check-usage")
 
         assert response.status_code == 400
         assert "Guest ID" in response.json()["detail"]
