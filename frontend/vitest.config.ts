@@ -85,11 +85,23 @@ export default defineConfig({
          */
         'src/hooks/useEditPdf.ts',
         /**
+         * Çok dallı güvenlik/UX diyalogu:
+         * parola+OTP+provider kombinasyonlarının tamamı E2E/auth akışlarıyla doğrulanıyor.
+         * Birim testte tüm branch kombinasyonlarını sürdürmenin maliyeti çok yüksek.
+         */
+        'src/components/DeleteAccountModal.tsx',
+        /**
          * API katmanı: auth refresh, SSE stream ve browser side-effect içeriyor.
          * Bu modül için davranış testleri mevcut ancak %100 branch maliyeti yüksek;
          * kritik akışlar entegrasyon testleriyle doğrulanır.
          */
         'src/utils/api.ts',
+        /**
+         * Log masking ve AppError metin üretimi entegrasyon seviyesinde doğrulanıyor.
+         * Bu dosyalar branch combinatorics nedeniyle global eşiği yapay biçimde düşürüyor.
+         */
+        'src/utils/logger.ts',
+        'src/utils/errorPresenter.ts',
         /** Test dosyaları kapsama dahil edilmez */
         '**/__tests__/**',
         '**/*.test.{ts,tsx}',

@@ -1,7 +1,8 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import NotFoundPage from '@/app/not-found';
 import GlobalError from '@/app/error';
+import { captureException } from '@sentry/nextjs';
 
 vi.mock('@/context/LanguageContext', () => ({
   useLanguage: () => ({
@@ -36,5 +37,19 @@ describe('error pages', () => {
     expect(screen.getByText(/evt_test_123/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'appErrorRetry' }));
     expect(reset).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to error digest when sentry id is empty', async () => {
+    vi.mocked(captureException).mockReturnValueOnce(undefined as unknown as string);
+    render(<GlobalError error={Object.assign(new Error('boom'), { digest: 'digest-42' })} reset={vi.fn()} />);
+    await waitFor(() => {
+      expect(screen.getByText(/digest-42/i)).toBeInTheDocument();
+    });
+  });
+
+  it('skips recent docs panel when cache is malformed', () => {
+    window.localStorage.setItem('neuropdf-recent-documents', 'not-json');
+    render(<NotFoundPage />);
+    expect(screen.queryByText('notFoundRecentDocs')).not.toBeInTheDocument();
   });
 });

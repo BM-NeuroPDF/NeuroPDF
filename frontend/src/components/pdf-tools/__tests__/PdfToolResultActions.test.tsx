@@ -25,4 +25,46 @@ describe('PdfToolResultActions', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(onReset).toHaveBeenCalledTimes(1);
   });
+
+  it('hides save action for guests and shows login warning', () => {
+    render(
+      <PdfToolResultActions
+        onDownload={vi.fn()}
+        onSave={vi.fn()}
+        onReset={vi.fn()}
+        saving={false}
+        session={null}
+        t={(key) => key}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'saveToFiles' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'loginWarning' })).toHaveAttribute('href', '/login');
+  });
+
+  it('renders saving label and supports custom save key', () => {
+    const { rerender } = render(
+      <PdfToolResultActions
+        onDownload={vi.fn()}
+        onSave={vi.fn()}
+        onReset={vi.fn()}
+        saving
+        session={{ user: { email: 'x@y.com' } } as never}
+        t={(key) => key}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'saving' })).toBeDisabled();
+
+    rerender(
+      <PdfToolResultActions
+        onDownload={vi.fn()}
+        onSave={vi.fn()}
+        onReset={vi.fn()}
+        saving={false}
+        session={{ user: { email: 'x@y.com' } } as never}
+        saveLabelKey="save"
+        t={(key) => key}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'save' })).toBeInTheDocument();
+  });
 });

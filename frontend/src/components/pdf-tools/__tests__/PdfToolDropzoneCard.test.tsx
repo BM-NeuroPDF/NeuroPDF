@@ -20,4 +20,35 @@ describe('PdfToolDropzoneCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'remove' }));
     expect(onRemove).toHaveBeenCalledWith(0);
   });
+
+  it('uses active/passive labels and clear-all action', () => {
+    const onClearAll = vi.fn();
+    const { rerender } = render(
+      <PdfToolDropzoneCard
+        getRootProps={() => ({})}
+        getInputProps={() => ({})}
+        isDragActive
+        files={[]}
+        onClearAll={onClearAll}
+        t={(key) => key}
+      />,
+    );
+    expect(screen.getByText('dropActive')).toBeInTheDocument();
+
+    const file = new File(['a'], 'doc.pdf', { type: 'application/pdf' });
+    rerender(
+      <PdfToolDropzoneCard
+        getRootProps={() => ({})}
+        getInputProps={() => ({})}
+        isDragActive={false}
+        files={[file]}
+        onClearAll={onClearAll}
+        currentFileHint="hint"
+        t={(key) => key}
+      />,
+    );
+    expect(screen.getByText('hint')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'clearAll' }));
+    expect(onClearAll).toHaveBeenCalledTimes(1);
+  });
 });
