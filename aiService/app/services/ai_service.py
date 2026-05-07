@@ -8,23 +8,22 @@ import uuid
 from collections.abc import Iterator
 from fastapi import HTTPException
 
-import google.generativeai as genai
+from google import genai
 from ..config import settings
 from .local_llm_service import stream_openai_compatible_chat
 
-flash_model = None
-pro_model = None
+gemini_client: genai.Client | None = None
+flash_model_name = "gemini-flash-latest"
+pro_model_name = "gemini-pro-latest"
 
 
 def _load_gemini_models_if_configured() -> None:
-    """API key varsa Gemini modellerini yükle (import + testler için tek giriş noktası)."""
-    global flash_model, pro_model
+    """API key varsa Gemini client'ını oluştur (import + testler için tek giriş noktası)."""
+    global gemini_client
     key = (settings.GEMINI_API_KEY or "").strip()
     if not key:
         return
-    genai.configure(api_key=key)
-    flash_model = genai.GenerativeModel("models/gemini-flash-latest")
-    pro_model = genai.GenerativeModel("models/gemini-pro-latest")
+    gemini_client = genai.Client(api_key=key)
 
 
 _load_gemini_models_if_configured()
@@ -69,7 +68,7 @@ SESSION_TTL_SECONDS = 60 * 60  # 1 saat
 
 
 def _require_cloud():
-    if not flash_model or not pro_model:
+    if not gemini_client:
         raise HTTPException(
             status_code=503, detail="Cloud LLM yapılandırılmadı (GEMINI_API_KEY yok)."
         )
@@ -110,15 +109,22 @@ def _is_quota_exceeded_error(err: Exception) -> bool:
     )
 
 
-def _generate_with_retry(model, prompt: str, attempts: int = 5):
+def _generate_with_retry(model_name: str, prompt: str, attempts: int = 5):
     """
     API çağrısını yapar. 429 hatası alırsa bekleyip tekrar dener.
     Quota exceeded hatası için retry yapmaz, hemen hata döner.
     """
     last_err = None
+    if gemini_client is None:
+        raise HTTPException(
+            status_code=503, detail="Cloud LLM yapılandırılmadı (GEMINI_API_KEY yok)."
+        )
     for i in range(attempts):
         try:
-            return model.generate_content(prompt)
+            return gemini_client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+            )
         except Exception as e:
             last_err = e
             # Quota exceeded is permanent - don't retry, fail immediately
@@ -187,7 +193,7 @@ def gemini_generate(
     if mode == "pro":
         try:
             # PRO ile sınırlı deneme
-            response = _generate_with_retry(pro_model, full_prompt, attempts=2)
+            response = _generate_with_retry(pro_model_name, full_prompt, attempts=2)
             if getattr(response, "candidates", None):
                 return response.text
         except Exception as e:
@@ -197,11 +203,11 @@ def gemini_generate(
             mode = "flash"
 
     # Ana model (veya fallback sonrası flash) ile deneme
-    model = flash_model if mode == "flash" else pro_model
+    model_name = flash_model_name if mode == "flash" else pro_model_name
 
     try:
         # Retry mekanizması ile çağır
-        response = _generate_with_retry(model, full_prompt, attempts=5)
+        response = _generate_with_retry(model_name, full_prompt, attempts=5)
 
         if getattr(response, "candidates", None):
             return response.text
@@ -240,9 +246,12 @@ def gemini_generate_stream(
         text_content = text_content[:MAX_TEXT_LENGTH]
     text_label = "TEXT" if language == "en" else "METİN"
     full_prompt = f"{prompt_instruction}\n\n{text_label}:\n---\n{text_content}\n---"
-    model = flash_model if mode == "flash" else pro_model
+    model_name = flash_model_name if mode == "flash" else pro_model_name
     try:
-        response = model.generate_content(full_prompt, stream=True)
+        response = gemini_client.models.generate_content_stream(
+            model=model_name,
+            contents=full_prompt,
+        )
         for chunk in response:
             txt = getattr(chunk, "text", "") or ""
             if txt:
@@ -281,7 +290,7 @@ def call_gemini_for_task(
 
     # 1. Deneme: PRO Modeli
     try:
-        resp = _generate_with_retry(pro_model, full_prompt, attempts=4)
+        resp = _generate_with_retry(pro_model_name, full_prompt, attempts=4)
         if getattr(resp, "candidates", None):
             return resp.text
     except Exception as e:
@@ -291,7 +300,7 @@ def call_gemini_for_task(
 
     # 2. Deneme (Fallback): FLASH Modeli
     try:
-        resp = _generate_with_retry(flash_model, full_prompt, attempts=5)
+        resp = _generate_with_retry(flash_model_name, full_prompt, attempts=5)
         if getattr(resp, "candidates", None):
             return resp.text
         raise HTTPException(

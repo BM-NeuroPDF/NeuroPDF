@@ -14,40 +14,28 @@ import app.services.ai_service as ai
 class TestRequireCloudAndLocalHelpers:
     def test_load_gemini_models_if_configured_skips_when_key_empty(self, monkeypatch):
         monkeypatch.setattr(ai.settings, "GEMINI_API_KEY", "")
-        ai.flash_model = None
-        ai.pro_model = None
-        with patch.object(ai.genai, "configure") as mock_cfg:
+        ai.gemini_client = None
+        with patch.object(ai.genai, "Client") as mock_client:
             ai._load_gemini_models_if_configured()
-            mock_cfg.assert_not_called()
-            assert ai.flash_model is None
-            assert ai.pro_model is None
+            mock_client.assert_not_called()
+            assert ai.gemini_client is None
 
     def test_load_gemini_models_if_configured_calls_genai_when_key_set(
         self, monkeypatch
     ):
-        orig_flash, orig_pro = ai.flash_model, ai.pro_model
+        orig_client = ai.gemini_client
         try:
             monkeypatch.setattr(ai.settings, "GEMINI_API_KEY", "ci-test-gemini-key")
-            mock_flash = MagicMock()
-            mock_pro = MagicMock()
-            with (
-                patch.object(ai.genai, "configure") as mock_cfg,
-                patch.object(
-                    ai.genai,
-                    "GenerativeModel",
-                    side_effect=[mock_flash, mock_pro],
-                ),
-            ):
-                ai.flash_model = None
-                ai.pro_model = None
+            mock_client = MagicMock()
+            with patch.object(
+                ai.genai, "Client", return_value=mock_client
+            ) as client_cls:
+                ai.gemini_client = None
                 ai._load_gemini_models_if_configured()
-                mock_cfg.assert_called_once_with(api_key="ci-test-gemini-key")
-                assert ai.flash_model is mock_flash
-                assert ai.pro_model is mock_pro
-                assert ai.genai.GenerativeModel.call_count == 2
+                client_cls.assert_called_once_with(api_key="ci-test-gemini-key")
+                assert ai.gemini_client is mock_client
         finally:
-            ai.flash_model = orig_flash
-            ai.pro_model = orig_pro
+            ai.gemini_client = orig_client
 
     def test_local_llm_configured_reads_env(self, monkeypatch):
         monkeypatch.setenv("LOCAL_LLM_URL", "http://localhost:11434/v1")
@@ -69,7 +57,7 @@ class TestRequireCloudAndLocalHelpers:
             assert ai._gemini_via_local_openai("t", "i") == "s"
 
     def test_require_cloud_raises_503(self):
-        with patch.object(ai, "flash_model", None), patch.object(ai, "pro_model", None):
+        with patch.object(ai, "gemini_client", None):
             with pytest.raises(HTTPException) as e:
                 ai._require_cloud()
             assert e.value.status_code == 503
@@ -125,8 +113,6 @@ class TestGeminiGenerateCloud:
     @patch.object(ai, "_generate_with_retry")
     def test_success_flash(self, mock_gr, _req, _loc):
         mock_gr.return_value = self._resp("yay")
-        ai.flash_model = MagicMock()
-        ai.pro_model = MagicMock()
         out = ai.gemini_generate("text", "instr", mode="flash")
         assert out == "yay"
 
@@ -199,34 +185,38 @@ class TestGeminiGenerateCloud:
 
 class TestGenerateWithRetry:
     def test_quota_exceeded_raises_http(self):
-        m = MagicMock()
-        m.generate_content.side_effect = Exception("quota exceeded limit: 0")
+        ai.gemini_client = MagicMock()
+        ai.gemini_client.models.generate_content.side_effect = Exception(
+            "quota exceeded limit: 0"
+        )
         with pytest.raises(HTTPException) as e:
-            ai._generate_with_retry(m, "p", attempts=2)
+            ai._generate_with_retry("gemini-pro-latest", "p", attempts=2)
         assert e.value.status_code == 429
 
     @patch("app.services.ai_service.time.sleep", return_value=None)
     def test_rate_limit_then_ok(self, _sleep):
-        m = MagicMock()
-        m.generate_content.side_effect = [
+        ai.gemini_client = MagicMock()
+        ai.gemini_client.models.generate_content.side_effect = [
             Exception("429"),
             MagicMock(candidates=[1], text="ok"),
         ]
-        r = ai._generate_with_retry(m, "p", attempts=3)
+        r = ai._generate_with_retry("gemini-flash-latest", "p", attempts=3)
         assert r.text == "ok"
 
     @patch("app.services.ai_service.time.sleep", return_value=None)
     def test_exhaust_retries(self, _sleep):
-        m = MagicMock()
-        m.generate_content.side_effect = Exception("429 rate limit")
+        ai.gemini_client = MagicMock()
+        ai.gemini_client.models.generate_content.side_effect = Exception(
+            "429 rate limit"
+        )
         with pytest.raises(Exception):
-            ai._generate_with_retry(m, "p", attempts=2)
+            ai._generate_with_retry("gemini-flash-latest", "p", attempts=2)
 
     def test_non_rate_error_reraises_immediately(self):
-        m = MagicMock()
-        m.generate_content.side_effect = ValueError("bad")
+        ai.gemini_client = MagicMock()
+        ai.gemini_client.models.generate_content.side_effect = ValueError("bad")
         with pytest.raises(ValueError):
-            ai._generate_with_retry(m, "p", attempts=3)
+            ai._generate_with_retry("gemini-flash-latest", "p", attempts=3)
 
 
 class TestCallGeminiForTask:
@@ -252,8 +242,6 @@ class TestCallGeminiForTask:
     @patch.object(ai, "_require_cloud")
     @patch.object(ai, "_generate_with_retry")
     def test_cloud_pro_then_flash(self, mock_gr, _req, _loc):
-        ai.flash_model = MagicMock()
-        ai.pro_model = MagicMock()
         pro_r = MagicMock()
         pro_r.text = "from pro"
         pro_r.candidates = [1]
@@ -264,8 +252,6 @@ class TestCallGeminiForTask:
     @patch.object(ai, "_require_cloud")
     @patch.object(ai, "_generate_with_retry")
     def test_cloud_pro_fails_rate_flash_ok(self, mock_gr, _req, _loc):
-        ai.flash_model = MagicMock()
-        ai.pro_model = MagicMock()
         flash_m = MagicMock(candidates=[1], text="f")
         mock_gr.side_effect = [
             Exception("rate limit"),
@@ -277,8 +263,6 @@ class TestCallGeminiForTask:
     @patch.object(ai, "_require_cloud")
     @patch.object(ai, "_generate_with_retry")
     def test_cloud_flash_no_text_raises_400(self, mock_gr, _req, _loc):
-        ai.flash_model = MagicMock()
-        ai.pro_model = MagicMock()
         mock_gr.side_effect = [
             MagicMock(candidates=[]),
             MagicMock(candidates=None, text=None),
@@ -293,8 +277,6 @@ class TestCallGeminiForTask:
     @patch.object(ai, "_require_cloud")
     @patch.object(ai, "_generate_with_retry")
     def test_cloud_flash_rate_429(self, mock_gr, _req, _loc):
-        ai.flash_model = MagicMock()
-        ai.pro_model = MagicMock()
         mock_gr.side_effect = [
             MagicMock(candidates=[]),
             Exception("rate limit 429"),
@@ -307,8 +289,6 @@ class TestCallGeminiForTask:
     @patch.object(ai, "_require_cloud")
     @patch.object(ai, "_generate_with_retry")
     def test_long_text_truncated_in_task(self, mock_gr, _req, _loc):
-        ai.flash_model = MagicMock()
-        ai.pro_model = MagicMock()
         mock_gr.return_value = MagicMock(candidates=[1], text="ok")
         long_b = "z" * 60000
         ai.call_gemini_for_task(long_b, "p")
@@ -318,8 +298,6 @@ class TestCallGeminiForTask:
     @patch.object(ai, "_require_cloud")
     @patch.object(ai, "_generate_with_retry")
     def test_pro_raises_non_rate_propagates(self, mock_gr, _req, _loc):
-        ai.flash_model = MagicMock()
-        ai.pro_model = MagicMock()
         mock_gr.side_effect = ValueError("not rate")
         with pytest.raises(ValueError):
             ai.call_gemini_for_task("x", "y")

@@ -4,7 +4,7 @@ python-multipart
 
 celery
 redis
-google-generativeai
+google-genai
 pypdf>=4
 zemberek-python
 httpx
