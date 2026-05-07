@@ -27,7 +27,8 @@ export default {
     const prettierArgs = filenames.map((f) => shellQuote(path.resolve(__dirname, f))).join(' ');
     
     // ESLint'i 50'şer dosyalık chunk'lara böl
-    const chunks = chunkArray(rel, 50);
+    const eslintRel = rel.filter(f => !f.includes("vitest.config") && !f.includes("next.config") && !f.includes("playwright.config"));
+    const chunks = chunkArray(eslintRel, 50);
     const eslintCmds = chunks.map((chunk) => {
       const args = chunk.map(shellQuote).join(' ');
       return `sh -c 'cd ${shellQuote(frontendDir)} && npx eslint --fix --max-warnings=0 ${args}'`;
