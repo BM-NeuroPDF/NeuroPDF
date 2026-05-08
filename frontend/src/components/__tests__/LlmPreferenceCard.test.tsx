@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ComponentProps } from 'react';
 import type { Session } from 'next-auth';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { LlmPreferenceCard } from '../LlmPreferenceCard';
 import { updateLlmPreference } from '@/services/llmPreferenceService';
 
@@ -34,6 +35,9 @@ function setup(overrides: Partial<ComponentProps<typeof LlmPreferenceCard>> = {}
 describe('LlmPreferenceCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+  afterEach(() => {
+    cleanup();
   });
 
   it('renders nothing without session user', () => {
@@ -84,12 +88,16 @@ describe('LlmPreferenceCard', () => {
   it('saves choice and revalidates', async () => {
     mockedUpdateLlm.mockResolvedValue(undefined);
     const { mutateLlm } = setup();
+    const user = userEvent.setup();
 
     fireEvent.click(screen.getByRole('button', { name: /Cloud LLM/i }));
-    fireEvent.click(screen.getByRole('button', { name: /savePreference/i }));
+    await user.click(screen.getByRole('button', { name: /savePreference/i }));
 
     await waitFor(() => {
       expect(mockedUpdateLlm).toHaveBeenCalledWith('cloud');
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     });
     expect(mutateLlm).toHaveBeenCalled();
   });
@@ -98,12 +106,16 @@ describe('LlmPreferenceCard', () => {
     mockedUpdateLlm.mockRejectedValue(new Error('fail'));
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const user = userEvent.setup();
 
     setup();
-    fireEvent.click(screen.getByRole('button', { name: /savePreference/i }));
+    await user.click(screen.getByRole('button', { name: /savePreference/i }));
 
     await waitFor(() => {
       expect(alertSpy).toHaveBeenCalledWith('Hata oluştu.');
+    });
+    await waitFor(() => {
+      expect(mockedUpdateLlm).toHaveBeenCalled();
     });
     alertSpy.mockRestore();
     errSpy.mockRestore();
@@ -111,19 +123,33 @@ describe('LlmPreferenceCard', () => {
 
   it('shows saving label while loading', async () => {
     mockedUpdateLlm.mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 200)));
+    const user = userEvent.setup();
     setup();
-    fireEvent.click(screen.getByRole('button', { name: /savePreference/i }));
+    await user.click(screen.getByRole('button', { name: /savePreference/i }));
     expect(screen.getByText('saving')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockedUpdateLlm).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.queryByText('saving')).not.toBeInTheDocument();
+    });
   });
 
   it('shows Turkish saving label while loading when t is empty', async () => {
     mockedUpdateLlm.mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 200)));
+    const user = userEvent.setup();
     const tEmpty = (() => '') as ComponentProps<typeof LlmPreferenceCard>['t'];
     render(
       <LlmPreferenceCard llmData={undefined} mutateLlm={vi.fn()} session={session} t={tEmpty} />,
     );
-    fireEvent.click(screen.getByRole('button', { name: /Tercihi Kaydet/i }));
+    await user.click(screen.getByRole('button', { name: /Tercihi Kaydet/i }));
     expect(screen.getByText('Kaydediliyor...')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockedUpdateLlm).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.queryByText('Kaydediliyor...')).not.toBeInTheDocument();
+    });
   });
 
   it('uses Turkish fallbacks when t returns empty', () => {
