@@ -52,13 +52,6 @@ def upgrade() -> None:
     op.add_column("users", sa.Column("active_avatar_url", sa.String(), nullable=True))
     op.alter_column(
         "users",
-        "password",
-        existing_type=sa.TEXT(),
-        type_=sa.String(length=255),
-        existing_nullable=True,
-    )
-    op.alter_column(
-        "users",
         "eula_accepted",
         existing_type=sa.BOOLEAN(),
         nullable=False,
@@ -79,13 +72,6 @@ def downgrade() -> None:
         existing_type=sa.BOOLEAN(),
         nullable=True,
         existing_server_default=sa.text("false"),
-    )
-    op.alter_column(
-        "users",
-        "password",
-        existing_type=sa.String(length=255),
-        type_=sa.TEXT(),
-        existing_nullable=True,
     )
     op.drop_column("users", "active_avatar_url")
     op.drop_table("user_avatars")
