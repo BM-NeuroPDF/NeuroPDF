@@ -29,7 +29,7 @@ const withBundleAnalyzer = bundleAnalyzer({
 });
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
+  output: process.env.CI ? undefined : 'standalone',
   outputFileTracingRoot: workspaceRoot,
 
   experimental: {
