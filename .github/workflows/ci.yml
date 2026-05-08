@@ -184,7 +184,6 @@ jobs:
       AI_SERVICE_API_KEY: ci_test_ai_key
       SUPABASE_URL: https://ci-placeholder.supabase.co
       SUPABASE_KEY: ci_placeholder_supabase_key
-      REDIS_URL: redis://localhost:6379
       E2E_MAGIC_OTP_ENABLED: "true"
       E2E_MAGIC_OTP_ALL_USERS: "true"
 
