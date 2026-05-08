@@ -1,12 +1,19 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import { auth } from "./src/auth.config";
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
-export async function middleware(req: NextRequest) {
-  const session = await auth();
-  const needsAuth = req.nextUrl.pathname.startsWith("/dashboard");
-  if (needsAuth && !session?.user) {
-    return NextResponse.redirect(new URL("/login", req.url));
+export function middleware(req: NextRequest) {
+  const needsAuth = req.nextUrl.pathname.startsWith('/dashboard');
+  if (needsAuth) {
+    const token =
+      req.cookies.get('next-auth.session-token') ??
+      req.cookies.get('__Secure-next-auth.session-token');
+    if (!token) {
+      return NextResponse.redirect(new URL('/login', req.url));
+    }
   }
   return NextResponse.next();
 }
+
+export const config = {
+  matcher: ['/dashboard/:path*'],
+};
