@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterEach, afterAll } from 'vitest';
+import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import ProGlobalChat from '../ProGlobalChat';
@@ -33,6 +33,9 @@ vi.mock('pdf-lib', () => ({
 vi.mock('next/image', () => ({
   default: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} />,
 }));
+
+/** Preserve host `setTimeout` before any test stubs replace `globalThis.setTimeout`. */
+const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
 
 describe('ProGlobalChat', () => {
   const mockSession = {
@@ -116,8 +119,7 @@ describe('ProGlobalChat', () => {
     });
   }
 
-  beforeEach(() => {
-    vi.clearAllMocks();
+  beforeAll(() => {
     vi.stubGlobal(
       'Audio',
       vi.fn().mockImplementation(() => ({
@@ -127,6 +129,18 @@ describe('ProGlobalChat', () => {
         volume: 1,
       })),
     );
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    globalThis.setTimeout = ((
+      fn: TimerHandler,
+      delay?: number,
+      ...args: Parameters<typeof setTimeout>
+    ) => {
+      const ms = delay === undefined ? 0 : Number(delay);
+      return nativeSetTimeout(fn, ms === 600 ? 0 : ms, ...args);
+    }) as typeof setTimeout;
     vi.mocked(useRouter).mockReturnValue({
       push: mockPush,
     } as unknown as ReturnType<typeof useRouter>);
@@ -137,6 +151,20 @@ describe('ProGlobalChat', () => {
     vi.mocked(useLanguage).mockReturnValue(mockUseLanguage as ReturnType<typeof useLanguage>);
     setPdfProviderState({});
     vi.mocked(sendRequest).mockResolvedValue({ role: 'pro' });
+  });
+
+  afterEach(async () => {
+    cleanup();
+    globalThis.setTimeout = nativeSetTimeout as typeof setTimeout;
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        nativeSetTimeout(resolve, 0);
+      });
+    });
+  });
+
+  afterAll(() => {
+    vi.unstubAllGlobals();
   });
 
   it('renders FAB when user is Pro', async () => {

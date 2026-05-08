@@ -18,7 +18,31 @@ from ...repositories.stats_repo import StatsRepository
 from ...repositories.user_repo import UserRepository
 from ...services.files.chat_service import normalize_message_metadata
 from ...observability.cache_logger import log_cache
+from ...rate_limit import check_rate_limit
+from ...redis_client import (
+    stats_cache_delete_keys,
+    stats_cache_get_json,
+    stats_cache_set_json,
+)
+from ...storage import (
+    delete_pdf_from_db,
+    get_pdf_from_db,
+    list_user_pdfs,
+    save_pdf_to_db,
+)
 import logging
+
+# Backward-compat re-exports used by routers/tests that patch via app.routers.files._legacy.*
+_REEXPORTED_SYMBOLS = (
+    check_rate_limit,
+    stats_cache_get_json,
+    stats_cache_set_json,
+    stats_cache_delete_keys,
+    save_pdf_to_db,
+    get_pdf_from_db,
+    list_user_pdfs,
+    delete_pdf_from_db,
+)
 
 logger = logging.getLogger(__name__)
 DB_UNAVAILABLE_DETAIL = "Database connection temporarily unavailable. Please try again."

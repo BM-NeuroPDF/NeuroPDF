@@ -40,28 +40,31 @@ export function useProcessedFileActions({
     async ({ blob, filename, mimeType = 'application/pdf' }: SaveProcessedOptions) => {
       if (!session) return null;
       setSaving(true);
-      try {
-        const fileToSave = new File([blob], filename, { type: mimeType });
-        const formData = new FormData();
-        formData.append('file', fileToSave);
-        formData.append('filename', filename);
+      const run = async () => {
+        try {
+          const fileToSave = new File([blob], filename, { type: mimeType });
+          const formData = new FormData();
+          formData.append('file', fileToSave);
+          formData.append('filename', filename);
 
-        const result = await sendRequest<{ size_kb?: number }>(
-          '/files/save-processed',
-          'POST',
-          formData,
-          true,
-        );
-        if (savePdf) {
-          await savePdf(fileToSave);
+          const result = await sendRequest<{ size_kb?: number }>(
+            '/files/save-processed',
+            'POST',
+            formData,
+            true,
+          );
+          if (savePdf) {
+            await savePdf(fileToSave);
+          }
+          return result;
+        } catch (error) {
+          onError(error);
+          return null;
         }
-        return result;
-      } catch (error) {
-        onError(error);
-        return null;
-      } finally {
+      };
+      return run().finally(() => {
         setSaving(false);
-      }
+      });
     },
     [onError, savePdf, session],
   );

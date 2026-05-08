@@ -7,9 +7,26 @@ import logging
 # Sadece kritik hataları görmek için yapılandırma
 logger = logging.getLogger(__name__)
 
+_JWT_INSECURE_DEFAULT = "fallback_secret_change_this"
+
 
 def _parse_csv_list(raw: str) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _environment_name() -> str:
+    return (os.getenv("ENVIRONMENT") or os.getenv("ENV", "development")).lower()
+
+
+def _allows_insecure_secret_defaults() -> bool:
+    """DEBUG=true veya geliştirme/test ortamlarında zayıf varsayılan secret'lara izin verilir."""
+    if os.getenv("DEBUG", "").lower() == "true":
+        return True
+    return _environment_name() in ("development", "dev", "local", "test")
+
+
+def _is_production_environment() -> bool:
+    return _environment_name() in ("production", "prod")
 
 
 class Settings(BaseSettings):
@@ -38,7 +55,7 @@ class Settings(BaseSettings):
     )
 
     # --- JWT Configuration ---
-    JWT_SECRET: str = os.getenv("JWT_SECRET", "fallback_secret_change_this")
+    JWT_SECRET: str = os.getenv("JWT_SECRET", _JWT_INSECURE_DEFAULT)
     ACCESS_TOKEN_EXPIRES_MIN: int = int(os.getenv("ACCESS_TOKEN_EXPIRES_MIN", "15"))
     REFRESH_TOKENS_ENABLED: bool = (
         os.getenv("REFRESH_TOKENS_ENABLED", "false").lower() == "true"
@@ -138,24 +155,89 @@ class Settings(BaseSettings):
             except Exception:
                 pass
 
-    @model_validator(mode="after")
-    def validate_production_settings(self):
-        """Validate critical settings in production environment"""
-        env = os.getenv("ENVIRONMENT", "development").lower()
+    def _effective_callback_secret(self) -> str:
+        return (self.CALLBACK_SECRET or "").strip() or (
+            self.INTERNAL_CALLBACK_SECRET or ""
+        ).strip()
 
-        # JWT_SECRET validation
-        if self.JWT_SECRET == "fallback_secret_change_this":
-            if env in ["production", "prod"]:
-                raise RuntimeError(
-                    "JWT_SECRET must be set to a secure value in production! "
-                    "Do not use the default fallback secret."
+    def _has_database_configuration(self) -> bool:
+        if self.DATABASE_URL and self.DATABASE_URL.strip():
+            return True
+        if self.USE_SUPABASE:
+            if self.SUPABASE_DATABASE_URL and self.SUPABASE_DATABASE_URL.strip():
+                return True
+        else:
+            if self.LOCAL_DATABASE_URL and self.LOCAL_DATABASE_URL.strip():
+                return True
+        return bool(self.DB_USER and self.DB_PASSWORD and self.DB_HOST)
+
+    @model_validator(mode="after")
+    def validate_critical_secrets(self):
+        dev_relaxed = _allows_insecure_secret_defaults()
+
+        # JWT_SECRET
+        jwt_weak = (not self.JWT_SECRET.strip()) or (
+            self.JWT_SECRET == _JWT_INSECURE_DEFAULT
+        )
+        if dev_relaxed:
+            if jwt_weak:
+                logger.warning(
+                    "JWT_SECRET is unset or using the insecure development default; "
+                    "set a strong secret in production-like environments."
+                )
+        else:
+            if jwt_weak:
+                raise ValueError(
+                    "JWT_SECRET must be set to a secure non-default value when "
+                    "DEBUG is not true and ENVIRONMENT is not development/dev/local/test."
                 )
 
-        # Production environment variable validation
-        if env in ["production", "prod"]:
+        # Callback HMAC (async summarize / AI callback)
+        if dev_relaxed:
+            if not self._effective_callback_secret():
+                logger.warning(
+                    "CALLBACK_SECRET / INTERNAL_CALLBACK_SECRET are unset; "
+                    "signed AI callbacks will reject requests."
+                )
+        else:
+            if not self._effective_callback_secret():
+                raise ValueError(
+                    "CALLBACK_SECRET or INTERNAL_CALLBACK_SECRET must be set to a "
+                    "non-empty value outside development/debug environments."
+                )
+
+        # Redis URL (rate limiting, OTP, cache; prod/staging should not rely on implicit defaults)
+        if dev_relaxed:
+            if not (self.REDIS_URL and self.REDIS_URL.strip()):
+                logger.warning(
+                    "REDIS_URL is unset; Redis-backed features may be unavailable."
+                )
+        else:
+            if not (self.REDIS_URL and self.REDIS_URL.strip()):
+                raise ValueError(
+                    "REDIS_URL must be set to a non-empty value when DEBUG is not "
+                    "true and ENVIRONMENT is not development/dev/local/test."
+                )
+
+        # Database connectivity (SQLAlchemy / build_db_url)
+        if dev_relaxed:
+            if not self._has_database_configuration():
+                logger.warning(
+                    "No DATABASE_URL, LOCAL_DATABASE_URL / SUPABASE_DATABASE_URL, "
+                    "or DB_USER+DB_PASSWORD+DB_HOST; database connection may fail."
+                )
+        else:
+            if not self._has_database_configuration():
+                raise ValueError(
+                    "Database must be configured: set DATABASE_URL, or "
+                    "LOCAL_DATABASE_URL (USE_SUPABASE=false), or SUPABASE_DATABASE_URL "
+                    "(USE_SUPABASE=true), or DB_USER/DB_PASSWORD/DB_HOST."
+                )
+
+        # Ek üretim kontrolleri (ENVIRONMENT=production|prod)
+        if _is_production_environment():
             required_vars = [
                 "JWT_SECRET",
-                "CALLBACK_SECRET",
                 "SUPABASE_URL",
                 "SUPABASE_KEY",
                 "DB_USER",
@@ -164,8 +246,9 @@ class Settings(BaseSettings):
             ]
             missing = [var for var in required_vars if not os.getenv(var)]
             if missing:
-                raise RuntimeError(
-                    f"Missing required environment variables in production: {', '.join(missing)}"
+                raise ValueError(
+                    "Missing required environment variables in production: "
+                    + ", ".join(missing)
                 )
 
         return self

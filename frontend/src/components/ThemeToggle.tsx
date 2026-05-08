@@ -1,6 +1,5 @@
 'use client';
 
-import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 
@@ -76,12 +75,11 @@ export default function ThemeToggle() {
         />
       </svg>
 
-      {/* Kayan Daire (Thumb) */}
-      <motion.div
-        className="w-6 h-6 bg-white rounded-full shadow-sm z-20"
-        layout
-        transition={{ type: 'spring', stiffness: 700, damping: 30 }}
-        animate={{ x: darkMode ? 32 : 0 }}
+      {/* Kayan daire: layout’ta framer-motion yükünü tetiklememek için CSS transition */}
+      <div
+        className={`pointer-events-none z-20 h-6 w-6 rounded-full bg-white shadow-sm transition-transform duration-300 ease-out motion-reduce:transition-none ${
+          darkMode ? 'translate-x-8' : 'translate-x-0'
+        }`}
         style={{
           boxShadow: darkMode ? '0px 2px 4px rgba(0,0,0,0.4)' : '0px 2px 4px rgba(0,0,0,0.1)',
         }}

@@ -1,36 +1,17 @@
 'use client';
 
-import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import dynamic from 'next/dynamic';
 import { useGuestLimit } from '@/hooks/useGuestLimit';
-import { usePdfToolUpload, type PdfToolUploadError } from '@/hooks/usePdfToolUpload';
-import { useProcessedFileActions } from '@/hooks/useProcessedFileActions';
-import { useGuestGatedAction } from '@/hooks/useGuestGatedAction';
 import UsageLimitModal from '@/components/UsageLimitModal';
 import PdfToolDropzoneCard from '@/components/pdf-tools/PdfToolDropzoneCard';
-import PdfToolResultActions from '@/components/pdf-tools/PdfToolResultActions';
 import { usePdfActions, usePdfData } from '@/context/PdfContext';
 import { useLanguage } from '@/context/LanguageContext';
-import { sendRequest } from '@/utils/api';
-import { getMaxMergeTotalBytes, getMaxUploadBytes } from '@/app/config/fileLimits';
+import { useMergePdf } from '@/hooks/useMergePdf';
 
-const PdfViewer = dynamic(() => import('@/components/PdfViewer'), {
-  ssr: false,
+const MergeResultPanel = dynamic(() => import('@/components/merge-pdf/MergeResultPanel'), {
+  loading: () => <div className="mt-6">{'Sonuç Yükleniyor...'}</div>,
 });
-
-// ✅ Hata Kodları (INVALID_TYPE eklendi)
-type ErrorType =
-  | 'NONE'
-  | 'INVALID_TYPE'
-  | 'SIZE_EXCEEDED'
-  | 'TOTAL_SIZE_EXCEEDED'
-  | 'CUSTOM'
-  | 'MERGE_MIN_FILES'
-  | 'PANEL_ERROR'
-  | 'FILE_ALREADY_IN_LIST'
-  | 'MERGE_ERROR'
-  | 'SAVE_ERROR';
 
 export default function MergePdfPage() {
   const { data: session, status } = useSession();
@@ -38,215 +19,35 @@ export default function MergePdfPage() {
   const { pdfFile } = usePdfData();
   const { savePdf } = usePdfActions();
 
-  const [files, setFiles] = useState<File[]>([]);
-  const [processedBlob, setProcessedBlob] = useState<Blob | null>(null);
-  const [merging, setMerging] = useState(false);
-
-  const [errorType, setErrorType] = useState<ErrorType>('NONE');
-  const [customErrorMsg, setCustomErrorMsg] = useState<string | null>(null);
-
-  const isGuest = status !== 'authenticated';
-  const maxBytesPerFile = getMaxUploadBytes(isGuest);
-  const maxTotalBytes = getMaxMergeTotalBytes(isGuest);
-
   const { usageInfo, showLimitModal, checkLimit, closeLimitModal, redirectToLogin } =
     useGuestLimit();
-  const { runWithGuestCheck } = useGuestGatedAction({
-    session,
-    checkLimit,
-    onError: (error) => console.error('Misafir sayaç hatası:', error),
-  });
-
-  const clearError = () => {
-    setErrorType('NONE');
-    setCustomErrorMsg(null);
-  };
-
-  const clearFiles = () => {
-    setFiles([]);
-    setProcessedBlob(null);
-    clearError();
-  };
-
-  const removeFile = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleUploadError = (uploadError: PdfToolUploadError) => {
-    clearError();
-    if (uploadError.code === 'INVALID_TYPE') {
-      setErrorType('INVALID_TYPE');
-      return;
-    }
-    if (uploadError.code === 'SIZE_EXCEEDED') {
-      setErrorType('SIZE_EXCEEDED');
-      return;
-    }
-    if (uploadError.code === 'PANEL_ERROR') {
-      setErrorType('PANEL_ERROR');
-      return;
-    }
-    setErrorType('CUSTOM');
-    setCustomErrorMsg(uploadError.message ?? null);
-  };
 
   const {
-    onDrop,
-    handleDropFromPanel: handleUploadFromPanel,
+    files,
+    processedBlob,
+    merging,
+    saving,
     getRootProps,
     getInputProps,
     isDragActive,
-  } = usePdfToolUpload({
-    maxBytes: maxBytesPerFile,
-    allowedTypes: ['application/pdf', '.pdf'],
-    onError: handleUploadError,
-    onFilesAccepted: (acceptedFiles) => {
-      const newFiles: File[] = [];
-      let currentTotalSize = files.reduce((acc, f) => acc + f.size, 0);
-
-      for (const file of acceptedFiles) {
-        if (currentTotalSize + file.size > maxTotalBytes) {
-          setErrorType('TOTAL_SIZE_EXCEEDED');
-          return;
-        }
-        newFiles.push(file);
-        currentTotalSize += file.size;
-      }
-      setFiles((prev) => [...prev, ...newFiles]);
-    },
-  });
-
-  const { downloadBlob, saveProcessed, saving } = useProcessedFileActions({
+    handleSelect,
+    handleDropFromPanel,
+    removeFile,
+    clearFiles,
+    handleMergePdfs,
+    handleDownload,
+    handleSave,
+    isReady,
+    hasProcessed,
+    currentError,
+  } = useMergePdf({
     session,
+    checkLimit,
+    status,
+    panelPdfFile: pdfFile,
     savePdf,
-    onError: (e) => {
-      console.error('❌ Save error:', e);
-      setErrorType('SAVE_ERROR');
-    },
+    t,
   });
-
-  const handleSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = e.target.files;
-    if (selectedFiles) {
-      const newFilesList = Array.from(selectedFiles);
-      onDrop(newFilesList, []);
-    }
-    e.target.value = '';
-  };
-
-  const handleDropFromPanel = (
-    e?: React.DragEvent<HTMLDivElement> | React.MouseEvent<HTMLButtonElement>,
-  ) => {
-    clearError();
-    if (pdfFile) {
-      // Panelden gelen dosya için de tip kontrolü
-      if (pdfFile.type !== 'application/pdf' && !pdfFile.name.toLowerCase().endsWith('.pdf')) {
-        setErrorType('INVALID_TYPE');
-        return;
-      }
-
-      if (pdfFile.size > maxBytesPerFile) {
-        setErrorType('SIZE_EXCEEDED');
-        return;
-      }
-
-      const currentTotalSize = files.reduce((acc, f) => acc + f.size, 0);
-      if (currentTotalSize + pdfFile.size > maxTotalBytes) {
-        setErrorType('TOTAL_SIZE_EXCEEDED');
-        return;
-      }
-
-      const isAlreadyInList = files.some((f) => f.name === pdfFile.name && f.size === pdfFile.size);
-
-      if (!isAlreadyInList) {
-        handleUploadFromPanel(pdfFile, e);
-      } else {
-        setErrorType('FILE_ALREADY_IN_LIST');
-        setCustomErrorMsg(pdfFile.name);
-      }
-    } else {
-      setErrorType('PANEL_ERROR');
-    }
-  };
-
-  // --- MERGE İŞLEMİ ---
-  const handleMergePdfs = async () => {
-    if (files.length < 2) {
-      setErrorType('MERGE_MIN_FILES');
-      return;
-    }
-    await runWithGuestCheck(async () => {
-      clearError();
-      setMerging(true);
-      try {
-        const formData = new FormData();
-        files.forEach((file) => formData.append('files', file));
-        const blob = await sendRequest<Blob>('/files/merge-pdfs', 'POST', formData, true);
-        if (blob.size === 0) throw new Error('Received empty blob from server');
-        setProcessedBlob(blob);
-        savePdf(new File([blob], 'merged.pdf', { type: 'application/pdf' }));
-      } catch (e: unknown) {
-        console.error('❌ Birleştirme Hatası:', e);
-        setErrorType('MERGE_ERROR');
-      } finally {
-        setMerging(false);
-      }
-    });
-  };
-
-  const handleDownload = async () => {
-    if (!processedBlob) return;
-    downloadBlob(processedBlob, 'merged.pdf');
-  };
-
-  // --- KAYDETME İŞLEMİ ---
-  const handleSave = async () => {
-    if (!processedBlob || !session) return;
-    clearError();
-    try {
-      const filename = 'merged.pdf';
-      const result = await saveProcessed({
-        blob: processedBlob,
-        filename,
-        mimeType: 'application/pdf',
-      });
-      if (!result) return;
-
-      alert(`${t('saveSuccess')}\n${t('fileSize')}: ${result.size_kb} KB`);
-      clearFiles();
-    } catch {}
-  };
-
-  const isReady = files.length >= 2;
-  const hasProcessed = processedBlob !== null;
-
-  // ✅ Hata Mesajı Renderlayıcı (Dil değişince burası yeniden çalışır)
-  const getErrorMessage = () => {
-    if (errorType === 'CUSTOM' && customErrorMsg) return customErrorMsg;
-
-    switch (errorType) {
-      case 'INVALID_TYPE':
-        return t('invalidFileType'); // ✅ Artık çeviri dönecek
-      case 'SIZE_EXCEEDED':
-        return `${t('fileSizeExceeded')} (Max: ${(maxBytesPerFile / (1024 * 1024)).toFixed(0)} MB)`;
-      case 'TOTAL_SIZE_EXCEEDED':
-        return `${t('totalSizeExceeded')} (Max: ${(maxTotalBytes / (1024 * 1024)).toFixed(0)} MB)`;
-      case 'PANEL_ERROR':
-        return t('panelPdfError');
-      case 'MERGE_MIN_FILES':
-        return t('mergeMinFilesError');
-      case 'FILE_ALREADY_IN_LIST':
-        return `"${customErrorMsg}" ${t('fileAlreadyInList')}`;
-      case 'MERGE_ERROR':
-        return t('unknownMergeError');
-      case 'SAVE_ERROR':
-        return t('saveError');
-      default:
-        return null;
-    }
-  };
-
-  const currentError = getErrorMessage();
 
   return (
     <main className="min-h-screen p-6 max-w-4xl mx-auto font-bold text-[var(--foreground)]">
@@ -361,54 +162,15 @@ export default function MergePdfPage() {
       )}
 
       {hasProcessed && processedBlob && (
-        <div className="mt-6 space-y-6">
-          <div className="container-card p-6">
-            <h3 className="text-xl mb-4 font-semibold">{t('mergedPdfPreview')}</h3>
-            <div className="rounded-lg overflow-hidden border border-[var(--navbar-border)]">
-              <PdfViewer
-                file={
-                  new File([processedBlob], 'merged.pdf', {
-                    type: 'application/pdf',
-                  })
-                }
-                height={550}
-              />
-            </div>
-          </div>
-
-          <div className="container-card p-6 border border-gray-300 dark:border-[var(--container-border)] shadow-xl">
-            <h3
-              className="text-xl mb-4 font-bold flex items-center gap-2"
-              style={{ color: 'var(--foreground)' }}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="w-6 h-6 text-green-500"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              {t('mergeSuccessTitle')}
-            </h3>
-
-            <PdfToolResultActions
-              onDownload={handleDownload}
-              onSave={handleSave}
-              onReset={clearFiles}
-              saving={saving}
-              session={session}
-              t={t}
-              saveLabelKey="save"
-            />
-          </div>
-        </div>
+        <MergeResultPanel
+          blob={processedBlob}
+          handleDownload={handleDownload}
+          handleSave={handleSave}
+          clearFiles={clearFiles}
+          saving={saving}
+          session={session}
+          t={t}
+        />
       )}
 
       <UsageLimitModal

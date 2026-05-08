@@ -15,6 +15,22 @@ from app.deps import get_current_user
 client = TestClient(app)
 
 
+def _mock_execute_avatar_context(mock_db, mapping_row: dict | None) -> None:
+    """Routes use ``execute(Text).mappings().first()`` for bundled user/settings/auth."""
+
+    result = MagicMock()
+    result.mappings.return_value.first.return_value = mapping_row
+    mock_db.execute.return_value = result
+
+
+def _mock_execute_user_exists(mock_db, exists: bool = True) -> None:
+    """``SELECT 1 FROM users WHERE id = ...`` uses ``Result.first()``."""
+
+    result = MagicMock()
+    result.first.return_value = (1,) if exists else None
+    mock_db.execute.return_value = result
+
+
 # ==========================================
 # FIXTURES
 # ==========================================
@@ -65,16 +81,13 @@ class TestGetAvatar:
         self, mock_get_supabase, override_dependencies, mock_db
     ):
         """Test getting avatar from database"""
-        # Mock user with settings
-        mock_user_obj = MagicMock()
-        mock_user_obj.id = "test-user-id"
-        mock_user_obj.username = "Test User"
-        mock_settings = MagicMock()
-        mock_settings.active_avatar_url = "user123/avatar.png"
-        mock_user_obj.settings = mock_settings
-
-        mock_db.query.return_value.filter.return_value.first.return_value = (
-            mock_user_obj
+        _mock_execute_avatar_context(
+            mock_db,
+            {
+                "username": "Test User",
+                "active_avatar_url": "user123/avatar.png",
+                "auth_email": None,
+            },
         )
 
         # Mock Supabase storage
@@ -104,14 +117,13 @@ class TestGetAvatar:
         sample_png,
     ):
         """Test getting avatar when not found - generates default"""
-        # Mock user without avatar
-        mock_user_obj = MagicMock()
-        mock_user_obj.id = "test-user-id"
-        mock_user_obj.username = "testuser"
-        mock_user_obj.settings = None
-
-        mock_db.query.return_value.filter.return_value.first.return_value = (
-            mock_user_obj
+        _mock_execute_avatar_context(
+            mock_db,
+            {
+                "username": "testuser",
+                "active_avatar_url": None,
+                "auth_email": None,
+            },
         )
 
         # Mock default avatar generation
@@ -145,12 +157,7 @@ class TestGetAvatarHistory:
 
     def test_get_avatar_history_success(self, override_dependencies, mock_db):
         """Test getting avatar history"""
-        # Mock user
-        mock_user_obj = MagicMock()
-        mock_user_obj.id = "test-user-id"
-        mock_db.query.return_value.filter.return_value.first.return_value = (
-            mock_user_obj
-        )
+        _mock_execute_user_exists(mock_db, exists=True)
 
         # Mock avatars
         mock_avatar1 = MagicMock()
@@ -167,7 +174,7 @@ class TestGetAvatarHistory:
         mock_avatar2.created_at = MagicMock()
         mock_avatar2.created_at.isoformat.return_value = "2024-01-02T00:00:00"
 
-        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [
+        mock_db.query.return_value.options.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [
             mock_avatar1,
             mock_avatar2,
         ]
@@ -230,12 +237,13 @@ class TestGenerateAvatar:
         self, mock_save_temp, mock_generate, override_dependencies, mock_db, sample_png
     ):
         """Test generating avatar preview"""
-        mock_user_obj = MagicMock()
-        mock_user_obj.id = "test-user-id"
-        mock_user_obj.username = "testuser"
-        mock_user_obj.email = "test@example.com"
-        mock_db.query.return_value.filter.return_value.first.return_value = (
-            mock_user_obj
+        _mock_execute_avatar_context(
+            mock_db,
+            {
+                "username": "testuser",
+                "active_avatar_url": None,
+                "auth_email": "test@example.com",
+            },
         )
 
         mock_generate.return_value = sample_png
@@ -253,10 +261,9 @@ class TestGenerateAvatar:
 
     def test_generate_avatar_empty_prompt(self, override_dependencies, mock_db):
         """Test generating avatar with empty prompt"""
-        mock_user_obj = MagicMock()
-        mock_user_obj.id = "test-user-id"
-        mock_db.query.return_value.filter.return_value.first.return_value = (
-            mock_user_obj
+        _mock_execute_avatar_context(
+            mock_db,
+            {"username": "u", "active_avatar_url": None, "auth_email": None},
         )
 
         payload = {"prompt": ""}
@@ -281,11 +288,7 @@ class TestEditAvatar:
         self, mock_save_temp, mock_edit, override_dependencies, mock_db, sample_png
     ):
         """Test editing avatar successfully"""
-        mock_user_obj = MagicMock()
-        mock_user_obj.id = "test-user-id"
-        mock_db.query.return_value.filter.return_value.first.return_value = (
-            mock_user_obj
-        )
+        _mock_execute_user_exists(mock_db, exists=True)
 
         mock_edit.return_value = sample_png
         mock_save_temp.return_value = "temp-avatar-id-456"

@@ -161,13 +161,13 @@ class TestGetTempAvatar:
         """Test successful temp avatar retrieval."""
         import json
         import base64
-        from datetime import datetime
+        from datetime import UTC, datetime
 
         avatar_bytes = b"fake_image_data"
         data = {
             "avatar_bytes_base64": base64.b64encode(avatar_bytes).decode("utf-8"),
             "prompt": "test prompt",
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         }
         mock_redis.get.return_value = json.dumps(data)
 

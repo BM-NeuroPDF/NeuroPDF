@@ -1,8 +1,9 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import NotFoundPage from '@/app/not-found';
-import GlobalError from '@/app/error';
-import { captureException } from '@sentry/nextjs';
+import SegmentError from '@/app/error';
+import RootGlobalError from '@/app/global-error';
+import * as SentryNext from '@sentry/nextjs';
 
 vi.mock('@/context/LanguageContext', () => ({
   useLanguage: () => ({
@@ -29,21 +30,53 @@ describe('error pages', () => {
     expect(screen.getByText('Doc A')).toBeInTheDocument();
   });
 
-  it('renders global error page with event id and retry', () => {
+  it('renders segment error page with event id and retry', async () => {
     const reset = vi.fn();
-    render(<GlobalError error={new Error('boom')} reset={reset} />);
+    render(<SegmentError error={new Error('boom')} reset={reset} />);
 
     expect(screen.getByText('appErrorTitle')).toBeInTheDocument();
-    expect(screen.getByText(/evt_test_123/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/evt_test_123/i)).toBeInTheDocument();
+    });
     fireEvent.click(screen.getByRole('button', { name: 'appErrorRetry' }));
     expect(reset).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to error digest when sentry id is empty', async () => {
-    vi.mocked(captureException).mockReturnValueOnce(undefined as unknown as string);
-    render(<GlobalError error={Object.assign(new Error('boom'), { digest: 'digest-42' })} reset={vi.fn()} />);
+  it('falls back to error digest when sentry id is empty (segment error)', async () => {
+    vi.mocked(SentryNext.captureException).mockReturnValueOnce(undefined as unknown as string);
+    render(
+      <SegmentError
+        error={Object.assign(new Error('boom'), { digest: 'digest-42' })}
+        reset={vi.fn()}
+      />,
+    );
     await waitFor(() => {
       expect(screen.getByText(/digest-42/i)).toBeInTheDocument();
+    });
+  });
+
+  it('renders root global-error with lazy Sentry capture and retry', async () => {
+    const reset = vi.fn();
+    render(<RootGlobalError error={new Error('root boom')} reset={reset} />);
+
+    expect(screen.getByRole('heading', { name: /Bir şeyler ters gitti/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/evt_test_123/i)).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Tekrar dene/i }));
+    expect(reset).toHaveBeenCalledTimes(1);
+  });
+
+  it('global-error falls back to digest when Sentry returns empty id', async () => {
+    vi.mocked(SentryNext.captureException).mockReturnValueOnce(undefined as unknown as string);
+    render(
+      <RootGlobalError
+        error={Object.assign(new Error('x'), { digest: 'dg-root' })}
+        reset={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText(/dg-root/i)).toBeInTheDocument();
     });
   });
 

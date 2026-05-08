@@ -1,0 +1,2 @@
+INVALID_TOKEN_WWW_AUTHENTICATE = 'Bearer error="invalid_token"'
+DELETION_OTP_TTL_SECONDS = 600

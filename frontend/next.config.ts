@@ -16,14 +16,11 @@ function readMbEnv(keys: string[], fallbackMb: number): number {
 }
 
 const maxUploadMb = readMbEnv(
-  [
-    'NEXT_PUBLIC_MAX_FILE_SIZE_USER_MB',
-    'MAX_FILE_SIZE_USER_MB',
-    'FRONTEND_MAX_UPLOAD_MB',
-  ],
-  50
+  ['NEXT_PUBLIC_MAX_FILE_SIZE_USER_MB', 'MAX_FILE_SIZE_USER_MB', 'FRONTEND_MAX_UPLOAD_MB'],
+  50,
 );
 const maxUploadBytes = Math.floor(maxUploadMb * 1024 * 1024);
+const workspaceRoot = path.resolve(__dirname, '..');
 
 const withBundleAnalyzer = bundleAnalyzer({
   enabled: process.env.ANALYZE === 'true',
@@ -33,13 +30,18 @@ const withBundleAnalyzer = bundleAnalyzer({
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  outputFileTracingRoot: path.join(__dirname),
+  outputFileTracingRoot: workspaceRoot,
 
   experimental: {
     serverActions: {
       bodySizeLimit: `${maxUploadMb}mb`,
     },
-    middlewareClientMaxBodySize: maxUploadBytes,
+    proxyClientMaxBodySize: maxUploadBytes,
+    /** Smaller client bundles: lucide barrel → per-icon imports at compile time. */
+    optimizePackageImports: ['lucide-react'],
+  },
+  turbopack: {
+    root: workspaceRoot,
   },
 
   async rewrites() {

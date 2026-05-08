@@ -91,6 +91,20 @@ describe('usePdfToolUpload', () => {
     expect(onError).toHaveBeenCalledWith({ code: 'MAX_FILES_EXCEEDED' });
   });
 
+  it('returns early when there are no accepted files and no rejections', () => {
+    const { result } = renderHook(() =>
+      usePdfToolUpload({
+        maxBytes: 1000,
+        onFilesAccepted,
+        onError,
+      }),
+    );
+
+    result.current.onDrop([], []);
+    expect(onFilesAccepted).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it('maps dropzone rejection codes', () => {
     const { result } = renderHook(() =>
       usePdfToolUpload({
@@ -100,17 +114,71 @@ describe('usePdfToolUpload', () => {
       }),
     );
 
-    result.current.onDrop([], [{ errors: [{ code: 'file-invalid-type', message: 'bad type' }] } as never]);
+    result.current.onDrop(
+      [],
+      [{ errors: [{ code: 'file-invalid-type', message: 'bad type' }] } as never],
+    );
     expect(onError).toHaveBeenLastCalledWith({ code: 'INVALID_TYPE' });
 
-    result.current.onDrop([], [{ errors: [{ code: 'file-too-large', message: 'too large' }] } as never]);
+    result.current.onDrop(
+      [],
+      [{ errors: [{ code: 'file-too-large', message: 'too large' }] } as never],
+    );
     expect(onError).toHaveBeenLastCalledWith({ code: 'SIZE_EXCEEDED' });
 
-    result.current.onDrop([], [{ errors: [{ code: 'too-many-files', message: 'too many' }] } as never]);
+    result.current.onDrop(
+      [],
+      [{ errors: [{ code: 'too-many-files', message: 'too many' }] } as never],
+    );
     expect(onError).toHaveBeenLastCalledWith({ code: 'MAX_FILES_EXCEEDED' });
 
-    result.current.onDrop([], [{ errors: [{ code: 'something-else', message: 'custom' }] } as never]);
+    result.current.onDrop(
+      [],
+      [{ errors: [{ code: 'something-else', message: 'custom' }] } as never],
+    );
     expect(onError).toHaveBeenLastCalledWith({ code: 'CUSTOM', message: 'custom' });
+  });
+
+  it('maps dropzone rejection with missing error detail to CUSTOM', () => {
+    const { result } = renderHook(() =>
+      usePdfToolUpload({
+        maxBytes: 1000,
+        onFilesAccepted,
+        onError,
+      }),
+    );
+
+    result.current.onDrop([], [{ errors: [] } as never]);
+    expect(onError).toHaveBeenLastCalledWith({
+      code: 'CUSTOM',
+      message: 'Unknown file rejection',
+    });
+  });
+
+  it('rejects oversized panel file via handleDropFromPanel', () => {
+    const { result } = renderHook(() =>
+      usePdfToolUpload({
+        maxBytes: 10,
+        onFilesAccepted,
+        onError,
+      }),
+    );
+    const file = new File(['01234567890123456789'], 'big.pdf', { type: 'application/pdf' });
+    result.current.handleDropFromPanel(file);
+    expect(onError).toHaveBeenCalledWith({ code: 'SIZE_EXCEEDED' });
+  });
+
+  it('rejects invalid panel MIME/extension via handleDropFromPanel', () => {
+    const { result } = renderHook(() =>
+      usePdfToolUpload({
+        maxBytes: 1000,
+        onFilesAccepted,
+        onError,
+      }),
+    );
+    const file = new File(['txt'], 'notes.txt', { type: 'text/plain' });
+    result.current.handleDropFromPanel(file);
+    expect(onError).toHaveBeenCalledWith({ code: 'INVALID_TYPE' });
   });
 
   it('accepts panel file and stops propagation', () => {

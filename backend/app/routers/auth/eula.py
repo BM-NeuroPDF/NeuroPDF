@@ -7,6 +7,7 @@ from supabase import Client
 from app.config import settings
 from app.db import get_db, get_supabase
 from app.deps import get_current_user as get_current_user_dep
+from app.redis_client import invalidate_auth_me_cache
 from app.schemas import auth as auth_schemas
 from app.utils import helpers
 
@@ -32,8 +33,11 @@ def accept_eula(
         ).execute()
     else:
         db.execute(
-            text("UPDATE user_settings SET eula_accepted = :accepted WHERE user_id = :uid"),
+            text(
+                "UPDATE user_settings SET eula_accepted = :accepted WHERE user_id = :uid"
+            ),
             {"accepted": payload.accepted, "uid": uid},
         )
         db.commit()
+    invalidate_auth_me_cache(uid)
     return {"message": "Success"}

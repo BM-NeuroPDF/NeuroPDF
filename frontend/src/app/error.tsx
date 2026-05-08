@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { captureException } from '@sentry/nextjs';
 import { useLanguage } from '@/context/LanguageContext';
 
 type AppErrorProps = {
@@ -15,8 +14,19 @@ export default function GlobalError({ error, reset }: AppErrorProps) {
   const [eventId, setEventId] = useState<string | null>(null);
 
   useEffect(() => {
-    const capturedId = captureException(error);
-    setEventId(capturedId ?? error.digest ?? null);
+    let cancelled = false;
+    void import('@sentry/nextjs')
+      .then(({ captureException }) => {
+        if (cancelled) return;
+        const capturedId = captureException(error);
+        setEventId(capturedId ?? error.digest ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setEventId(error.digest ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [error]);
 
   return (

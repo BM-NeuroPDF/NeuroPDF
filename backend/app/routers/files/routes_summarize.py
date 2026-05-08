@@ -325,7 +325,11 @@ async def trigger_summarize_task(
         logger.debug("Token çözüldü. User ID: %s", user_id)
 
         response = (
-            supabase.table("documents").select("*").eq("id", file_id).single().execute()
+            supabase.table("documents")
+            .select("id,user_id,storage_path")
+            .eq("id", file_id)
+            .single()
+            .execute()
         )
         if not response.data:
             raise HTTPException(status_code=404, detail="Dosya bulunamadı")
@@ -440,7 +444,11 @@ async def get_file_summary(
     try:
         user_id = current_user.get("sub")
         response = (
-            supabase.table("documents").select("*").eq("id", file_id).single().execute()
+            supabase.table("documents")
+            .select("id,user_id,status,summary,error")
+            .eq("id", file_id)
+            .single()
+            .execute()
         )
 
         if not response.data:

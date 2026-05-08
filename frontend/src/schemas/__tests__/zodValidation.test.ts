@@ -10,6 +10,21 @@ describe('parseOrValidationAppError', () => {
     expect(out).toEqual({ id: 'x' });
   });
 
+  it('falls back inlineMessage when issue messages are empty', () => {
+    const schema = z.object({
+      id: z.string().superRefine((_v, ctx) => {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: '' });
+      }),
+    });
+    expect(() => parseOrValidationAppError(schema, { id: 'any' }, 'code.empty')).toThrow(AppError);
+    try {
+      parseOrValidationAppError(schema, { id: 'any' }, 'code.empty');
+    } catch (err) {
+      const appErr = err as AppError;
+      expect(appErr.inlineMessage).toBe('Doğrulama hatası');
+    }
+  });
+
   it('throws AppError with validation metadata when parsing fails', () => {
     const schema = z.object({ id: z.string().min(2, 'too-short') });
     expect(() => parseOrValidationAppError(schema, { id: 'x' }, 'code.fail')).toThrow(AppError);

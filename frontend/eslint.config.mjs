@@ -1,19 +1,12 @@
 import { defineConfig, globalIgnores } from 'eslint/config';
-import { FlatCompat } from '@eslint/eslintrc';
-import coreWebVitals from 'eslint-config-next/core-web-vitals.js';
-import nextTypescript from 'eslint-config-next/typescript.js';
+import coreWebVitals from 'eslint-config-next/core-web-vitals';
+import nextTypescript from 'eslint-config-next/typescript';
 import eslintConfigPrettier from 'eslint-config-prettier/flat';
 import eslintPluginEslintComments from 'eslint-plugin-eslint-comments';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const compat = new FlatCompat({ baseDirectory: __dirname });
 
 export default defineConfig([
-  ...compat.config(coreWebVitals),
-  ...compat.config(nextTypescript),
+  ...coreWebVitals,
+  ...nextTypescript,
   {
     plugins: {
       'eslint-comments': eslintPluginEslintComments,

@@ -43,7 +43,7 @@ class TestUserRepoGetLlmProvider:
     async def test_no_user_row_returns_local(self):
         repo = UserRepository()
         db = MagicMock()
-        db.query.return_value.filter.return_value.first.return_value = None
+        db.scalar.return_value = None
         assert await repo.get_llm_provider("uid", db=db, supabase=None) == "local"
 
 

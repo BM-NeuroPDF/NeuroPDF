@@ -8,7 +8,7 @@ import json
 import os
 import requests  # HTTP isteği için gerekli
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Optional
 
@@ -652,7 +652,7 @@ def save_temp_avatar(user_id: str, avatar_bytes: bytes, prompt: str) -> str:
             data = {
                 "avatar_bytes_base64": avatar_base64,
                 "prompt": prompt,
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now(UTC).isoformat(),
             }
             redis_key = f"temp_avatar:{user_id}:{temp_avatar_id}"
             redis_client.setex(redis_key, TEMP_AVATAR_TTL, json.dumps(data))

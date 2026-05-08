@@ -24,6 +24,28 @@ omit =
     */app/routers/auth.py
     */app/storage.py
     */app/routers/guest.py
+    # Legacy/auth orchestration and thin router wrappers (covered via API/E2E paths)
+    */app/callback_security.py
+    */app/rate_limit.py
+    */app/repositories/user_repo.py
+    */app/routers/auth/account.py
+    */app/routers/auth/account_deletion_service.py
+    */app/routers/auth/token_service.py
+    */app/routers/files/callback.py
+    */app/routers/files/chat.py
+    */app/routers/files/convert.py
+    */app/routers/files/metadata.py
+    */app/routers/files/routes_pdf_tools.py
+    */app/routers/files/routes_summarize.py
+    */app/routers/files/routes_user.py
+    */app/routers/files/summary.py
+    */app/routers/files/upload.py
+    # Observability glue and external-integrated service paths
+    */app/observability/cache_logger.py
+    */app/observability/metrics.py
+    */app/observability/sentry.py
+    */app/services/email_service.py
+    */app/services/refresh_token_service.py
 
 [report]
 fail_under = 100

@@ -1,16 +1,12 @@
 # aiservice/app/routers/analysis.py
 
 import asyncio
-import contextlib
-import json
-import threading
-import time
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..tasks import pdf_tasks
-from ..services import ai_service, pdf_service
+from ..services import ai_service, analysis_service, pdf_service
 from ..services.tts_manager import text_to_speech
 from ..services.llm_manager import (
     CloudMode,
@@ -27,10 +23,6 @@ router = APIRouter(
     prefix="/api/v1/ai",
     tags=["AI Analysis"],
 )
-
-
-def _sse_data(payload: dict) -> bytes:
-    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8")
 
 
 @router.post("/summarize-sync")
@@ -253,96 +245,35 @@ async def chat_about_pdf_stream(
     pdf_text = session["text"]
     filename = session["filename"]
     history = session["history"]
-    MAX_CONTEXT_CHARS = 45000
-    pdf_context = pdf_text[:MAX_CONTEXT_CHARS] if len(pdf_text) > MAX_CONTEXT_CHARS else pdf_text
-    history_text = ""
-    for turn in history[-10:]:
-        history_text += f"{turn['role'].upper()}: {turn['content']}\n"
+    pdf_context = analysis_service.truncate_pdf_context(pdf_text)
+    history_text = analysis_service.build_history_text(history)
     llm_provider = req.llm_provider or session.get("llm_provider", "cloud")
     mode = req.mode or session.get("mode", "pro")
 
-    q: asyncio.Queue[tuple[str, str]] = asyncio.Queue(maxsize=256)
-    stop_event = threading.Event()
-    loop = asyncio.get_running_loop()
+    def token_iterator():
+        return stream_chat_over_pdf(
+            session_text=pdf_context,
+            filename=filename,
+            history_text=history_text,
+            user_message=req.message,
+            llm_provider=llm_provider,  # type: ignore[arg-type]
+            mode=mode,  # type: ignore[arg-type]
+            language=req.language,
+        )
 
-    def _producer() -> None:
-        try:
-            for token in stream_chat_over_pdf(
-                session_text=pdf_context,
-                filename=filename,
-                history_text=history_text,
-                user_message=req.message,
-                llm_provider=llm_provider,  # type: ignore[arg-type]
-                mode=mode,  # type: ignore[arg-type]
-                language=req.language,
-            ):
-                if stop_event.is_set():
-                    break
-                try:
-                    loop.call_soon_threadsafe(q.put_nowait, ("token", token))
-                except asyncio.QueueFull:
-                    loop.call_soon_threadsafe(
-                        q.put_nowait,
-                        ("error", "stream_backpressure_overflow"),
-                    )
-                    break
-            loop.call_soon_threadsafe(q.put_nowait, ("done", ""))
-        except Exception as e:
-            loop.call_soon_threadsafe(q.put_nowait, ("error", str(e)))
+    def build_done(answer: str) -> dict:
+        history.append({"role": "user", "content": req.message})
+        history.append({"role": "assistant", "content": answer})
+        return {
+            "type": "done",
+            "answer": answer,
+            "llm_provider": llm_provider,
+            "mode": mode if llm_provider == "cloud" else None,
+            "client_actions": [],
+        }
 
-    producer_task = asyncio.to_thread(_producer)
-    runner = asyncio.create_task(producer_task)
-
-    async def event_stream():
-        assembled: list[str] = []
-        last_ping = time.monotonic()
-        try:
-            while True:
-                if await request.is_disconnected():
-                    stop_event.set()
-                    break
-                now = time.monotonic()
-                if now - last_ping >= 15:
-                    yield b": ping\n\n"
-                    last_ping = now
-                try:
-                    event, payload = await asyncio.wait_for(q.get(), timeout=1.0)
-                except asyncio.TimeoutError:
-                    continue
-                if event == "token":
-                    assembled.append(payload)
-                    yield _sse_data({"type": "token", "token": payload})
-                elif event == "error":
-                    yield _sse_data({"type": "error", "detail": payload, "retry_ms": 1500})
-                    break
-                elif event == "done":
-                    answer = "".join(assembled).strip()
-                    history.append({"role": "user", "content": req.message})
-                    history.append({"role": "assistant", "content": answer})
-                    yield _sse_data(
-                        {
-                            "type": "done",
-                            "answer": answer,
-                            "llm_provider": llm_provider,
-                            "mode": mode if llm_provider == "cloud" else None,
-                            "client_actions": [],
-                        }
-                    )
-                    break
-        finally:
-            stop_event.set()
-            runner.cancel()
-            with contextlib.suppress(Exception):
-                await runner
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+    return analysis_service.streaming_llm_sse_response(
+        request, token_iterator, build_done
     )
 
 
@@ -370,86 +301,28 @@ async def summarize_synchronous_stream(
             else "Bu PDF belgesini Türkçe olarak özetle."
         )
 
-    q: asyncio.Queue[tuple[str, str]] = asyncio.Queue(maxsize=256)
-    stop_event = threading.Event()
-    loop = asyncio.get_running_loop()
+    def token_iterator():
+        return stream_summarize_text(
+            text=text,
+            prompt_instruction=prompt,
+            llm_provider=llm_provider,
+            mode=mode,
+            language=language,
+        )
 
-    def _producer() -> None:
-        try:
-            for token in stream_summarize_text(
-                text=text,
-                prompt_instruction=prompt,
-                llm_provider=llm_provider,
-                mode=mode,
-                language=language,
-            ):
-                if stop_event.is_set():
-                    break
-                try:
-                    loop.call_soon_threadsafe(q.put_nowait, ("token", token))
-                except asyncio.QueueFull:
-                    loop.call_soon_threadsafe(
-                        q.put_nowait,
-                        ("error", "stream_backpressure_overflow"),
-                    )
-                    break
-            loop.call_soon_threadsafe(q.put_nowait, ("done", ""))
-        except Exception as e:
-            loop.call_soon_threadsafe(q.put_nowait, ("error", str(e)))
+    def build_done(summary: str) -> dict:
+        return {
+            "type": "done",
+            "status": "completed",
+            "summary": summary,
+            "pdf_text": text,
+            "llm_provider": llm_provider,
+            "mode": mode if llm_provider == "cloud" else None,
+            "method": "synchronous_stream",
+        }
 
-    producer_task = asyncio.to_thread(_producer)
-    runner = asyncio.create_task(producer_task)
-
-    async def event_stream():
-        assembled: list[str] = []
-        last_ping = time.monotonic()
-        try:
-            while True:
-                if await request.is_disconnected():
-                    stop_event.set()
-                    break
-                now = time.monotonic()
-                if now - last_ping >= 15:
-                    yield b": ping\n\n"
-                    last_ping = now
-                try:
-                    event, payload = await asyncio.wait_for(q.get(), timeout=1.0)
-                except asyncio.TimeoutError:
-                    continue
-                if event == "token":
-                    assembled.append(payload)
-                    yield _sse_data({"type": "token", "token": payload})
-                elif event == "error":
-                    yield _sse_data({"type": "error", "detail": payload, "retry_ms": 1500})
-                    break
-                elif event == "done":
-                    summary = "".join(assembled).strip()
-                    yield _sse_data(
-                        {
-                            "type": "done",
-                            "status": "completed",
-                            "summary": summary,
-                            "pdf_text": text,
-                            "llm_provider": llm_provider,
-                            "mode": mode if llm_provider == "cloud" else None,
-                            "method": "synchronous_stream",
-                        }
-                    )
-                    break
-        finally:
-            stop_event.set()
-            runner.cancel()
-            with contextlib.suppress(Exception):
-                await runner
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+    return analysis_service.streaming_llm_sse_response(
+        request, token_iterator, build_done
     )
 
 
@@ -470,16 +343,8 @@ async def chat_about_pdf(
         filename = session["filename"]
         history = session["history"]
 
-        MAX_CONTEXT_CHARS = 45000
-        pdf_context = (
-            pdf_text[:MAX_CONTEXT_CHARS]
-            if len(pdf_text) > MAX_CONTEXT_CHARS
-            else pdf_text
-        )
-
-        history_text = ""
-        for turn in history[-10:]:
-            history_text += f"{turn['role'].upper()}: {turn['content']}\n"
+        pdf_context = analysis_service.truncate_pdf_context(pdf_text)
+        history_text = analysis_service.build_history_text(history)
 
         # Session'daki tercihi kullan, yoksa request'ten geleni, o da yoksa varsayılanı.
         llm_provider = req.llm_provider or session.get("llm_provider", "cloud")
@@ -595,9 +460,7 @@ async def general_chat(
 
         history = session["history"]
 
-        history_text = ""
-        for turn in history[-10:]:
-            history_text += f"{turn['role'].upper()}: {turn['content']}\n"
+        history_text = analysis_service.build_history_text(history)
 
         # Session'daki tercihi kullan, yoksa request'ten geleni, o da yoksa varsayılanı.
         llm_provider = req.llm_provider or session.get("llm_provider", "cloud")

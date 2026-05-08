@@ -832,9 +832,7 @@ class TestUserRepositoryShimEndpoints:
     @pytest.mark.asyncio
     async def test_get_llm_provider_returns_cloud_when_db_says_1(self, mock_db):
         repo = UserRepository()
-        mock_user = MagicMock()
-        mock_user.llm_choice_id = 1
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_user
+        mock_db.scalar.return_value = 1
 
         provider = await repo.get_llm_provider(
             user_id="test-user-id", db=mock_db, supabase=None
@@ -845,9 +843,7 @@ class TestUserRepositoryShimEndpoints:
     @pytest.mark.asyncio
     async def test_get_llm_provider_returns_local_when_db_says_0(self, mock_db):
         repo = UserRepository()
-        mock_user = MagicMock()
-        mock_user.llm_choice_id = 0
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_user
+        mock_db.scalar.return_value = 0
 
         provider = await repo.get_llm_provider(
             user_id="test-user-id", db=mock_db, supabase=None
@@ -858,7 +854,7 @@ class TestUserRepositoryShimEndpoints:
     @pytest.mark.asyncio
     async def test_get_llm_provider_fallback_to_local_on_db_exception(self, mock_db):
         repo = UserRepository()
-        mock_db.query.side_effect = RuntimeError("db boom")
+        mock_db.scalar.side_effect = RuntimeError("db boom")
 
         provider = await repo.get_llm_provider(
             user_id="test-user-id", db=mock_db, supabase=None
@@ -922,3 +918,20 @@ class TestPDFOperations:
 
         # Should return merged PDF or success status
         assert response.status_code in [200, 201]
+
+
+class TestMarkdownToPdfAuth:
+    def test_markdown_to_pdf_requires_auth(self):
+        response = client.post(
+            "/files/markdown-to-pdf",
+            json={"markdown": "# Test"},
+        )
+        assert response.status_code == 401
+
+    def test_markdown_to_pdf_with_auth_succeeds(self, override_dependencies):
+        response = client.post(
+            "/files/markdown-to-pdf",
+            json={"markdown": "# Test\n\nBu bir test markdown içeriğidir."},
+        )
+        assert response.status_code == 200
+        assert response.headers.get("content-type", "").startswith("application/pdf")

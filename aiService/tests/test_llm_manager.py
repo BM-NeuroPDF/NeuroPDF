@@ -10,8 +10,11 @@ from app.services.llm_manager import (
     summarize_text,
     chat_over_pdf,
     general_chat,
+    stream_chat_over_pdf,
+    stream_summarize_text,
     _build_chat_prompt,
 )
+from app.services import llm_manager
 
 
 # ==========================================
@@ -274,3 +277,80 @@ class TestBuildChatPrompt:
         assert "CHAT HISTORY" in result
         assert "USER QUESTION" in result
         assert "Q1" in result
+
+
+class TestStreamingHelpers:
+    @patch(
+        "app.services.llm_manager.ai_service.gemini_generate_stream",
+        return_value=iter(["z"]),
+    )
+    def test_cloud_generate_stream_wrapper(self, _stream):
+        out = list(
+            llm_manager._cloud_generate_stream("t", "i", mode="flash", language="tr")
+        )
+        assert out == ["z"]
+
+    @patch(
+        "app.services.llm_manager._cloud_generate_stream",
+        return_value=iter(["t1", "t2"]),
+    )
+    def test_stream_chat_over_pdf_cloud(self, _stream):
+        out = list(
+            stream_chat_over_pdf(
+                session_text="pdf",
+                filename="f.pdf",
+                history_text="",
+                user_message="q",
+                llm_provider="cloud",
+            )
+        )
+        assert out == ["t1", "t2"]
+
+    @patch("app.services.llm_manager._local_chat_generate", return_value="a b")
+    def test_stream_chat_over_pdf_local(self, _local):
+        out = list(
+            stream_chat_over_pdf(
+                session_text="pdf",
+                filename="f.pdf",
+                history_text="",
+                user_message="q",
+                llm_provider="local",
+            )
+        )
+        assert "".join(out).strip() == "a b"
+
+    def test_stream_chat_over_pdf_invalid_provider(self):
+        with pytest.raises(HTTPException) as e:
+            list(
+                stream_chat_over_pdf(
+                    session_text="pdf",
+                    filename="f.pdf",
+                    history_text="",
+                    user_message="q",
+                    llm_provider="invalid",  # type: ignore[arg-type]
+                )
+            )
+        assert e.value.status_code == 400
+
+    @patch("app.services.llm_manager._cloud_generate_stream", return_value=iter(["s1"]))
+    def test_stream_summarize_text_cloud(self, _stream):
+        assert list(stream_summarize_text("body", "inst", llm_provider="cloud")) == [
+            "s1"
+        ]
+
+    @patch(
+        "app.services.llm_manager.analyze_text_with_local_llm",
+        return_value={"summary": "x y"},
+    )
+    def test_stream_summarize_text_local(self, _local):
+        assert (
+            "".join(
+                list(stream_summarize_text("body", "inst", llm_provider="local"))
+            ).strip()
+            == "x y"
+        )
+
+    def test_stream_summarize_text_invalid_provider(self):
+        with pytest.raises(HTTPException) as e:
+            list(stream_summarize_text("body", "inst", llm_provider="invalid"))  # type: ignore[arg-type]
+        assert e.value.status_code == 400

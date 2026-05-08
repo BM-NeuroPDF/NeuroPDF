@@ -37,7 +37,7 @@ class StatsRepository(StatsRepoProtocol):
             if settings.USE_SUPABASE and supabase is not None:
                 res = (
                     supabase.table("user_stats")
-                    .select("*")
+                    .select("summary_count,tools_count")
                     .eq("user_id", user_id)
                     .execute()
                 )
@@ -225,7 +225,7 @@ class StatsRepository(StatsRepoProtocol):
             if settings.USE_SUPABASE and supabase is not None:
                 users_response = (
                     supabase.table("users")
-                    .select("*", count="exact", head=True)
+                    .select("id", count="exact", head=True)
                     .execute()
                 )
                 total_users = (

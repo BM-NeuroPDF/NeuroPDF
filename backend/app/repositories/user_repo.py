@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -127,11 +127,9 @@ class UserRepository(UserRepoProtocol):
             return "local"
         try:
             if db is not None:
-                user = db.query(User).filter(User.id == user_id).first()
-                if user:
-                    return (
-                        "local" if getattr(user, "llm_choice_id", 0) == 0 else "cloud"
-                    )
+                lic = db.scalar(select(User.llm_choice_id).where(User.id == user_id))
+                if lic is not None:
+                    return "local" if int(lic) == 0 else "cloud"
         except Exception as e:
             logger.warning(
                 "Failed to get llm provider for %s: %s", user_id, e, exc_info=True

@@ -361,3 +361,47 @@ class TestChatPdfHttp500:
                 headers=HEADERS,
             )
         assert r.status_code == 500
+
+
+class TestStreamingEndpoints:
+    @patch(
+        "app.routers.analysis.stream_chat_over_pdf", return_value=iter(["tok1", "tok2"])
+    )
+    def test_chat_stream_sse(self, _stream, client):
+        sess = {
+            "text": "pdf body",
+            "filename": "f.pdf",
+            "history": [],
+            "llm_provider": "cloud",
+            "mode": "flash",
+            "created_at": __import__("time").time(),
+        }
+        with patch.dict(
+            "app.services.ai_service._PDF_CHAT_SESSIONS", {"sse1": sess}, clear=False
+        ):
+            with client.stream(
+                "POST",
+                "/api/v1/ai/chat/stream",
+                json={"session_id": "sse1", "message": "q"},
+                headers=HEADERS,
+            ) as resp:
+                body = b"".join(resp.iter_bytes())
+        assert b'"type": "token"' in body
+        assert b'"type": "done"' in body
+
+    @patch("app.routers.analysis.stream_summarize_text", return_value=iter(["a", "b"]))
+    @patch(
+        "app.routers.analysis.pdf_service.extract_text_from_pdf_bytes",
+        return_value="text",
+    )
+    def test_summarize_sync_stream_sse(self, _ext, _stream, client):
+        pdf = io.BytesIO(b"%PDF-1.4")
+        with client.stream(
+            "POST",
+            "/api/v1/ai/summarize-sync/stream?llm_provider=cloud&language=tr",
+            files={"file": ("x.pdf", pdf, "application/pdf")},
+            headers=HEADERS,
+        ) as resp:
+            body = b"".join(resp.iter_bytes())
+        assert b'"type": "token"' in body
+        assert b'"method": "synchronous_stream"' in body

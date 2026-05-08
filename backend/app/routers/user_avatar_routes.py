@@ -1,7 +1,8 @@
 # app/routers/user_avatar_routes.py
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Body, Form
-from sqlalchemy.orm import Session
+from sqlalchemy import desc, text
+from sqlalchemy.orm import Session, load_only
 from pydantic import BaseModel
 from typing import Optional
 import base64
@@ -32,6 +33,47 @@ router = APIRouter(prefix="/api/v1/user", tags=["User Avatar"])
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 JPEG_MAGIC = b"\xff\xd8\xff"
 logger = logging.getLogger(__name__)
+
+
+def _fetch_local_avatar_context(db: Session, user_id: str) -> dict | None:
+    """Single JOIN (+ scalar subquery) for avatar URL + display-name sources."""
+    row = (
+        db.execute(
+            text(
+                """
+            SELECT u.username AS username,
+                   us.active_avatar_url AS active_avatar_url,
+                   (SELECT ua.provider_key
+                    FROM user_auth ua
+                    WHERE ua.user_id = u.id AND ua.provider = 'local'
+                    ORDER BY ua.id ASC
+                    LIMIT 1) AS auth_email
+            FROM users u
+            LEFT JOIN user_settings us ON us.user_id = u.id
+            WHERE u.id = :uid
+            LIMIT 1
+            """
+            ),
+            {"uid": user_id},
+        )
+        .mappings()
+        .first()
+    )
+    return dict(row) if row else None
+
+
+def _clear_invalid_avatar_url_local(db: Session, user_id: str) -> None:
+    db.execute(
+        text("UPDATE user_settings SET active_avatar_url = NULL WHERE user_id = :uid"),
+        {"uid": user_id},
+    )
+    db.commit()
+
+
+def _display_name_from_local_row(row: dict | None) -> str:
+    if not row:
+        return "User"
+    return row.get("username") or row.get("auth_email") or "User"
 
 
 # --- REQUEST MODELLERİ ---
@@ -93,21 +135,20 @@ async def get_avatar(
     )
 
     active_avatar_url = None
+    local_row: dict | None = None
 
-    # 2. Önce DB'den çekmeyi dene
+    # 2. Önce DB'den çekmeyi dene (tek JOIN + alt sorgu — SELECT * yerine yalnızca kullanılan kolonlar)
     if db is not None:
         try:
-            from app.models import User
-
-            user = db.query(User).filter(User.id == target_user_id).first()
-            if user:
+            local_row = _fetch_local_avatar_context(db, target_user_id)
+            if local_row:
                 logger.info(
-                    f"User found in DB: {target_user_id}, settings: {user.settings is not None}"
+                    f"User found in DB: {target_user_id}, "
+                    f"has_avatar_url={bool(local_row.get('active_avatar_url'))}"
                 )
-                if user.settings and user.settings.active_avatar_url:
-                    # Geçersiz avatar URL'lerini temizle (static/defaults/default_avatar.png gibi)
-                    temp_url = user.settings.active_avatar_url
-                    if temp_url and temp_url != "static/defaults/default_avatar.png":
+                temp_url = local_row.get("active_avatar_url")
+                if temp_url:
+                    if temp_url != "static/defaults/default_avatar.png":
                         active_avatar_url = temp_url
                         logger.info(
                             f"✅ Avatar URL found in DB for {target_user_id}: {active_avatar_url}"
@@ -116,10 +157,8 @@ async def get_avatar(
                         logger.warning(
                             f"⚠️ Invalid avatar URL in DB for {target_user_id}: {temp_url}, will create new avatar"
                         )
-                        # Geçersiz URL'i temizle
-                        if user.settings:
-                            user.settings.active_avatar_url = None
-                            db.commit()
+                        _clear_invalid_avatar_url_local(db, target_user_id)
+                        local_row["active_avatar_url"] = None
                 else:
                     logger.info(
                         f"⚠️ User found but no active_avatar_url in settings for {target_user_id}"
@@ -189,11 +228,8 @@ async def get_avatar(
         # DB varsa otomatik avatar oluştur
         if db is not None:
             try:
-                from app.models import User
-
-                user = db.query(User).filter(User.id == target_user_id).first()
-                if user:
-                    username = user.username or user.email or "User"
+                if local_row:
+                    username = _display_name_from_local_row(local_row)
                     logger.info(
                         f"Creating initial avatar for user {target_user_id} with username: {username}"
                     )
@@ -255,16 +291,12 @@ async def get_avatar(
             f"Avatar file not found in storage: {active_avatar_url}, generating default avatar"
         )
         try:
-            if db is not None:
-                from app.models import User
+            if db is not None and local_row:
+                username = _display_name_from_local_row(local_row)
+                avatar_bytes = generate_avatar_from_name(username)
+                from fastapi.responses import Response
 
-                user = db.query(User).filter(User.id == target_user_id).first()
-                if user:
-                    username = user.username or user.email or "User"
-                    avatar_bytes = generate_avatar_from_name(username)
-                    from fastapi.responses import Response
-
-                    return Response(content=avatar_bytes, media_type="image/png")
+                return Response(content=avatar_bytes, media_type="image/png")
         except Exception as e:
             logger.error(f"Failed to generate default avatar: {e}", exc_info=True)
         raise HTTPException(status_code=404, detail="Avatar file not found in storage")
@@ -288,16 +320,12 @@ async def get_avatar(
                 f"Avatar file not found in storage, generating default avatar for {target_user_id}"
             )
             try:
-                if db is not None:
-                    from app.models import User
+                if db is not None and local_row:
+                    username = _display_name_from_local_row(local_row)
+                    avatar_bytes = generate_avatar_from_name(username)
+                    from fastapi.responses import Response
 
-                    user = db.query(User).filter(User.id == target_user_id).first()
-                    if user:
-                        username = user.username or user.email or "User"
-                        avatar_bytes = generate_avatar_from_name(username)
-                        from fastapi.responses import Response
-
-                        return Response(content=avatar_bytes, media_type="image/png")
+                    return Response(content=avatar_bytes, media_type="image/png")
             except Exception as gen_error:
                 logger.error(
                     f"Failed to generate default avatar: {gen_error}", exc_info=True
@@ -317,15 +345,23 @@ async def get_avatar_history(
 ):
     target_user_id = resolve_user_id(user_id, current_user)
 
-    from app.models import User
-    from sqlalchemy import desc
-
-    user = db.query(User).filter(User.id == target_user_id).first()
-    if not user:
+    exists = db.execute(
+        text("SELECT 1 FROM users WHERE id = :uid LIMIT 1"),
+        {"uid": target_user_id},
+    ).first()
+    if exists is None:
         raise HTTPException(status_code=404, detail="User not found")
 
     avatars = (
         db.query(UserAvatar)
+        .options(
+            load_only(
+                UserAvatar.id,
+                UserAvatar.image_path,
+                UserAvatar.is_ai_generated,
+                UserAvatar.created_at,
+            )
+        )
         .filter(UserAvatar.user_id == target_user_id)
         .order_by(desc(UserAvatar.created_at))
         .limit(limit)
@@ -412,13 +448,11 @@ async def generate_avatar_preview(
 ):
     target_user_id = resolve_user_id(user_id, current_user)
 
-    from app.models import User
-
-    user = db.query(User).filter(User.id == target_user_id).first()
-    if not user:
+    row = _fetch_local_avatar_context(db, target_user_id)
+    if not row:
         raise HTTPException(status_code=404, detail="User not found")
 
-    username = user.username or user.email or "User"
+    username = _display_name_from_local_row(row)
 
     if not request.prompt or not request.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt is required")
@@ -454,10 +488,11 @@ async def edit_avatar(
 ):
     target_user_id = resolve_user_id(user_id, current_user)
 
-    from app.models import User
-
-    user = db.query(User).filter(User.id == target_user_id).first()
-    if not user:
+    exists = db.execute(
+        text("SELECT 1 FROM users WHERE id = :uid LIMIT 1"),
+        {"uid": target_user_id},
+    ).first()
+    if exists is None:
         raise HTTPException(status_code=404, detail="User not found")
 
     # Dosya kontrolleri

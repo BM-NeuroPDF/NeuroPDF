@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import jwt
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -79,44 +80,58 @@ def issue_refresh_token(
 
 
 def revoke_refresh_token_by_jti(db: Session, jti: str) -> bool:
-    row = db.query(RefreshToken).filter(RefreshToken.jti == jti).first()
-    if not row:
-        return False
-    if row.revoked_at is None:
-        row.revoked_at = _now()
+    now = _now()
+    res = db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.jti == jti, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=now)
+    )
+    if res.rowcount:
         db.flush()
-    return True
+        return True
+    found = db.scalar(select(RefreshToken.jti).where(RefreshToken.jti == jti).limit(1))
+    return found is not None
 
 
 def revoke_all_refresh_tokens_for_user(db: Session, user_id: str) -> int:
     now = _now()
-    rows = db.query(RefreshToken).filter(
-        RefreshToken.user_id == str(user_id),
-        RefreshToken.revoked_at.is_(None),
+    res = db.execute(
+        update(RefreshToken)
+        .where(
+            RefreshToken.user_id == str(user_id),
+            RefreshToken.revoked_at.is_(None),
+        )
+        .values(revoked_at=now)
     )
-    count = 0
-    for row in rows:
-        row.revoked_at = now
-        count += 1
     db.flush()
-    return count
+    return int(res.rowcount or 0)
 
 
 def rotate_refresh_token(db: Session, token: str) -> tuple[str, str]:
     claims = _decode_refresh_token(token)
     user_id = str(claims["sub"])
     jti = str(claims["jti"])
-    row = db.query(RefreshToken).filter(RefreshToken.jti == jti).first()
-    if not row:
+    row = db.execute(
+        select(RefreshToken.revoked_at, RefreshToken.expires_at).where(
+            RefreshToken.jti == jti
+        )
+    ).one_or_none()
+    if row is None:
         raise RefreshTokenError("refresh token not recognized")
     now = _now()
-    if row.revoked_at is not None:
+    revoked_at, expires_at = row.revoked_at, row.expires_at
+    if revoked_at is not None:
         revoke_all_refresh_tokens_for_user(db, user_id)
         raise RefreshTokenReuseDetected(user_id)
-    if row.expires_at <= now:
-        row.revoked_at = now
+    if expires_at <= now:
+        db.execute(
+            update(RefreshToken).where(RefreshToken.jti == jti).values(revoked_at=now)
+        )
         db.flush()
         raise RefreshTokenError("refresh token expired")
-    row.revoked_at = now
+    db.execute(
+        update(RefreshToken).where(RefreshToken.jti == jti).values(revoked_at=now)
+    )
+    db.flush()
     issued = issue_refresh_token(db, user_id=user_id, parent_jti=jti)
     return user_id, issued.token

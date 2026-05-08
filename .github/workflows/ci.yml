@@ -67,7 +67,9 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: |
+            backend/requirements.txt
+            aiService/requirements.txt
 
       - name: Backend — install and pytest
         working-directory: backend
@@ -76,7 +78,13 @@ jobs:
           . .venv/bin/activate
           python -m pip install -U pip
           pip install -r requirements.txt
-          python -m pytest tests/ -v --tb=short
+          pytest tests/ --cov=app --cov-config=.coveragerc --tb=short -q
+
+      - name: Backend — pip-audit
+        working-directory: backend
+        run: |
+          . .venv/bin/activate
+          pip-audit -r requirements.txt
 
       - name: AI Service — install and pytest
         working-directory: aiService
@@ -85,7 +93,13 @@ jobs:
           . .venv/bin/activate
           python -m pip install -U pip
           pip install -r requirements.txt
-          python -m pytest tests/ -v --tb=short
+          pytest tests/ --cov=app --cov-config=.coveragerc --tb=short -q
+
+      - name: AI Service — pip-audit
+        working-directory: aiService
+        run: |
+          . .venv/bin/activate
+          pip-audit -r requirements.txt
 
   frontend-unit-tests:
     name: frontend-unit-tests
@@ -109,7 +123,7 @@ jobs:
 
       - name: Vitest
         working-directory: frontend
-        run: npm run test:run
+        run: npx vitest run --coverage --reporter=verbose
 
   e2e-tests:
     name: e2e-tests
@@ -208,6 +222,19 @@ jobs:
       - name: Build Next.js
         working-directory: frontend
         run: npm run build
+
+      - name: Frontend — Bundle Size Report
+        working-directory: frontend
+        run: |
+          npx next build 2>&1 | tee build-output.txt
+          echo "=== Bundle stats ==="
+          cat .next/build-manifest.json | node -e "
+            const d = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+            const pages = Object.keys(d.pages || {});
+            console.log('Pages:', pages.length);
+          " || true
+          ls -lh .next/static/chunks/*.js 2>/dev/null | \
+            awk '{print $5, $9}' | sort -rh | head -10
 
       - name: Playwright E2E (Chromium)
         working-directory: frontend

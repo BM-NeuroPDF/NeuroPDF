@@ -42,6 +42,8 @@ services:
       retries: 3
       start_period: 40s
 
+  # Yerel LLM için OLLAMA_HOST=http://ollama:11434 ve ayrı Ollama container gereklidir.
+  # (LOCAL_LLM_URL veya OLLAMA_* yapılandırması için bkz. docs/LLM_SETUP.md ve aiService/.env.example).
   aiservice:
     build:
       context: ./aiService

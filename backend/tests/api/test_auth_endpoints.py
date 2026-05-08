@@ -473,6 +473,19 @@ class TestAuthEndpoints:
         finally:
             app.dependency_overrides.pop(get_current_user, None)
 
+    @patch("app.routers.auth.eula.invalidate_auth_me_cache")
+    @patch("app.routers.auth.settings.USE_SUPABASE", True)
+    def test_accept_eula_supabase_invalidates_me_cache(
+        self, mock_inv, override_get_supabase
+    ):
+        app.dependency_overrides[get_current_user] = lambda: {"sub": "u-supabase"}
+        try:
+            response = client.post("/auth/accept-eula", json={"accepted": True})
+            assert response.status_code == 200
+            mock_inv.assert_called_once_with("u-supabase")
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
     @patch("app.routers.auth.settings.USE_SUPABASE", False)
     def test_accept_eula_local(self):
         mock_session = MagicMock()
@@ -488,6 +501,94 @@ class TestAuthEndpoints:
             assert response.status_code == 200
             mock_session.execute.assert_called()
             mock_session.commit.assert_called_once()
+        finally:
+            app.dependency_overrides.clear()
+
+    @patch("app.routers.auth.eula.invalidate_auth_me_cache")
+    @patch("app.routers.auth.settings.USE_SUPABASE", False)
+    def test_accept_eula_local_invalidates_me_cache(self, mock_inv):
+        mock_session = MagicMock()
+        app.dependency_overrides[get_current_user] = lambda: {"sub": "u-local"}
+        app.dependency_overrides[get_supabase] = lambda: MagicMock()
+
+        def _db():
+            yield mock_session
+
+        app.dependency_overrides[get_db] = _db
+        try:
+            response = client.post("/auth/accept-eula", json={"accepted": True})
+            assert response.status_code == 200
+            mock_inv.assert_called_once_with("u-local")
+        finally:
+            app.dependency_overrides.clear()
+
+    @patch("app.routers.auth.account.stats_cache_get_json")
+    @patch("app.routers.auth.settings.USE_SUPABASE", False)
+    def test_get_me_returns_cached_without_db_queries(self, mock_get_json):
+        mock_get_json.return_value = {
+            "user_id": "u-me",
+            "email": "c@test.com",
+            "username": "Cached",
+            "provider": "local",
+            "eula_accepted": True,
+            "created_at": None,
+        }
+        mock_session = MagicMock()
+        app.dependency_overrides[get_current_user] = lambda: {"sub": "u-me"}
+        app.dependency_overrides[get_supabase] = lambda: MagicMock()
+
+        def _db():
+            yield mock_session
+
+        app.dependency_overrides[get_db] = _db
+        try:
+            response = client.get("/auth/me")
+            assert response.status_code == 200
+            assert response.json()["username"] == "Cached"
+            mock_session.execute.assert_not_called()
+        finally:
+            app.dependency_overrides.clear()
+
+    @patch("app.routers.auth.account.stats_cache_set_json")
+    @patch("app.routers.auth.account.stats_cache_get_json")
+    @patch("app.routers.auth.settings.USE_SUPABASE", False)
+    def test_get_me_cache_miss_writes_redis(self, mock_get_json, mock_set_json):
+        mock_get_json.return_value = None
+        mock_session = MagicMock()
+
+        def execute_side_effect(stmt, _params=None):
+            s = str(stmt)
+            m = MagicMock()
+            if "SELECT id, username FROM users" in s:
+                m.mappings.return_value.first.return_value = {
+                    "id": "u-me",
+                    "username": "MeUser",
+                }
+            elif "user_settings" in s:
+                m.mappings.return_value.first.return_value = {"eula_accepted": False}
+            elif "user_auth" in s:
+                m.mappings.return_value.first.return_value = {
+                    "provider": "local",
+                    "provider_key": "x@y.com",
+                }
+            return m
+
+        mock_session.execute.side_effect = execute_side_effect
+        app.dependency_overrides[get_current_user] = lambda: {"sub": "u-me"}
+        app.dependency_overrides[get_supabase] = lambda: MagicMock()
+
+        def _db():
+            yield mock_session
+
+        app.dependency_overrides[get_db] = _db
+        try:
+            response = client.get("/auth/me")
+            assert response.status_code == 200
+            mock_set_json.assert_called_once()
+            key, payload, ttl = mock_set_json.call_args[0]
+            assert key == "auth:me:u-me"
+            assert ttl == 60
+            assert payload["username"] == "MeUser"
         finally:
             app.dependency_overrides.clear()
 

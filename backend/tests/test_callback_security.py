@@ -19,7 +19,9 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def _bypass_callback_ip_rate_limit():
     """Callback tests assert signature/CIDR behavior, not Redis-backed ip_rpm."""
-    with patch("app.routers.files.routes_summarize.check_rate_limit", return_value=True):
+    with patch(
+        "app.routers.files.routes_summarize.check_rate_limit", return_value=True
+    ):
         yield
 
 
@@ -239,6 +241,7 @@ def test_production_requires_callback_secret(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("DB_USER", "u")
     monkeypatch.setenv("DB_PASSWORD", "p")
     monkeypatch.setenv("DB_HOST", "h")
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
 
-    with pytest.raises(RuntimeError, match="CALLBACK_SECRET"):
+    with pytest.raises(ValueError, match="CALLBACK_SECRET"):
         Settings()

@@ -48,7 +48,10 @@ class MarkdownToPdfRequest(BaseModel):
 
 
 @router.post("/markdown-to-pdf")
-async def markdown_to_pdf(request: MarkdownToPdfRequest):
+async def markdown_to_pdf(
+    request: MarkdownToPdfRequest,
+    _current_user: dict = Depends(get_current_user),
+):
     try:
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(

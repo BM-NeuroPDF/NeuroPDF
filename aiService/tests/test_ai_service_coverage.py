@@ -184,6 +184,12 @@ class TestGeminiGenerateCloud:
 
 
 class TestGenerateWithRetry:
+    def test_generate_with_retry_requires_client(self):
+        ai.gemini_client = None
+        with pytest.raises(HTTPException) as e:
+            ai._generate_with_retry("gemini-flash-latest", "p", attempts=1)
+        assert e.value.status_code == 503
+
     def test_quota_exceeded_raises_http(self):
         ai.gemini_client = MagicMock()
         ai.gemini_client.models.generate_content.side_effect = Exception(
@@ -348,3 +354,37 @@ class TestSessions:
         ai._GENERAL_CHAT_SESSIONS[gid]["created_at"] = time.time() - 99999
         ai._cleanup_sessions()
         assert gid not in ai._GENERAL_CHAT_SESSIONS
+
+
+class TestGeminiGenerateStream:
+    @patch.object(ai, "_local_llm_configured", return_value=True)
+    @patch.object(ai, "_gemini_via_local_openai_stream", return_value=iter(["a", "b"]))
+    def test_local_stream_path(self, _stream, _local):
+        out = list(ai.gemini_generate_stream("txt", "instr"))
+        assert out == ["a", "b"]
+
+    @patch.object(ai, "_local_llm_configured", return_value=False)
+    @patch.object(ai, "_require_cloud")
+    def test_cloud_stream_success(self, _req, _local):
+        chunk1 = MagicMock(text="x")
+        chunk2 = MagicMock(text="")
+        chunk3 = MagicMock(text="y")
+        ai.gemini_client = MagicMock()
+        ai.gemini_client.models.generate_content_stream.return_value = [
+            chunk1,
+            chunk2,
+            chunk3,
+        ]
+        out = list(ai.gemini_generate_stream("txt", "instr", mode="flash"))
+        assert out == ["x", "y"]
+
+    @patch.object(ai, "_local_llm_configured", return_value=False)
+    @patch.object(ai, "_require_cloud")
+    def test_cloud_stream_rate_limit_maps_429(self, _req, _local):
+        ai.gemini_client = MagicMock()
+        ai.gemini_client.models.generate_content_stream.side_effect = Exception(
+            "rate limit 429"
+        )
+        with pytest.raises(HTTPException) as e:
+            list(ai.gemini_generate_stream("txt", "instr", mode="flash"))
+        assert e.value.status_code == 429

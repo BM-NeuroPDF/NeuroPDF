@@ -20,6 +20,7 @@
     "test:e2e": "playwright test",
     "test:e2e:desktop": "playwright test --project='Desktop HD (720p)' --project='Desktop FHD (1080p)'",
     "test:e2e:responsive": "playwright test --project='Mobile (375p)' --project='Tablet (600p)' --project='Laptop (1366p)' --project='Desktop FHD (1080p)'",
+    "analyze": "ANALYZE=true next build",
     "analyze:dead": "ts-prune"
   },
   "dependencies": {
@@ -32,7 +33,7 @@
     "framer-motion": "^11.15.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.468.0",
-    "next": "^15.5.15",
+    "next": "^16.2.6",
     "next-auth": "^4.24.10",
     "pdf-lib": "^1.17.1",
     "react": "^19.0.0",
@@ -47,6 +48,7 @@
     "tailwind-merge": "^2.5.5",
     "zod": "^3.25.76"
   },
+  "_security_notes": "Risk acceptance (npm audit): Next bundles postcss@8.4.31 (GHSA-qx2v-qp2m-jg93 / CVE-2026-41305). Dev/postcss override does not replace nested next/node_modules/postcss. Track stable Next release that ships postcss>=8.5.10: docs/security/SECURITY_BACKLOG.md",
   "devDependencies": {
     "@next/bundle-analyzer": "^15.5.16",
     "@playwright/test": "^1.49.1",
@@ -61,12 +63,12 @@
     "@vitest/coverage-v8": "^3.2.4",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.16.0",
-    "eslint-config-next": "^15.5.16",
+    "eslint-config-next": "^16.2.6",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-eslint-comments": "^3.2.0",
     "jsdom": "^25.0.1",
     "msw": "^2.12.14",
-    "postcss": "^8.4.49",
+    "postcss": "^8.5.14",
     "prettier": "^3.5.3",
     "tailwindcss": "4.0.0-alpha.31",
     "ts-prune": "^0.10.3",

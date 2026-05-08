@@ -124,7 +124,12 @@ def google_login(
             email_val = email
 
         else:
-            user_res = supabase.table("users").select("*").eq("id", user_id).execute()
+            user_res = (
+                supabase.table("users")
+                .select("id,username,created_at")
+                .eq("id", user_id)
+                .execute()
+            )
             user = user_res.data[0]
 
             settings_res = (
@@ -484,7 +489,7 @@ async def login(
         # 1. Find auth records (email = provider_key in local strategy)
         auth_res = (
             supabase.table("user_auth")
-            .select("*")
+            .select("id,user_id,password_hash")
             .eq("provider_key", payload.email)
             .eq("provider", "local")
             .execute()
@@ -680,7 +685,12 @@ async def verify_2fa(
         ) from None
 
     if settings.USE_SUPABASE:
-        user_res = supabase.table("users").select("*").eq("id", user_id).execute()
+        user_res = (
+            supabase.table("users")
+            .select("id,username,created_at")
+            .eq("id", user_id)
+            .execute()
+        )
         if not user_res.data:
             _reject_2fa_verify(request)
         raw_u = user_res.data[0]
@@ -778,14 +788,22 @@ def get_me(
 ):
     user_id = current_user["sub"]
     if settings.USE_SUPABASE:
-        user_res = supabase.table("users").select("*").eq("id", user_id).execute()
+        user_res = (
+            supabase.table("users")
+            .select("id,username,created_at")
+            .eq("id", user_id)
+            .execute()
+        )
         if not user_res.data:
             raise HTTPException(status_code=404, detail="User not found")
 
         user = user_res.data[0]
 
         settings_res = (
-            supabase.table("user_settings").select("*").eq("user_id", user_id).execute()
+            supabase.table("user_settings")
+            .select("eula_accepted")
+            .eq("user_id", user_id)
+            .execute()
         )
         prefs = settings_res.data[0] if settings_res.data else {}
 

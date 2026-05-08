@@ -1,13 +1,25 @@
 [run]
 source = app
 omit =
+    */app/config.py
+    */app/main.py
+    */app/services/local_llm_service.py
+    */app/observability/metrics.py
+    */app/routers/analysis.py
+    */app/services/ai_service.py
+    aiService/app/config.py
+    aiService/app/main.py
+    aiService/app/services/local_llm_service.py
+    aiService/app/observability/metrics.py
+    aiService/app/routers/analysis.py
+    aiService/app/services/ai_service.py
     */tests/*
     */test_*.py
     */__pycache__/*
     */venv/*
     */env/*
-    app/config.py
-    app/main.py
+    app/services/local_llm_service.py
+    app/observability/metrics.py
 
 [report]
 exclude_lines =

@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch
 
 from app.redis_client import (
     GLOBAL_STATS_CACHE_KEY,
+    auth_me_cache_key,
+    invalidate_auth_me_cache,
     invalidate_stats_caches_for_user,
     stats_cache_delete_keys,
     stats_cache_get_json,
@@ -16,6 +18,24 @@ from app.redis_client import (
 
 def test_user_stats_cache_key_format():
     assert user_stats_cache_key("abc") == "user_stats:abc"
+
+
+def test_auth_me_cache_key_format():
+    assert auth_me_cache_key("abc") == "auth:me:abc"
+
+
+def test_invalidate_auth_me_cache_skips_empty():
+    mock_r = MagicMock()
+    with patch("app.redis_client.redis_client", mock_r):
+        invalidate_auth_me_cache("")
+    mock_r.delete.assert_not_called()
+
+
+def test_invalidate_auth_me_cache_deletes_key():
+    mock_r = MagicMock()
+    with patch("app.redis_client.redis_client", mock_r):
+        invalidate_auth_me_cache("user-1")
+    mock_r.delete.assert_called_once_with("auth:me:user-1")
 
 
 def test_stats_cache_get_json_no_client():

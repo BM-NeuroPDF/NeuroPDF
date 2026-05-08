@@ -9,12 +9,6 @@ vi.mock('@/context/LanguageContext', () => ({
   }),
 }));
 
-vi.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...rest }: { children?: React.ReactNode }) => <div {...rest}>{children}</div>,
-  },
-}));
-
 describe('ThemeToggle', () => {
   beforeEach(() => {
     localStorage.clear();

@@ -1,10 +1,33 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useEditPdf } from '@/hooks/useEditPdf';
-import EditPdfCanvas from '@/components/edit-pdf/EditPdfCanvas';
-import EditPdfDialogs from '@/components/edit-pdf/EditPdfDialogs';
 import EditPdfSidebar from '@/components/edit-pdf/EditPdfSidebar';
-import EditPdfToolbar from '@/components/edit-pdf/EditPdfToolbar';
+
+const EditPdfCanvas = dynamic(() => import('@/components/edit-pdf/EditPdfCanvas'), {
+  ssr: false,
+  loading: () => (
+    <div className="mt-8 animate-pulse rounded-2xl border border-[var(--navbar-border)] p-6 space-y-4">
+      <div className="h-6 w-48 rounded bg-gray-200 dark:bg-gray-700" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="h-32 rounded bg-gray-200 dark:bg-gray-700" />
+        <div className="h-32 rounded bg-gray-200 dark:bg-gray-700" />
+        <div className="h-32 rounded bg-gray-200 dark:bg-gray-700" />
+      </div>
+    </div>
+  ),
+});
+
+const EditPdfToolbar = dynamic(() => import('@/components/edit-pdf/EditPdfToolbar'), {
+  loading: () => (
+    <div className="mt-8 flex gap-3">
+      <div className="h-10 w-40 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+      <div className="h-10 w-28 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+    </div>
+  ),
+});
+
+const EditPdfDialogs = dynamic(() => import('@/components/edit-pdf/EditPdfDialogs'));
 
 /**
  * Dynamic import boundaries live in `@/components/edit-pdf/EditPdfDocument`

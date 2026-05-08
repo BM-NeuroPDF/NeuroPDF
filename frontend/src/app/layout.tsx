@@ -6,7 +6,7 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import { PopupProvider } from '@/context/PopupContext';
 import Providers from './Providers';
 import NavBar from '@/components/NavBar';
-import ResponsivePdfPanel from '@/components/ResponsivePdfPanel';
+import ResponsivePdfPanelDynamic from '@/components/ResponsivePdfPanelDynamic';
 import EulaGuard from '@/components/auth/EulaGuard';
 import { ProGlobalChatGate } from '@/components/ProGlobalChatGate';
 import WebVitalsReporter from '@/components/WebVitalsReporter';
@@ -42,7 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     </main>
 
                     <div className="relative z-[31] w-0 shrink-0 overflow-visible">
-                      <ResponsivePdfPanel />
+                      <ResponsivePdfPanelDynamic />
                     </div>
                   </div>
                   {/* Global ProChat: ağır ağaç defer; girişli kullanıcıda idle / ilk etkileşimde yüklenir */}

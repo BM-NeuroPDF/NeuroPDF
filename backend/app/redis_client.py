@@ -25,7 +25,7 @@ try:
         socket_timeout=5,
         # Bağlantı havuzu ayarları
         max_connections=10,
-        retry_on_timeout=True,
+        # redis-py 6+: TimeoutError is retried by default; retry_on_timeout removed.
     )
 
     # Bağlantıyı test et
@@ -76,6 +76,20 @@ GLOBAL_STATS_CACHE_TTL_SEC = 300
 
 def user_stats_cache_key(user_id: str) -> str:
     return f"user_stats:{user_id}"
+
+
+AUTH_ME_CACHE_TTL_SEC = 60
+
+
+def auth_me_cache_key(user_id: str) -> str:
+    return f"auth:me:{user_id}"
+
+
+def invalidate_auth_me_cache(user_id: str) -> None:
+    """GET /auth/me Redis önbelleğini temizler (profil/eula vb. güncellemelerinden sonra)."""
+    if not user_id:
+        return
+    stats_cache_delete_keys(auth_me_cache_key(user_id))
 
 
 def stats_cache_get_json(key: str) -> Optional[dict[str, Any]]:

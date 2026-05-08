@@ -68,7 +68,9 @@ def _signed_callback_headers(payload: dict, secret: str, ts: int | None = None) 
 
 def test_guest_check_usage_returns_429_with_retry_after():
     fake_redis = FakeRedis()
-    strict_limits = {"check_usage": [RateLimitRule("ip_rpm", limit=1, window_seconds=60)]}
+    strict_limits = {
+        "check_usage": [RateLimitRule("ip_rpm", limit=1, window_seconds=60)]
+    }
     with (
         patch("app.rate_limit.redis_client", fake_redis),
         patch.dict("app.routers.guest.PUBLIC_GUEST_LIMITS", strict_limits, clear=False),
@@ -131,9 +133,13 @@ def test_summarize_guest_returns_429_with_retry_after():
 
 
 def test_markdown_to_pdf_payload_guard():
-    payload = {"markdown": "x" * 120_000}
-    response = client.post("/files/markdown-to-pdf", json=payload)
-    assert response.status_code == 413
+    app.dependency_overrides[get_current_user] = lambda: {"sub": "user-1"}
+    try:
+        payload = {"markdown": "x" * 120_000}
+        response = client.post("/files/markdown-to-pdf", json=payload)
+        assert response.status_code == 413
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
 
 
 def test_callback_rate_limited_returns_retry_after():
@@ -167,7 +173,9 @@ def test_callback_rate_limited_returns_retry_after():
         second = client.post(
             "/files/callback/1",
             content=body,
-            headers=_signed_callback_headers(payload, "cb-secret", ts=int(time.time()) + 1),
+            headers=_signed_callback_headers(
+                payload, "cb-secret", ts=int(time.time()) + 1
+            ),
         )
     app.dependency_overrides.clear()
     assert first.status_code in (200, 404, 409, 403)
