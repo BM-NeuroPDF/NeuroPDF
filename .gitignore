@@ -10,6 +10,8 @@ client_secret_*.json
 node_modules/
 
 # === Python Virtual Environments ===
+# Repo kökünde .venv oluşturmayın; backend ve aiService kendi venv’lerini kullanır.
+/.venv/
 backend/.venv/
 aiService/.venv/
 
@@ -58,6 +60,7 @@ NeuroPDF_Final_Report.md
 Thumbs.db
 
 # === Local debug / merge artifacts (do not commit) ===
+pw-report/
 *.patch
 *.orig
 *.rej

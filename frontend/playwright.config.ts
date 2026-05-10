@@ -9,8 +9,13 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
+/** Docker compose / `next start` (CI) = HTTP on 127.0.0.1. Host-only `npm run dev` with mkcert → set PLAYWRIGHT_BASE_URL=https://localhost:3000 */
+const playwrightBaseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:3000';
+
 export default defineConfig({
   testDir: './e2e/tests',
+
+  globalTeardown: './e2e/global-teardown.ts',
 
   /* Global setup: Seed test user before running tests */
   // Manual user is used now, so global setup is disabled
@@ -25,24 +30,25 @@ export default defineConfig({
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
 
-  /* Retry on CI only - Fedora'da anlık takılmalar için retry ekle */
-  retries: process.env.CI ? 2 : 2,
+  /* Local: 2 retries (Fedora flake). CI: 1 retry — fewer total attempts keeps the suite inside job timeout. */
+  retries: process.env.CI ? 1 : 2,
 
   /* Global test timeout - Fedora'da LLM işlemleri için yeterli süre */
   timeout: 90000,
 
-  /* Opt out of parallel tests on CI. Fedora'da CPU darboğazını önlemek için worker sayısını düşür */
-  workers: process.env.CI ? 1 : 2,
+  workers: 2,
 
-  /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
+  /* Terminal: line = her test satırı (list bazen uzun koşularda “boş” hissi verir). HTML asla otomatik tarayıcı açmaz; teardown’da show-report hatırlatılır. */
+  reporter: process.env.CI
+    ? [['github'], ['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]]
+    : [['line'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
 
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: process.env.CI ? 'http://127.0.0.1:3000' : 'https://localhost:3000',
-    /* Local dev uses mkcert/self-signed cert on HTTPS. */
-    ignoreHTTPSErrors: !process.env.CI,
+    baseURL: playwrightBaseURL,
+    /* Self-signed / mkcert only when base URL is https:// */
+    ignoreHTTPSErrors: playwrightBaseURL.startsWith('https'),
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',

@@ -139,7 +139,8 @@ jobs:
     name: e2e-tests
     needs: [env-example-sync, backend-tests, frontend-unit-tests]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Full chromium suite: 90s/test, 2 workers, CI retries=1; single next build. Below ~30m risks cancel + no HTML report.
+    timeout-minutes: 45
 
     services:
       postgres:
@@ -237,20 +238,22 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
+      # Single production build (second `next build` here used to add ~minutes and push e2e past the job timeout).
       - name: Build Next.js
         working-directory: frontend
-        run: npm run build
+        run: npm run build 2>&1 | tee build-output.txt
 
       - name: Frontend — Bundle Size Report
         working-directory: frontend
         run: |
-          npx next build 2>&1 | tee build-output.txt
-          echo "=== Bundle stats ==="
-          cat .next/build-manifest.json | node -e "
-            const d = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+          echo "=== Bundle stats (from Build Next.js output) ==="
+          test -f .next/build-manifest.json || { echo "missing .next/build-manifest.json"; exit 1; }
+          node -e "
+            const fs = require('fs');
+            const d = JSON.parse(fs.readFileSync('.next/build-manifest.json','utf8'));
             const pages = Object.keys(d.pages || {});
             console.log('Pages:', pages.length);
-          " || true
+          "
           ls -lh .next/static/chunks/*.js 2>/dev/null | \
             awk '{print $5, $9}' | sort -rh | head -10
 
