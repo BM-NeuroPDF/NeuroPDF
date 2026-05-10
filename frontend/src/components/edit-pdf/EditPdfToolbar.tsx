@@ -82,11 +82,8 @@ export default function EditPdfToolbar({
 
       {isProcessingDone && processedBlob && (
         <div className="mt-8 space-y-6">
-          <div className="container-card p-6 border border-gray-300 dark:border-[var(--container-border)] shadow-xl">
-            <h3
-              className="text-xl mb-4 font-bold flex items-center gap-2"
-              style={{ color: 'var(--foreground)' }}
-            >
+          <div className="container-card border border-np-outline-variant p-6 shadow-xl">
+            <h3 className="mb-4 flex items-center gap-2 text-xl font-bold text-np-on-surface">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
@@ -161,11 +158,7 @@ export default function EditPdfToolbar({
             {!session && (
               <p className="mt-4 text-sm opacity-80">
                 💡{' '}
-                <a
-                  href="/login"
-                  className="underline font-bold"
-                  style={{ color: 'var(--button-bg)' }}
-                >
+                <a href="/login" className="font-bold text-np-action-primary underline">
                   {t('loginWarning')}
                 </a>
               </p>

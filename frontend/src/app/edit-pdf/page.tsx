@@ -7,12 +7,12 @@ import EditPdfSidebar from '@/components/edit-pdf/EditPdfSidebar';
 const EditPdfCanvas = dynamic(() => import('@/components/edit-pdf/EditPdfCanvas'), {
   ssr: false,
   loading: () => (
-    <div className="mt-8 animate-pulse rounded-2xl border border-[var(--navbar-border)] p-6 space-y-4">
-      <div className="h-6 w-48 rounded bg-gray-200 dark:bg-gray-700" />
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-        <div className="h-32 rounded bg-gray-200 dark:bg-gray-700" />
-        <div className="h-32 rounded bg-gray-200 dark:bg-gray-700" />
-        <div className="h-32 rounded bg-gray-200 dark:bg-gray-700" />
+    <div className="mt-8 animate-pulse space-y-4 rounded-2xl border border-np-outline-variant p-6">
+      <div className="h-6 w-48 rounded bg-np-surface-container-high" />
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <div className="h-32 rounded bg-np-surface-container-high" />
+        <div className="h-32 rounded bg-np-surface-container-high" />
+        <div className="h-32 rounded bg-np-surface-container-high" />
       </div>
     </div>
   ),
@@ -21,8 +21,8 @@ const EditPdfCanvas = dynamic(() => import('@/components/edit-pdf/EditPdfCanvas'
 const EditPdfToolbar = dynamic(() => import('@/components/edit-pdf/EditPdfToolbar'), {
   loading: () => (
     <div className="mt-8 flex gap-3">
-      <div className="h-10 w-40 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
-      <div className="h-10 w-28 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+      <div className="h-10 w-40 animate-pulse rounded bg-np-surface-container-high" />
+      <div className="h-10 w-28 animate-pulse rounded bg-np-surface-container-high" />
     </div>
   ),
 });
@@ -65,7 +65,7 @@ export default function EditPdfPage() {
   } = useEditPdf();
 
   return (
-    <main className="min-h-screen p-6 max-w-5xl mx-auto font-bold text-[var(--foreground)]">
+    <main className="mx-auto min-h-screen max-w-5xl p-6 font-bold text-np-on-background">
       <EditPdfSidebar
         title={t('editPageTitle')}
         session={session}

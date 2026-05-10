@@ -67,8 +67,8 @@ export default function EditPdfSidebar({
         className={`container-card border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-300
           ${
             isDragActive
-              ? 'border-[var(--button-bg)] opacity-80 bg-[var(--background)]'
-              : 'border-[var(--navbar-border)] hover:border-[var(--button-bg)]'
+              ? 'border-np-action-primary bg-np-background opacity-80'
+              : 'border-np-outline-variant hover:border-np-action-primary'
           }`}
       >
         <input {...getInputProps()} accept="application/pdf" />
