@@ -259,6 +259,16 @@ jobs:
         working-directory: frontend
         run: npx playwright test --project=chromium
 
+      # upload-artifact@v4 skips paths that match .gitignore; frontend/playwright-report/ is ignored.
+      - name: Stage Playwright report for artifact upload
+        if: always()
+        working-directory: frontend
+        run: |
+          rm -rf playwright-report-artifact
+          if [ -d playwright-report ]; then
+            cp -a playwright-report playwright-report-artifact
+          fi
+
       - name: Upload backend log
         if: always()
         uses: actions/upload-artifact@v4
@@ -273,5 +283,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: frontend/playwright-report
+          path: frontend/playwright-report-artifact
+          if-no-files-found: warn
           retention-days: 7

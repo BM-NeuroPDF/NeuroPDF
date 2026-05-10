@@ -4,6 +4,7 @@ frontend/.next
 frontend/.turbo
 frontend/coverage
 frontend/playwright-report
+frontend/playwright-report-artifact
 frontend/out
 frontend/build
 frontend/dist
