@@ -33,27 +33,14 @@ export function EditPdfSortablePageItem({
       style={style}
       {...attributes}
       {...listeners}
-      className="border rounded-xl overflow-hidden shadow-lg cursor-move transition-shadow hover:shadow-2xl flex-shrink-0 touch-none"
+      className="flex-shrink-0 cursor-move touch-none overflow-hidden rounded-xl border border-np-outline-variant shadow-lg transition-shadow hover:shadow-2xl"
     >
-      <div
-        className="w-[190px]"
-        style={{
-          backgroundColor: 'var(--container-bg)',
-          borderColor: 'var(--container-border)',
-          color: 'var(--foreground)',
-        }}
-      >
-        <div
-          className="text-center text-xs py-2 border-b font-bold tracking-wide truncate px-1 select-none"
-          style={{
-            backgroundColor: 'var(--background)',
-            borderColor: 'var(--navbar-border)',
-          }}
-        >
+      <div className="w-[190px] bg-np-surface-container text-np-on-background">
+        <div className="truncate border-b border-np-outline-variant bg-np-background px-1 py-2 text-center text-xs font-bold tracking-wide select-none">
           {t('orderIndex')}: {index + 1} ({t('origPage')} {pageNumber})
         </div>
 
-        <div className="flex justify-center bg-gray-200 dark:bg-gray-800 p-2 h-[240px] items-center overflow-hidden">
+        <div className="flex h-[240px] items-center justify-center overflow-hidden bg-np-surface-container-high p-2">
           <EditPdfPage
             pageNumber={pageNumber}
             width={170}
