@@ -205,6 +205,13 @@ jobs:
           python -m pip install -U pip
           pip install -r requirements.txt
           alembic upgrade head
+          # Runtime settings (must match job env; if False here, uvicorn child would also see wrong values)
+          python -c "
+          from app.config import settings
+          print('E2E_MAGIC_OTP_ENABLED:', settings.E2E_MAGIC_OTP_ENABLED)
+          print('E2E_MAGIC_OTP_ALL_USERS:', settings.E2E_MAGIC_OTP_ALL_USERS)
+          print('RATE_LIMIT_ENABLED:', settings.RATE_LIMIT_ENABLED)
+          "
           uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/backend.log 2>&1 &
           for i in $(seq 1 60); do
             if curl -sf http://127.0.0.1:8000/health >/dev/null; then
