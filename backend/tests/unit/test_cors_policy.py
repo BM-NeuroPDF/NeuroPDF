@@ -1,7 +1,19 @@
 from fastapi.testclient import TestClient
 
-from app.config import settings
+from app.config import Settings, settings
 from app.main import app, _validate_cors_policy
+
+
+def test_cors_allowed_origins_merges_frontend_origin():
+    """127.0.0.1 vs localhost are different browser Origins; FRONTEND_ORIGIN must be allowed."""
+    s = Settings(
+        FRONTEND_ORIGIN="http://127.0.0.1:3000",
+        CORS_ALLOWED_ORIGINS_RAW="http://localhost:3000",
+    )
+    assert s.CORS_ALLOWED_ORIGINS == [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
 
 def test_preflight_allows_configured_origin():
@@ -16,7 +28,9 @@ def test_preflight_allows_configured_origin():
         )
 
     assert response.status_code == 200
-    assert response.headers.get("access-control-allow-origin") == "http://localhost:3000"
+    assert (
+        response.headers.get("access-control-allow-origin") == "http://localhost:3000"
+    )
     assert response.headers.get("access-control-allow-credentials") == "true"
 
 

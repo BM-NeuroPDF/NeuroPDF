@@ -264,9 +264,14 @@ class Settings(BaseSettings):
     @property
     def CORS_ALLOWED_ORIGINS(self) -> list[str]:
         origins = _parse_csv_list(self.CORS_ALLOWED_ORIGINS_RAW)
-        if origins:
-            return origins
-        return [self.FRONTEND_ORIGIN]
+        if not origins:
+            return [self.FRONTEND_ORIGIN]
+        # Browsers treat localhost vs 127.0.0.1 as different Origins; CI often uses 127.0.0.1
+        # while CORS_ALLOWED_ORIGINS defaults to localhost only — merge FRONTEND_ORIGIN to avoid OPTIONS 400.
+        merged = list(dict.fromkeys(origins))
+        if self.FRONTEND_ORIGIN not in merged:
+            merged.append(self.FRONTEND_ORIGIN)
+        return merged
 
     @property
     def CORS_ALLOWED_METHODS(self) -> list[str]:
