@@ -247,6 +247,7 @@ jobs:
           ls -lh .next/static/chunks/*.js 2>/dev/null | \
             awk '{print $5, $9}' | sort -rh | head -10
 
+      # Full e2e suite (includes phase9 theme smoke + phase10 authenticated routes when API login is viable).
       - name: Playwright E2E (Chromium)
         working-directory: frontend
         run: npx playwright test --project=chromium
