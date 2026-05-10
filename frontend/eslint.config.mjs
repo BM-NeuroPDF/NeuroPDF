@@ -41,7 +41,6 @@ export default defineConfig([
     '.next/**',
     'coverage/**',
     'playwright-report/**',
-    'playwright-report-artifact/**',
     'out/**',
     'build/**',
     'next-env.d.ts',
